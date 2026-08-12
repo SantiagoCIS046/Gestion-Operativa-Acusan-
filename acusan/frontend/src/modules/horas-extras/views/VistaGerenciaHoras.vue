@@ -1,0 +1,155 @@
+<template>
+  <div class="gerencia-horas-view">
+    <div class="view-header">
+      <div>
+        <h1 class="view-title">Control y Aprobación de Horas Extras</h1>
+        <p class="view-subtitle">Consolidado operativo, recargos y autorizaciones presupuestales de cuadrillas</p>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-label">Total Horas Mes</span>
+          <span class="kpi-value">{{ totalHoras }}h</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Presupuesto Ejecutado</span>
+          <span class="kpi-value text-emerald-600">${{ formatCurrency(totalMonto) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla de Horas Extras -->
+    <TablaHorasExtras
+      :items="horasData"
+      @approve="aprobarHora"
+      @reject="rechazarHora"
+      @export="exportarReporte"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import TablaHorasExtras from '../components/TablaHorasExtras.vue'
+
+const horasData = ref([
+  {
+    id: 101,
+    cedula: '91234567',
+    funcionario: 'Héctor Fabio Ramírez',
+    area: 'Cuadrilla Alcantarillado - Red Principal',
+    fecha: '10/08/2026',
+    tipo: 'NOCTURNA',
+    cantidadHoras: 4,
+    montoEstimado: 98000,
+    estado: 'PENDIENTE'
+  },
+  {
+    id: 102,
+    cedula: '1098444555',
+    funcionario: 'Mauricio Gómez Santos',
+    area: 'Mantenimiento Planta de Tratamiento',
+    fecha: '09/08/2026',
+    tipo: 'FESTIVA_DIURNA',
+    cantidadHoras: 8,
+    montoEstimado: 240000,
+    estado: 'PENDIENTE'
+  },
+  {
+    id: 103,
+    cedula: '13888999',
+    funcionario: 'Álvaro Uribe Pinzón',
+    area: 'Reparación de Fugas - Sector San Gil',
+    fecha: '08/08/2026',
+    tipo: 'DIURNA',
+    cantidadHoras: 3,
+    montoEstimado: 55000,
+    estado: 'APROBADO'
+  }
+])
+
+const totalHoras = computed(() => {
+  return horasData.value.reduce((acc, curr) => acc + curr.cantidadHoras, 0)
+})
+
+const totalMonto = computed(() => {
+  return horasData.value.reduce((acc, curr) => acc + curr.montoEstimado, 0)
+})
+
+const aprobarHora = (item) => {
+  item.estado = 'APROBADO'
+  alert(`Registro de horas para ${item.funcionario} aprobado.`)
+}
+
+const rechazarHora = (item) => {
+  item.estado = 'RECHAZADO'
+  alert(`Registro de horas para ${item.funcionario} rechazado.`)
+}
+
+const exportarReporte = () => {
+  alert('Generando consolidado de nómina para Acuasan (Excel/PDF)...')
+}
+
+const formatCurrency = (val) => {
+  return new Intl.NumberFormat('es-CO').format(val)
+}
+</script>
+
+<style scoped>
+.gerencia-horas-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: #ffffff;
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.view-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.view-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 4px 0 0 0;
+}
+
+.kpi-grid {
+  display: flex;
+  gap: 16px;
+}
+
+.kpi-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+</style>

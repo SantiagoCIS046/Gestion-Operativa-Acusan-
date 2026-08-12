@@ -1,0 +1,303 @@
+<template>
+  <div class="gestion-pqr-view">
+    <div class="view-header">
+      <div>
+        <h1 class="view-title">Atención al Usuario & PQR Acuasan</h1>
+        <p class="view-subtitle">Gestión de peticiones, quejas, reclamos y recursos legales en tiempo límite</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-primary" @click="nuevoPQR">+ Radicar Nueva PQR</button>
+      </div>
+    </div>
+
+    <div class="pqr-layout">
+      <!-- Master List -->
+      <div class="pqr-list-container">
+        <div class="list-search">
+          <input
+            v-model="busqueda"
+            type="text"
+            placeholder="Buscar por radicado, usuario o matrícula..."
+            class="search-input"
+          />
+        </div>
+
+        <div class="items-list">
+          <div
+            v-for="item in filteredPqrs"
+            :key="item.id"
+            class="pqr-list-item"
+            :class="{ active: selectedPqr && selectedPqr.id === item.id }"
+            @click="selectedPqr = item"
+          >
+            <div class="item-top">
+              <span class="rad-tag">#{{ item.radicado }}</span>
+              <span class="status-dot" :class="'status-' + item.estado.toLowerCase()"></span>
+            </div>
+            <div class="item-user">{{ item.usuario }}</div>
+            <div class="item-motivo">{{ item.motivo }}</div>
+            <div class="item-bottom">
+              <span class="item-date">📅 {{ item.fechaRadicado }}</span>
+              <span class="item-term text-amber-600">Vence: {{ item.fechaVencimiento }}</span>
+            </div>
+          </div>
+
+          <div v-if="filteredPqrs.length === 0" class="no-items">
+            No se encontraron registros.
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Panel -->
+      <div class="pqr-detail-container">
+        <PanelAtencionPQR
+          :pqr="selectedPqr"
+          @responder="procesarRespuesta"
+          @escalar="escalarCuadrilla"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import PanelAtencionPQR from '../components/PanelAtencionPQR.vue'
+
+const pqrs = ref([
+  {
+    id: 1,
+    radicado: 'PQR-2026-0811',
+    usuario: 'Gonzalo Silva Moreno',
+    matricula: 'ACU-48201',
+    direccion: 'Carrera 11 # 14-32, Barrio San Antonio',
+    motivo: 'Baja presión de agua y turbidez intermitente',
+    descripcion: 'Desde el pasado lunes el suministro de agua llega con muy baja presión en el segundo piso del inmueble y presenta coloración amarillenta en horas de la mañana.',
+    fechaRadicado: '10/08/2026',
+    fechaVencimiento: '24/08/2026',
+    estado: 'ABIERTO'
+  },
+  {
+    id: 2,
+    radicado: 'PQR-2026-0795',
+    usuario: 'Almacén Central San Gil S.A.S',
+    matricula: 'ACU-10944',
+    direccion: 'Calle 12 # 9-45, Centro',
+    motivo: 'Inconformidad con cobro de consumo promedio',
+    descripcion: 'Solicitud de reliquidación de la factura del periodo de julio por cobro sobre estimado habiendo tenido el local cerrado durante reparaciones locativas.',
+    fechaRadicado: '05/08/2026',
+    fechaVencimiento: '19/08/2026',
+    estado: 'EN_TRAMITE'
+  },
+  {
+    id: 3,
+    radicado: 'PQR-2026-0770',
+    usuario: 'Clara Inés Barrera',
+    matricula: 'ACU-33120',
+    direccion: 'Carrera 7 # 21-10, La Gruta',
+    motivo: 'Revisión y cambio de medidor averiado',
+    descripcion: 'El medidor presenta fuga en la tuerca de unión y condensación interna que impide la toma de lectura correcta.',
+    fechaRadicado: '01/08/2026',
+    fechaVencimiento: '15/08/2026',
+    estado: 'RESUELTO'
+  }
+])
+
+const selectedPqr = ref(pqrs.value[0])
+const busqueda = ref('')
+
+const filteredPqrs = computed(() => {
+  return pqrs.value.filter(p =>
+    p.radicado.toLowerCase().includes(busqueda.value.toLowerCase()) ||
+    p.usuario.toLowerCase().includes(busqueda.value.toLowerCase()) ||
+    (p.matricula && p.matricula.toLowerCase().includes(busqueda.value.toLowerCase()))
+  )
+})
+
+const procesarRespuesta = (payload) => {
+  if (selectedPqr.value) {
+    selectedPqr.value.estado = 'RESUELTO'
+    alert(`PQR ${selectedPqr.value.radicado} respondida con éxito y notificada.`)
+  }
+}
+
+const escalarCuadrilla = (item) => {
+  item.estado = 'EN_TRAMITE'
+  alert(`PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
+}
+
+const nuevoPQR = () => {
+  alert('Apertura de formulario de radicación ciudadana...')
+}
+</script>
+
+<style scoped>
+.gestion-pqr-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: #ffffff;
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.view-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.view-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 4px 0 0 0;
+}
+
+.pqr-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .pqr-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pqr-list-container {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  max-height: 750px;
+  overflow: hidden;
+}
+
+.list-search {
+  padding: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.items-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pqr-list-item {
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pqr-list-item:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.pqr-list-item.active {
+  background: #f0f9ff;
+  border-color: #0284c7;
+}
+
+.item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.rad-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0284c7;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-abierto { background: #ef4444; }
+.status-en_tramite { background: #f59e0b; }
+.status-resuelto { background: #10b981; }
+
+.item-user {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.item-motivo {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 4px 0 8px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.no-items {
+  padding: 30px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: #0369a1;
+}
+</style>

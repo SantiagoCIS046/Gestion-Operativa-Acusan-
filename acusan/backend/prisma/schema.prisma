@@ -1,0 +1,128 @@
+// Prisma schema file for Acuasan Gestión Operativa
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: PERMISOS LABORALES & OCR
+// -------------------------------------------------------------
+enum EstadoPermiso {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  EN_REVISION
+}
+
+enum TipoPermiso {
+  CALAMIDAD
+  MEDICO
+  PERSONAL
+  COMPENSATORIO
+  ESTUDIO
+}
+
+model Permiso {
+  id                String        @id @default(uuid())
+  radicado          String        @unique
+  cedula            String
+  nombreFuncionario String
+  cargo             String?
+  dependencia       String?
+  tipo              TipoPermiso
+  fechaInicio       DateTime
+  fechaFin          DateTime
+  justificacion     String?
+  soporteUrl        String?
+  ocrConfidence     Float?        @default(0)
+  ocrRawPayload     Json?
+  estado            EstadoPermiso @default(PENDIENTE)
+  aprobadoPor       String?
+  fechaAprobacion   DateTime?
+  observaciones     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("permisos")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: HORAS EXTRAS & RECARGOS
+// -------------------------------------------------------------
+enum TipoHoraExtra {
+  DIURNA
+  NOCTURNA
+  FESTIVA_DIURNA
+  FESTIVA_NOCTURNA
+}
+
+enum EstadoHoraExtra {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+model HoraExtra {
+  id              String          @id @default(uuid())
+  cedula          String
+  funcionario     String
+  cuadrillaArea   String
+  fechaOperacion  DateTime
+  tipoRecargo     TipoHoraExtra
+  cantidadHoras   Float
+  montoEstimado   Decimal         @default(0) @db.Decimal(12, 2)
+  estado          EstadoHoraExtra @default(PENDIENTE)
+  justificacion   String?
+  autorizadoPor   String?
+  fechaAprobacion DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("horas_extras")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: PQR (Peticiones, Quejas, Reclamos & Recursos)
+// -------------------------------------------------------------
+enum EstadoPQR {
+  ABIERTO
+  EN_TRAMITE
+  RESUELTO
+  ANULADO
+}
+
+enum PrioridadPQR {
+  BAJA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+model PQR {
+  id               String       @id @default(uuid())
+  radicado         String       @unique
+  usuario          String
+  cedulaNit        String?
+  matricula        String?
+  telefono         String?
+  email            String?
+  direccion        String?
+  motivo           String
+  descripcion      String
+  prioridad        PrioridadPQR @default(MEDIA)
+  estado           EstadoPQR    @default(ABIERTO)
+  fechaRadicado    DateTime     @default(now())
+  fechaVencimiento DateTime
+  respuestaOficial String?
+  fechaRespuesta   DateTime?
+  respondidoPor    String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("pqrs")
+}
