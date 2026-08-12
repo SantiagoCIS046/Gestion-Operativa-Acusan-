@@ -1,17 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  --primary-color: #0284c7;
-  --primary-dark: #0369a1;
-  --primary-light: #e0f2fe;
-  --bg-main: #f8fafc;
+  /* Paleta Oficial ACUASAN */
+  --acuasan-green: #73be28;
+  --acuasan-green-dark: #5a991b;
+  --acuasan-green-light: #f0fdf4;
+  --acuasan-blue: #004884;
+  --acuasan-blue-dark: #002d57;
+  --acuasan-blue-light: #e0f2fe;
+  --acuasan-cyan: #00a3e0;
+  --acuasan-cyan-light: #e0f7ff;
+  --acuasan-yellow: #f59e0b;
+  --acuasan-yellow-light: #fef9c3;
+  
+  --bg-main: #f0f4f8;
   --text-main: #0f172a;
   --text-muted: #64748b;
   --border-color: #e2e8f0;
   --card-bg: #ffffff;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
 }
 
 * {
@@ -20,10 +26,12 @@
   padding: 0;
 }
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+html, body {
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
+  font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
+  <defs>
+    <!-- Drop Gradients -->
+    <linearGradient id="dropGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a3e635" />
+      <stop offset="100%" stop-color="#65a30d" />
+    </linearGradient>
+    <linearGradient id="dropCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="dropYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="bgCircle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00589b" />
+      <stop offset="100%" stop-color="#003566" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <!-- Outer Lime Green Circle Ring -->
+    <circle cx="80" cy="80" r="76" fill="#73be28" />
+    
+    <!-- Deep Blue Inner Circle -->
+    <circle cx="80" cy="80" r="70" fill="url(#bgCircle)" stroke="#73be28" stroke-width="3" />
+
+    <!-- Three Water Drops in Acuasan colors -->
+    <!-- Top Left Green Leaf Drop -->
+    <path d="M66 58 C66 49, 75 40, 75 40 C75 40, 84 49, 84 58 C84 64, 79.5 68, 75 68 C70.5 68, 66 64, 66 58 Z" fill="url(#dropGreen)" />
+
+    <!-- Right Cyan Water Drop -->
+    <path d="M85 62 C85 50, 102 41, 102 41 C102 41, 119 50, 119 62 C119 71, 111 79, 102 79 C93 79, 85 71, 85 62 Z" fill="url(#dropCyan)" />
+
+    <!-- Bottom Left Gold/Yellow Drop -->
+    <path d="M54 71 C54 62, 68 53, 68 53 C68 53, 82 62, 82 71 C82 80, 75 87, 68 87 C61 87, 54 80, 54 71 Z" fill="url(#dropYellow)" />
+
+    <!-- White Splash Waves -->
+    <path d="M41 83 C49 74, 55 80, 55 80 C55 80, 47 87, 41 83 Z" fill="#ffffff" opacity="0.95" />
+    <path d="M120 83 C112 74, 106 80, 106 80 C106 80, 114 87, 120 83 Z" fill="#ffffff" opacity="0.95" />
+
+    <!-- Acuasan Text -->
+    <text x="80" y="108" font-family="'Inter', 'Arial Black', sans-serif" font-weight="900" font-size="22" fill="#ffffff" text-anchor="middle" letter-spacing="-1">acuasan</text>
+    
+    <!-- 100% Sangileña Subtext -->
+    <text x="80" y="123" font-family="'Inter', sans-serif" font-weight="800" font-size="10.5" fill="#38bdf8" text-anchor="middle">1<tspan fill="#73be28">00</tspan>% <tspan fill="#ffffff">Sangileña</tspan></text>
+  </g>
+</svg>

@@ -1,145 +1,1467 @@
 <template>
-  <div class="permisos-encargado-view">
-    <div class="view-header">
-      <div>
-        <h1 class="view-title">Gestión de Permisos — Panel Encargado</h1>
-        <p class="view-subtitle">Carga de solicitudes físicas, extracción OCR y registro preliminar</p>
+  <div class="encargado-view container-fluid p-0">
+    <!-- ========================================== -->
+    <!-- BOOTSTRAP TOAST / ALERT BANNER NOTIFICATIONS -->
+    <!-- ========================================== -->
+    <transition name="toast-slide">
+      <div
+        v-if="alertaBootstrap.visible"
+        :class="['alert', `alert-${alertaBootstrap.tipo}`, 'alert-dismissible', 'fade', 'show', 'd-flex', 'align-items-center', 'shadow-sm', 'mb-3', 'rounded-3']"
+        role="alert"
+      >
+        <div class="me-2 fs-5">
+          <span v-if="alertaBootstrap.tipo === 'success'">✔</span>
+          <span v-else-if="alertaBootstrap.tipo === 'danger'">⚠️</span>
+          <span v-else-if="alertaBootstrap.tipo === 'warning'">⚡</span>
+          <span v-else>ℹ️</span>
+        </div>
+        <div class="flex-grow-1">
+          <strong class="d-block">{{ alertaBootstrap.titulo }}</strong>
+          <span class="small">{{ alertaBootstrap.mensaje }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close"
+          @click="alertaBootstrap.visible = false"
+        ></button>
       </div>
-      <div class="view-actions">
-        <label class="btn btn-primary upload-btn">
-          <span>📁 Subir Documento Solicitud</span>
-          <input type="file" accept=".pdf,.png,.jpg,.jpeg" @change="handleFileUpload" hidden />
-        </label>
-      </div>
-    </div>
+    </transition>
 
-    <!-- Workspace split: Visor PDF + Formulario OCR -->
-    <div class="workspace-grid">
-      <div class="visor-column">
-        <VisorPDF :pdfUrl="selectedPdfUrl" :title="activeDocumentTitle" />
+    <!-- ========================================== -->
+    <!-- SCENARIO A: FORMULARIO PRINCIPAL OCR & VISOR ORIGINAL -->
+    <!-- ========================================== -->
+    <template v-if="vistaActiva === 'formulario'">
+      <!-- Top Action & KPI Header -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <!-- KPI Card: Procesados esta semana (Lunes a Viernes relacionado al mes) -->
+        <div class="card border-0 shadow-sm rounded-3 px-3 py-2 bg-white" style="min-width: 260px;">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <span class="text-uppercase fw-bold text-muted small" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                PROCESADOS ESTA SEMANA (LUN - VIE)
+              </span>
+              <div class="fs-2 fw-bold text-primary lh-1 mt-1" style="color: #004884 !important;">
+                {{ totalProcesadosEstaSemana }}
+              </div>
+              <div class="text-muted fw-semibold mt-1" style="font-size: 0.68rem;">
+                {{ rangoSemanaActualTexto }}
+              </div>
+            </div>
+            <div class="badge bg-success-subtle text-success p-2 rounded-3">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <polyline points="9 15 12 18 17 13"></polyline>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons: Historial de Permisos + Insertar Permiso Escaneado -->
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <!-- Button: Historial de Permisos (Plantilla Excel) -->
+          <button
+            type="button"
+            class="btn btn-outline-success fw-bold d-inline-flex align-items-center gap-2 shadow-sm rounded-3"
+            @click="vistaActiva = 'historial'"
+            title="Ver plantilla de Excel y listado de entregas procesadas"
+          >
+            <span>📗</span>
+            <span>Historial (Plantilla Excel)</span>
+            <span class="badge bg-success text-white rounded-pill">{{ historialRemisiones.length }}</span>
+          </button>
+
+          <!-- Button: Insertar Permiso Escaneado -->
+          <label
+            class="btn btn-primary fw-bold d-inline-flex align-items-center gap-2 shadow-sm rounded-3 mb-0"
+            style="background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
+            title="Seleccionar archivo PDF escaneado del computador"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Insertar Permiso Escaneado (PDF/PC)</span>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              @change="handleScannedFileUpload"
+              hidden
+            />
+          </label>
+        </div>
       </div>
-      <div class="form-column">
-        <FormularioValidacionOCR
-          :initialData="extractedData"
-          :confianzaOcr="ocrConfidence"
-          @save="guardarPermiso"
-          @cancel="limpiarFormulario"
-          @re-scan="reprocesarOCR"
-        />
+
+      <!-- BOOTSTRAP ALERT BANNER: SCANNING OCR NOTIFICATION -->
+      <transition name="fade">
+        <div v-if="isScanningOCR" class="alert alert-info d-flex align-items-center shadow-sm rounded-3 mb-3" role="alert">
+          <div class="spinner-border spinner-border-sm text-info me-2" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <div>
+            Analizando y extrayendo datos con OCR de <strong>{{ documentFileName }}</strong>...
+          </div>
+        </div>
+      </transition>
+
+      <!-- Main Workspace (Visor Original + Cuadro de Datos OCR con Bootstrap) -->
+      <div class="row g-3">
+        <!-- LEFT COLUMN: Visor del PDF / Archivo Original Real Escaneado (En todo el cuadro) -->
+        <div class="col-lg-7">
+          <div class="card border shadow-sm rounded-3 overflow-hidden h-100 d-flex flex-column">
+            <!-- Header Toolbar -->
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
+              <div class="d-flex align-items-center gap-2">
+                <span class="fs-5">📄</span>
+                <span class="fw-bold small text-dark text-truncate" style="max-width: 320px;">
+                  {{ documentLoaded ? documentFileName : 'Ningún documento cargado' }}
+                </span>
+              </div>
+
+              <div v-if="documentLoaded">
+                <label class="btn btn-sm btn-outline-secondary fw-semibold mb-0" style="cursor: pointer;" title="Cambiar archivo">
+                  <span>🔄 Cambiar PDF</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    @change="handleScannedFileUpload"
+                    hidden
+                  />
+                </label>
+              </div>
+            </div>
+
+            <!-- Viewport: Visualización del PDF / Documento Escaneado en Todo el Cuadro -->
+            <div class="card-body p-0 bg-dark bg-opacity-75 d-flex justify-content-center align-items-start overflow-auto flex-grow-1" style="min-height: 600px; max-height: 740px;">
+              <!-- STATE A: NO DOCUMENT LOADED (WAITING FOR INSERTION) -->
+              <div v-if="!documentLoaded" class="card border-0 shadow-sm p-4 text-center mx-auto my-auto rounded-3 bg-white" style="max-width: 420px;">
+                <div class="mx-auto mb-3 d-flex align-items-center justify-content-center bg-success-subtle border border-success-subtle rounded-circle" style="width: 70px; height: 70px;">
+                  <span class="fs-2">📑</span>
+                </div>
+                <h5 class="fw-bold mb-2 text-primary" style="color: #004884 !important;">Bandeja de Permisos Lista</h5>
+                <p class="text-muted small mb-3">
+                  Inserte el archivo PDF escaneado desde su computador para visualizar el documento original y extraer su información automáticamente.
+                </p>
+                <label class="btn btn-primary fw-bold mx-auto mb-0" style="background: #004884; cursor: pointer;">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="me-1">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>Seleccionar Permiso Escaneado (PDF/PC)</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    @change="handleScannedFileUpload"
+                    hidden
+                  />
+                </label>
+              </div>
+
+              <!-- STATE B: DOCUMENTO REAL ESCANEADO / PDF OCUPANDO TODO EL CUADRO -->
+              <div v-else class="w-100 h-100 d-flex flex-column align-items-center p-2 gap-3">
+                <!-- If it's a native PDF uploaded by user -->
+                <iframe
+                  v-if="isPdfFile && customFileUrl"
+                  :src="customFileUrl + '#toolbar=1&navpanes=0'"
+                  class="w-100 h-100 rounded bg-white border-0"
+                  style="min-height: 680px;"
+                  title="Visor PDF Original"
+                ></iframe>
+
+                <!-- If user uploaded a custom image from PC -->
+                <div v-else-if="customFileUrl && customFileUrl.startsWith('blob:')" class="w-100 text-center">
+                  <img
+                    :src="customFileUrl"
+                    alt="Documento Original Escaneado"
+                    class="img-fluid rounded shadow bg-white border"
+                    style="max-width: 100%; object-fit: contain;"
+                  />
+                </div>
+
+                <!-- REAL ORIGINAL SCANNED ACUASAN SHEETS IN FULL CONTINUOUS FLOW (EN TODO EL CUADRO) -->
+                <div v-else class="w-100 d-flex flex-column align-items-center gap-3">
+                  <!-- Página 1: Solicitud de Permiso Laboral Oficial Escaneada -->
+                  <div class="w-100 text-center">
+                    <img
+                      src="/scans/solicitud_permiso_scan.png"
+                      alt="Solicitud de Permiso Laboral Original Escaneada Acuasan"
+                      class="img-fluid rounded shadow bg-white border w-100"
+                      style="max-width: 720px; object-fit: contain;"
+                    />
+                  </div>
+
+                  <!-- Página 2: Evidencia Adjunta Escaneada (Formulario E-18 Registraduría) -->
+                  <div class="w-100 text-center">
+                    <img
+                      src="/scans/evidencia_e18_scan.png"
+                      alt="Formulario E-18 Evidencia Adjunta Escaneada"
+                      class="img-fluid rounded shadow bg-white border w-100"
+                      style="max-width: 720px; object-fit: contain;"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Formulario con Todos los Campos de Texto Estilo Bootstrap -->
+        <div class="col-lg-5">
+          <div class="card border shadow-sm rounded-3">
+            <div class="card-header bg-white py-3 px-3 border-bottom">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <h5 class="fw-bold text-primary m-0" style="color: #004884 !important;">
+                  Revisión de Datos (OCR)
+                </h5>
+                <span v-if="documentLoaded" class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                  ✔ 99% OCR Extraído
+                </span>
+                <span v-else class="badge bg-secondary-subtle text-secondary border px-2 py-1">
+                  ⏳ Esperando Documento
+                </span>
+              </div>
+              <p class="text-muted small mb-0">
+                Revise y rectifique los datos extraídos del PDF antes de confirmar el envío a Gerencia.
+              </p>
+            </div>
+
+            <div class="card-body p-3">
+              <form @submit.prevent="confirmarYEnviar">
+                <!-- SECTION 1: INFORMACIÓN DEL TRABAJADOR -->
+                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                  <div class="bg-success rounded" style="width: 4px; height: 14px;"></div>
+                  <span class="text-uppercase fw-bold text-primary small" style="font-size: 0.72rem; letter-spacing: 0.4px;">
+                    INFORMACIÓN DEL TRABAJADOR (SOLICITANTE)
+                  </span>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label mb-1 fw-semibold text-secondary small">Nombre Completo del Trabajador</label>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light text-muted">👤</span>
+                    <input
+                      v-model="formData.nombreFuncionario"
+                      type="text"
+                      class="form-control fw-bold"
+                      placeholder="Esperando documento escaneado..."
+                      :disabled="!documentLoaded"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Cédula / Documento</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted">🪪</span>
+                      <input
+                        v-model="formData.cedula"
+                        type="text"
+                        class="form-control"
+                        placeholder="Número de cédula"
+                        :disabled="!documentLoaded"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Cargo</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted">💼</span>
+                      <input
+                        v-model="formData.cargo"
+                        type="text"
+                        class="form-control"
+                        placeholder="Cargo del funcionario"
+                        :disabled="!documentLoaded"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label mb-1 fw-semibold text-secondary small">Área / Dependencia</label>
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light text-muted">🏢</span>
+                    <input
+                      v-model="formData.dependencia"
+                      type="text"
+                      class="form-control"
+                      placeholder="Área u operativa"
+                      :disabled="!documentLoaded"
+                    />
+                  </div>
+                </div>
+
+                <!-- SECTION 2: DETALLES DEL PERMISO LABORAL -->
+                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                  <div class="bg-success rounded" style="width: 4px; height: 14px;"></div>
+                  <span class="text-uppercase fw-bold text-primary small" style="font-size: 0.72rem; letter-spacing: 0.4px;">
+                    DETALLES DEL PERMISO LABORAL
+                  </span>
+                </div>
+
+                <div class="row g-2 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Fecha del Permiso</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted">📅</span>
+                      <input
+                        v-model="formData.fechaInicio"
+                        type="text"
+                        class="form-control fw-bold"
+                        placeholder="DD/MM/YYYY"
+                        :disabled="!documentLoaded"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Horario (24h) & Duración</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted">⏱️</span>
+                      <input
+                        v-model="formData.horasCalculadas"
+                        type="text"
+                        class="form-control fw-bold text-center text-primary"
+                        placeholder="Ej. 07:00 a 16:00 (8 horas)"
+                        :disabled="!documentLoaded"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Tipo de Permiso</label>
+                    <select
+                      v-model="formData.tipoPermiso"
+                      class="form-select form-select-sm fw-bold"
+                      :disabled="!documentLoaded"
+                    >
+                      <option value="Compensatorio">Compensatorio</option>
+                      <option value="Cita Médica">Cita Médica</option>
+                      <option value="Personal">Personal / Asunto Propio</option>
+                      <option value="Calamidad Doméstica">Calamidad Doméstica</option>
+                      <option value="Estudio / Capacitación">Estudio / Capacitación</option>
+                    </select>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Vo.Bo. Jefe Inmediato</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-success-subtle text-success">✔</span>
+                      <input
+                        type="text"
+                        class="form-control bg-light text-success fw-bold"
+                        :value="documentLoaded ? 'Firmado en Solicitud' : 'Pendiente'"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SECTION 3: MOTIVO Y OBSERVACIONES -->
+                <div class="mb-3">
+                  <label class="form-label mb-1 fw-semibold text-secondary small">Motivo y Justificación Extraída</label>
+                  <textarea
+                    v-model="formData.motivo"
+                    rows="3"
+                    class="form-control form-control-sm"
+                    placeholder="El motivo escrito en la solicitud aparecerá aquí..."
+                    :disabled="!documentLoaded"
+                    required
+                  ></textarea>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label mb-1 fw-semibold text-secondary small">Observaciones para Gerencia (Opcional)</label>
+                  <textarea
+                    v-model="formData.observaciones"
+                    rows="2"
+                    class="form-control form-control-sm"
+                    placeholder="Observación o nota adicional para la Gerencia General..."
+                    :disabled="!documentLoaded"
+                  ></textarea>
+                </div>
+
+                <!-- Action Buttons with Bootstrap Classes -->
+                <div class="d-flex justify-content-between align-items-center pt-2 border-top gap-2">
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm px-3"
+                    @click="abrirModalRechazo"
+                    :disabled="!documentLoaded"
+                  >
+                    Rechazar
+                  </button>
+
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-2 shadow-sm"
+                    style="background: linear-gradient(180deg, #004884 0%, #002d57 100%); border-color: #002040;"
+                    :disabled="!documentLoaded || isSubmitting"
+                  >
+                    <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
+                    <span v-else>▶</span>
+                    <span>{{ isSubmitting ? 'Enviando a Gerencia...' : 'Confirmar y Enviar a Gerencia' }}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ========================================== -->
+    <!-- SCENARIO B: VISTA HISTORIAL TIPO PLANTILLA EXCEL (CUADRO POR CUADRO Y SCROLL AUTOMÁTICO) -->
+    <!-- ========================================== -->
+    <template v-else-if="vistaActiva === 'historial'">
+      <div class="d-flex flex-column gap-3">
+        <!-- Excel Workbook Top Toolbar (Sin overflow-hidden para que el calendario no se corte) -->
+        <div class="card border shadow-sm rounded-3 bg-white">
+          <div class="card-header bg-success text-white py-2 px-3 d-flex flex-wrap justify-content-between align-items-center rounded-top">
+            <div class="d-flex align-items-center gap-2">
+              <span class="fs-5">📗</span>
+              <div>
+                <strong class="text-white" style="font-size: 0.95rem;">ACUASAN_REGISTRO_PERMISOS_2026.xlsx</strong>
+                <span class="badge bg-white text-success ms-2 small">Hoja 1: Consolidado_General</span>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-light text-success fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                @click="vistaActiva = 'formulario'"
+              >
+                <span>‹ Volver a Formulario</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Excel Formula & Filter Bar -->
+          <div class="card-body p-2 bg-light border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2 position-relative">
+            <!-- Search & Formula input -->
+            <div class="d-flex align-items-center gap-2 flex-grow-1" style="min-width: 300px;">
+              <span class="badge bg-secondary text-white fw-bold px-2 py-1" style="font-family: monospace;">fx</span>
+              <div class="input-group input-group-sm flex-grow-1">
+                <span class="input-group-text bg-white text-muted">Filtro / Búsqueda:</span>
+                <input
+                  v-model="busquedaHistorial"
+                  type="text"
+                  class="form-control"
+                  placeholder="Buscar por radicado, funcionario, cédula o dependencia..."
+                />
+              </div>
+            </div>
+
+            <!-- Estado selector y Botón Cronograma -->
+            <div class="d-flex align-items-center gap-2">
+              <select v-model="filtroEstadoHistorial" class="form-select form-select-sm" style="width: auto;">
+                <option value="">Todos los Estados (Columna Estado)</option>
+                <option value="ENVIADO_GERENCIA">✔ Enviados a Gerencia</option>
+                <option value="PENDIENTE_ENVIO">⏳ Pendientes de Envío</option>
+              </select>
+
+              <!-- 📅 BOTÓN CRONOGRAMA CON POPOVER COMPLETO SIN CORTES (LUNES A DOMINGO / LUNES A VIERNES) -->
+              <div class="position-relative">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-success fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                  @click="mostrarCalendario = !mostrarCalendario"
+                  title="Abrir selector de fecha y cronograma"
+                >
+                  <span>📅 Periodo: <strong>{{ etiquetaCronograma }}</strong></span>
+                  <span class="small">▼</span>
+                </button>
+
+                <!-- POPOVER CALENDARIO RELACIONADO AL MES (SEMANA LUNES A VIERNES / DOMINGO) -->
+                <transition name="popover-fade">
+                  <div
+                    v-if="mostrarCalendario"
+                    class="card border shadow-lg position-absolute end-0 p-3 rounded-3 bg-white"
+                    style="z-index: 1070; width: 310px; top: calc(100% + 6px);"
+                  >
+                    <!-- Encabezado mes / año -->
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                      <button class="btn btn-sm btn-light border py-0 px-2 fw-bold" @click="mesAnterior" :disabled="esPrimerMesDisponible" title="Mes anterior">‹</button>
+                      <strong class="text-primary fs-6">{{ mesActualInfo.nombre }} {{ anioSeleccionado }}</strong>
+                      <div class="d-flex gap-1 align-items-center">
+                        <button class="btn btn-sm btn-light border py-0 px-2 fw-bold" @click="mesSiguiente" title="Mes siguiente">›</button>
+                        <button class="btn-close btn-sm ms-1" @click="mostrarCalendario = false" title="Cerrar"></button>
+                      </div>
+                    </div>
+
+                    <!-- Días de la semana (LUNES A VIERNES LABORALES + FIN DE SEMANA) -->
+                    <div class="d-grid text-center mb-2" style="grid-template-columns: repeat(7, 1fr); gap: 3px;">
+                      <span class="small text-primary fw-bold" style="font-size: 0.7rem;">Lu</span>
+                      <span class="small text-primary fw-bold" style="font-size: 0.7rem;">Ma</span>
+                      <span class="small text-primary fw-bold" style="font-size: 0.7rem;">Mi</span>
+                      <span class="small text-primary fw-bold" style="font-size: 0.7rem;">Ju</span>
+                      <span class="small text-primary fw-bold" style="font-size: 0.7rem;">Vi</span>
+                      <span class="small text-muted fw-bold" style="font-size: 0.68rem;">Sá</span>
+                      <span class="small text-muted fw-bold" style="font-size: 0.68rem;">Do</span>
+                      
+                      <!-- Espacios en blanco según el día de la semana que inicia el mes -->
+                      <span v-for="b in primerDiaSemanaMes" :key="'blank-' + b"></span>
+                      
+                      <!-- Días del mes (Alineados exactamente según el día de inicio) -->
+                      <button
+                        v-for="dia in totalDiasMes"
+                        :key="'dia-' + dia"
+                        type="button"
+                        :class="[
+                          'btn btn-sm p-0 rounded position-relative',
+                          diaSeleccionado === dia ? 'btn-primary text-white fw-bold shadow-sm' : (contarRegistrosPorDia(dia) > 0 ? 'btn-info-subtle border border-info text-dark fw-bold' : 'btn-light text-dark')
+                        ]"
+                        style="height: 28px; font-size: 0.76rem;"
+                        @click="seleccionarDia(dia)"
+                      >
+                        {{ dia }}
+                        <span
+                          v-if="contarRegistrosPorDia(dia) > 0 && diaSeleccionado !== dia"
+                          class="position-absolute top-0 end-0 translate-middle-y badge rounded-pill bg-danger"
+                          style="font-size: 0.5rem; padding: 2px 4px;"
+                        >
+                          {{ contarRegistrosPorDia(dia) }}
+                        </span>
+                      </button>
+                    </div>
+
+                    <!-- Footer acciones del cronograma -->
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                      <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small text-primary fw-bold" @click="seleccionarTodoElMes">
+                        Ver mes completo
+                      </button>
+                      <button type="button" class="btn btn-sm btn-primary py-1 px-3 fw-bold rounded-2" @click="mostrarCalendario = false">
+                        Listo
+                      </button>
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </div>
+          </div>
+
+          <!-- 📊 PLANTILLA DE EXCEL CON CUADRÍCULA CUADRO POR CUADRO, CELDAS EN BLANCO Y SCROLL AUTOMÁTICO -->
+          <div class="excel-scroll-wrapper">
+            <table class="table table-bordered table-hover align-middle mb-0 excel-sheet-grid">
+              <!-- Header Letras Excel Fijo (A, B, C...) -->
+              <thead class="excel-sticky-header text-center">
+                <tr class="excel-letter-row">
+                  <th class="excel-corner-cell">#</th>
+                  <th style="min-width: 140px;">A</th>
+                  <th style="min-width: 120px;">B</th>
+                  <th style="min-width: 90px;">C</th>
+                  <th style="min-width: 120px;">D</th>
+                  <th style="min-width: 220px;">E</th>
+                  <th style="min-width: 200px;">F</th>
+                  <th style="min-width: 140px;">G</th>
+                  <th style="min-width: 110px;">H</th>
+                  <th style="min-width: 160px;">I</th>
+                  <th style="min-width: 160px;">J</th>
+                  <th style="min-width: 140px;">K</th>
+                </tr>
+                <!-- Header Nombres de Columnas -->
+                <tr class="excel-title-row">
+                  <th class="excel-corner-cell">FILA</th>
+                  <th class="text-center">N° RADICADO</th>
+                  <th class="text-center">FECHA ENTREGA</th>
+                  <th class="text-center">HORA (24H)</th>
+                  <th class="text-center">CÉDULA</th>
+                  <th>NOMBRE DEL FUNCIONARIO</th>
+                  <th>CARGO & ÁREA</th>
+                  <th class="text-center">TIPO DE PERMISO</th>
+                  <th class="text-center">DURACIÓN</th>
+                  <th class="text-center">RECURRENCIA (MES / AÑO)</th>
+                  <th class="text-center">ESTADO GERENCIA</th>
+                  <th class="text-center">ACCIÓN</th>
+                </tr>
+              </thead>
+
+              <!-- Cuerpo de la Plantilla con Filas Llenas y Cuadros en Blanco -->
+              <tbody>
+                <tr
+                  v-for="(fila, index) in filasExcelCompletas"
+                  :key="fila.id"
+                  :class="['excel-row', { 'excel-row-empty': fila.esVacia }]"
+                >
+                  <!-- Número de fila de Excel (1, 2, 3, 4, 5...) -->
+                  <td class="excel-row-num text-center fw-bold">{{ index + 1 }}</td>
+
+                  <!-- 🟢 SI LA FILA TIENE DATOS REGISTRADOS -->
+                  <template v-if="!fila.esVacia">
+                    <!-- Col A: Radicado -->
+                    <td class="excel-cell text-center fw-bold font-monospace text-primary" style="color: #004884 !important;">
+                      {{ fila.radicado }}
+                    </td>
+
+                    <!-- Col B: Fecha Entrega -->
+                    <td class="excel-cell text-center font-monospace">
+                      {{ (fila.fechaEntrega || '').split(' ')[0] }}
+                    </td>
+
+                    <!-- Col C: Hora Entrega (Formato 24h) -->
+                    <td class="excel-cell text-center fw-semibold font-monospace small text-dark">
+                      {{ fila.hora24 }}
+                    </td>
+
+                    <!-- Col D: Cédula -->
+                    <td class="excel-cell text-center font-monospace">
+                      {{ fila.cedula }}
+                    </td>
+
+                    <!-- Col E: Nombre del Funcionario -->
+                    <td class="excel-cell fw-bold text-dark">
+                      {{ fila.funcionario }}
+                    </td>
+
+                    <!-- Col F: Cargo & Dependencia -->
+                    <td class="excel-cell small">
+                      <div class="fw-semibold text-dark">{{ fila.cargo }}</div>
+                      <div class="text-muted" style="font-size: 0.72rem;">{{ fila.dependencia }}</div>
+                    </td>
+
+                    <!-- Col G: Tipo de Permiso -->
+                    <td class="excel-cell text-center">
+                      <span class="badge bg-light text-dark border px-2 py-1 fw-semibold">
+                        {{ fila.tipo }}
+                      </span>
+                    </td>
+
+                    <!-- Col H: Duración / Horas -->
+                    <td class="excel-cell text-center fw-bold text-primary" style="color: #004884 !important;">
+                      {{ fila.duracion }}
+                    </td>
+
+                    <!-- Col I: Recurrencia Real (Veces en el Mes y Año) -->
+                    <td class="excel-cell text-center small">
+                      <span
+                        :class="[
+                          'badge px-2 py-1 me-1',
+                          calcularRecurrenciaMes(fila.cedula, fila.anio, fila.mesNum) >= 2
+                            ? 'bg-warning-subtle text-warning-emphasis border border-warning'
+                            : 'bg-primary-subtle text-primary border border-primary-subtle'
+                        ]"
+                      >
+                        {{ calcularRecurrenciaMes(fila.cedula, fila.anio, fila.mesNum) }} en el mes
+                      </span>
+                      <span class="text-muted fw-semibold" style="font-size: 0.72rem;">
+                        (Total año: {{ calcularRecurrenciaAno(fila.cedula, fila.anio) }})
+                      </span>
+                    </td>
+
+                    <!-- Col J: Estado de Remisión -->
+                    <td class="excel-cell text-center">
+                      <span
+                        v-if="fila.estadoEnvio === 'ENVIADO_GERENCIA'"
+                        class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"
+                      >
+                        ✔ Enviado a Gerencia
+                      </span>
+                      <span
+                        v-else
+                        class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1"
+                      >
+                        ⏳ Pendiente de Envío
+                      </span>
+                    </td>
+
+                    <!-- Col K: Acción -->
+                    <td class="excel-cell text-center">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold"
+                        style="font-size: 0.75rem;"
+                        @click="cargarEnFormulario(fila)"
+                        title="Cargar el documento escaneado original y datos en el formulario"
+                      >
+                        Cargar en Permisos
+                      </button>
+                    </td>
+                  </template>
+
+                  <!-- ⚪ SI ES UN CUADRO EN BLANCO (FILA VACÍA ESPERANDO REGISTROS) -->
+                  <template v-else>
+                    <td class="excel-cell excel-empty-cell text-muted text-center small fst-italic">
+                      <span v-if="index === historialFiltrado.length" class="text-black-50">(Sin registrar)</span>
+                    </td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                    <td class="excel-cell excel-empty-cell"></td>
+                  </template>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Excel Sheet Bottom Status Bar -->
+          <div class="card-footer bg-light py-2 px-3 border-top d-flex flex-wrap justify-content-between align-items-center small text-muted font-monospace">
+            <div>
+              <span>LISTO • RECUENTO ACTIVO: <strong>{{ historialFiltrado.length }} registros</strong> en {{ etiquetaCronograma }}</span>
+            </div>
+            <div class="d-flex gap-3">
+              <span>ENVIADOS GERENCIA: <strong class="text-success">{{ totalEnviadosGerenciaPeriodo }}</strong></span>
+              <span>PENDIENTES: <strong class="text-warning">{{ totalPendientesEnvioPeriodo }}</strong></span>
+              <span>100% ZOOM</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ========================================== -->
+    <!-- BOOTSTRAP MODAL: RECHAZO DE SOLICITUD -->
+    <!-- ========================================== -->
+    <div
+      v-if="modalRechazoVisible"
+      class="modal fade show d-block"
+      tabindex="-1"
+      style="background: rgba(0,0,0,0.5); z-index: 1080;"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow rounded-3 border-0">
+          <div class="modal-header bg-danger-subtle border-bottom border-danger-subtle py-2 px-3">
+            <h6 class="modal-title fw-bold text-danger mb-0">⚠️ Rechazar Solicitud de Permiso</h6>
+            <button type="button" class="btn-close" @click="modalRechazoVisible = false"></button>
+          </div>
+          <div class="modal-body p-3">
+            <p class="small text-muted mb-2">
+              Indique el motivo por el cual se rechaza la solicitud de <strong>{{ formData.nombreFuncionario }}</strong>:
+            </p>
+            <textarea
+              v-model="motivoRechazoTexto"
+              class="form-control form-control-sm"
+              rows="3"
+              placeholder="Escriba el motivo formal del rechazo..."
+              required
+            ></textarea>
+          </div>
+          <div class="modal-footer py-2 px-3 border-top">
+            <button type="button" class="btn btn-sm btn-secondary" @click="modalRechazoVisible = false">Cancelar</button>
+            <button type="button" class="btn btn-sm btn-danger fw-bold" @click="confirmarRechazoModal">Confirmar Rechazo</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import VisorPDF from '../components/VisorPDF.vue'
-import FormularioValidacionOCR from '../components/FormularioValidacionOCR.vue'
+import { ref, reactive, computed } from 'vue'
 
-const selectedPdfUrl = ref('')
-const activeDocumentTitle = ref('Sin documento seleccionado')
-const ocrConfidence = ref(96)
+// Controls view mode: 'formulario' | 'historial'
+const vistaActiva = ref('formulario')
 
-const extractedData = ref({
-  cedula: '1098765432',
-  nombreFuncionario: 'Carlos Andrés Gómez Ortiz',
-  tipoPermiso: 'CALAMIDAD',
-  dependencia: 'Operaciones de Red / Acueducto',
-  fechaInicio: '2026-08-15',
-  fechaFin: '2026-08-16',
-  justificacion: 'Solicitud por emergencia familiar debidamente certificada con soporte adjunto.'
+const documentLoaded = ref(true)
+const documentFileName = ref('Permiso_Escaneado_Solicitud.pdf')
+const customFileUrl = ref('')
+const isPdfFile = ref(false)
+
+const isScanningOCR = ref(false)
+const isSubmitting = ref(false)
+
+// BOOTSTRAP ALERT STATE
+const alertaBootstrap = reactive({
+  visible: false,
+  tipo: 'success',
+  titulo: '',
+  mensaje: ''
 })
 
-const handleFileUpload = (event) => {
-  const file = event.target.files[0]
-  if (file) {
-    activeDocumentTitle.value = file.name
-    selectedPdfUrl.value = URL.createObjectURL(file)
+const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
+  alertaBootstrap.tipo = tipo
+  alertaBootstrap.titulo = titulo
+  alertaBootstrap.mensaje = mensaje
+  alertaBootstrap.visible = true
+  if (duracion > 0) {
+    setTimeout(() => {
+      alertaBootstrap.visible = false
+    }, duracion)
   }
 }
 
-const guardarPermiso = (datos) => {
-  console.log('Guardando solicitud de permiso:', datos)
-  alert('Solicitud de permiso registrada con éxito. Pasa a revisión de Gerencia.')
+// BOOTSTRAP REJECT MODAL STATE
+const modalRechazoVisible = ref(false)
+const motivoRechazoTexto = ref('')
+
+const abrirModalRechazo = () => {
+  motivoRechazoTexto.value = ''
+  modalRechazoVisible.value = true
 }
 
-const limpiarFormulario = () => {
-  selectedPdfUrl.value = ''
-  activeDocumentTitle.value = 'Sin documento seleccionado'
+const confirmarRechazoModal = () => {
+  if (!motivoRechazoTexto.value.trim()) {
+    lanzarAlertaBootstrap('warning', 'Campo Obligatorio', 'Debe especificar el motivo del rechazo.')
+    return
+  }
+  const nombre = formData.nombreFuncionario
+  const motivo = motivoRechazoTexto.value
+  modalRechazoVisible.value = false
+  limpiarFormularioYVisor()
+  lanzarAlertaBootstrap('danger', 'Solicitud Rechazada', `La solicitud de ${nombre} ha sido rechazada. Motivo: ${motivo}`)
 }
 
-const reprocesarOCR = () => {
-  console.log('Re-ejecutando OCR sobre el soporte...')
+// Cronograma Popover and Period Selection
+const mostrarCalendario = ref(false)
+
+// Dynamic Real-Time Date Detection
+const fechaActual = new Date()
+const anioActual = fechaActual.getFullYear()
+const mesActual = fechaActual.getMonth() + 1
+const diaActual = fechaActual.getDate()
+
+const anioSeleccionado = ref(anioActual >= 2026 ? anioActual : 2026)
+const mesNumSeleccionado = ref(
+  (anioActual === 2026 && mesActual < 8) ? 8 : (anioActual >= 2026 ? mesActual : 8)
+)
+const diaSeleccionado = ref(diaActual)
+
+const todosLosMeses = [
+  { mesNum: 1, nombre: 'Enero' },
+  { mesNum: 2, nombre: 'Febrero' },
+  { mesNum: 3, nombre: 'Marzo' },
+  { mesNum: 4, nombre: 'Abril' },
+  { mesNum: 5, nombre: 'Mayo' },
+  { mesNum: 6, nombre: 'Junio' },
+  { mesNum: 7, nombre: 'Julio' },
+  { mesNum: 8, nombre: 'Agosto' },
+  { mesNum: 9, nombre: 'Septiembre' },
+  { mesNum: 10, nombre: 'Octubre' },
+  { mesNum: 11, nombre: 'Noviembre' },
+  { mesNum: 12, nombre: 'Diciembre' }
+]
+
+const mesActualInfo = computed(() => {
+  return todosLosMeses.find(m => m.mesNum === mesNumSeleccionado.value) || todosLosMeses[7]
+})
+
+const etiquetaCronograma = computed(() => {
+  if (diaSeleccionado.value !== null) {
+    return `${diaSeleccionado.value} de ${mesActualInfo.value.nombre}, ${anioSeleccionado.value}`
+  }
+  return `${mesActualInfo.value.nombre} ${anioSeleccionado.value}`
+})
+
+const esPrimerMesDisponible = computed(() => {
+  return anioSeleccionado.value === 2026 && mesNumSeleccionado.value === 8
+})
+
+const totalDiasMes = computed(() => {
+  return new Date(anioSeleccionado.value, mesNumSeleccionado.value, 0).getDate()
+})
+
+// 📅 CALENDARIO INICIA EN LUNES: Lunes=0, Martes=1, Miércoles=2, Jueves=3, Viernes=4, Sábado=5, Domingo=6
+const primerDiaSemanaMes = computed(() => {
+  const jsDay = new Date(anioSeleccionado.value, mesNumSeleccionado.value - 1, 1).getDay()
+  return (jsDay + 6) % 7
+})
+
+const busquedaHistorial = ref('')
+const filtroEstadoHistorial = ref('')
+
+// Form model for OCR verification with standard Bootstrap classes & 24h format
+const formData = reactive({
+  nombreFuncionario: 'Angelica Sandrit Morales Rojas',
+  cedula: '1100964621',
+  cargo: 'Líder Potabilización',
+  dependencia: 'Planta de Tratamiento / Potabilización',
+  fechaPermisoTexto: '18 de Agosto 2026',
+  horaDetalle: '07:00 a 16:00 (8 horas)',
+  fechaInicio: '18/08/2026',
+  fechaFin: '18/08/2026',
+  horasCalculadas: '07:00 a 16:00 (8 horas)',
+  tipoPermiso: 'Compensatorio',
+  motivoManuscrito: 'Jurado Votaciones presidencia 21 de Junio 2026',
+  motivo: 'Día de descanso compensatorio por haber prestado la función pública de Jurado de Votación (Vicepresidente, Mesa 7) en Elecciones Presidenciales Segunda Vuelta 2026.',
+  observaciones: 'Cumple con el término legal de los 45 días posteriores a la votación.'
+})
+
+// Detailed History of Remissions (Horas en Formato 24h)
+const historialRemisiones = ref([
+  {
+    id: 1,
+    anio: 2026,
+    mesNum: 8,
+    dia: 10,
+    radicado: 'PERM-2026-0040',
+    fechaEntrega: '10/08/2026',
+    hora24: '08:15',
+    cedula: '1098345672',
+    funcionario: 'Carlos Andrés Mendoza Ruiz',
+    cargo: 'Técnico Operario - Acueducto',
+    dependencia: 'Mantenimiento de Acueducto',
+    tipo: 'Cita Médica',
+    duracion: '08:00 a 12:00 (4 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Cita médica especialista.',
+    soporte: 'Certificado_EPS_Sanitas.pdf'
+  },
+  {
+    id: 2,
+    anio: 2026,
+    mesNum: 8,
+    dia: 11,
+    radicado: 'PERM-2026-0041',
+    fechaEntrega: '11/08/2026',
+    hora24: '10:00',
+    cedula: '63456789',
+    funcionario: 'Sandra Milena Villamizar',
+    cargo: 'Auxiliar Administrativa',
+    dependencia: 'Recursos Humanos',
+    tipo: 'Personal',
+    duracion: '10:00 a 12:00 (2 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Diligencia bancaria.',
+    soporte: 'Permiso_Sandra_V.pdf'
+  },
+  {
+    id: 3,
+    anio: 2026,
+    mesNum: 8,
+    dia: 12,
+    radicado: 'PERM-2026-0042',
+    fechaEntrega: '12/08/2026',
+    hora24: '09:30',
+    cedula: '1098345672',
+    funcionario: 'Carlos Andrés Mendoza Ruiz',
+    cargo: 'Técnico Operario - Acueducto',
+    dependencia: 'Mantenimiento de Acueducto',
+    tipo: 'Cita Médica',
+    duracion: '08:00 a 12:00 (4 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Cita médica especialista - Urología.',
+    soporte: 'Certificado_EPS_Sanitas.pdf'
+  },
+  {
+    id: 4,
+    anio: 2026,
+    mesNum: 8,
+    dia: 12,
+    radicado: 'PERM-2026-0043',
+    fechaEntrega: '12/08/2026',
+    hora24: '11:15',
+    cedula: '13888999',
+    funcionario: 'Jorge Eliécer Prada Santos',
+    cargo: 'Conductor Operativo Cuadrilla',
+    dependencia: 'Aseo y Rutas Urbanas',
+    tipo: 'Compensatorio',
+    duracion: '07:00 a 15:00 (8 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Día compensatorio por labor dominical en jornada de recolección especial.',
+    soporte: 'Compensatorio_JPrada.pdf'
+  },
+  {
+    id: 5,
+    anio: 2026,
+    mesNum: 8,
+    dia: 13,
+    radicado: 'PERM-2026-0044',
+    fechaEntrega: '13/08/2026',
+    hora24: '14:00',
+    cedula: '1098765432',
+    funcionario: 'María Fernanda Ruiz Ortiz',
+    cargo: 'Analista de Facturación y Cartera',
+    dependencia: 'Comercial y Facturación',
+    tipo: 'Personal',
+    duracion: '14:00 a 16:00 (2 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Diligencia notarial y bancaria personal impostergable.',
+    soporte: 'Solicitud_Permiso_Laboral.pdf'
+  },
+  {
+    id: 6,
+    anio: 2026,
+    mesNum: 8,
+    dia: 14,
+    radicado: 'PERM-2026-0045',
+    fechaEntrega: '14/08/2026',
+    hora24: '08:45',
+    cedula: '91234567',
+    funcionario: 'Héctor Fabio Ramírez',
+    cargo: 'Operario de Redes de Alcantarillado',
+    dependencia: 'Alcantarillado Principal',
+    tipo: 'Calamidad Doméstica',
+    duracion: '08:00 a 16:00 (16 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Emergencia por filtración e inundación en vivienda familiar.',
+    soporte: 'Acta_Calamidad_HF.pdf'
+  },
+  {
+    id: 7,
+    anio: 2026,
+    mesNum: 8,
+    dia: 15,
+    radicado: 'PERM-2026-0046',
+    fechaEntrega: '15/08/2026',
+    hora24: '16:20',
+    cedula: '1098444555',
+    funcionario: 'Mauricio Gómez Santos',
+    cargo: 'Operador Planta de Tratamiento',
+    dependencia: 'Planta de Tratamiento de Agua',
+    tipo: 'Estudio / Capacitación',
+    duracion: '10:00 a 16:00 (6 horas)',
+    estadoEnvio: 'ENVIADO_GERENCIA',
+    motivo: 'Examen de certificación en sustancias químicas.',
+    soporte: 'Certificado_Examen_MG.pdf'
+  }
+])
+
+// 📅 CÁLCULO DE LA SEMANA LABORAL (LUNES A VIERNES) RELACIONADA AL MES
+const obtenerRangoSemanaLaboral = () => {
+  const d = new Date(anioActual, mesActual - 1, diaActual)
+  const diaSemana = d.getDay() // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  
+  // Offset para llegar al Lunes de esta semana
+  const diffLunes = diaSemana === 0 ? -6 : 1 - diaSemana
+  const fechaLunes = new Date(d)
+  fechaLunes.setDate(d.getDate() + diffLunes)
+
+  // Viernes de la misma semana
+  const fechaViernes = new Date(fechaLunes)
+  fechaViernes.setDate(fechaLunes.getDate() + 4)
+
+  return {
+    diaLunes: fechaLunes.getDate(),
+    mesLunes: fechaLunes.getMonth() + 1,
+    anioLunes: fechaLunes.getFullYear(),
+    diaViernes: fechaViernes.getDate(),
+    mesViernes: fechaViernes.getMonth() + 1,
+    anioViernes: fechaViernes.getFullYear()
+  }
+}
+
+const rangoSemanaActualTexto = computed(() => {
+  const { diaLunes, mesLunes, diaViernes, mesViernes } = obtenerRangoSemanaLaboral()
+  const nombreMesLunes = todosLosMeses.find(m => m.mesNum === mesLunes)?.nombre.substring(0, 3) || ''
+  const nombreMesViernes = todosLosMeses.find(m => m.mesNum === mesViernes)?.nombre.substring(0, 3) || ''
+  
+  if (mesLunes === mesViernes) {
+    return `Lun ${diaLunes} a Vie ${diaViernes} de ${nombreMesLunes}`
+  }
+  return `Lun ${diaLunes} ${nombreMesLunes} a Vie ${diaViernes} ${nombreMesViernes}`
+})
+
+// KPI DINÁMICO: TOTAL PROCESADOS EN LA SEMANA (LUNES A VIERNES)
+const totalProcesadosEstaSemana = computed(() => {
+  const { diaLunes, mesLunes, anioLunes, diaViernes, mesViernes, anioViernes } = obtenerRangoSemanaLaboral()
+  
+  return historialRemisiones.value.filter(item => {
+    // Si la semana está dentro del mismo mes
+    if (mesLunes === mesViernes && anioLunes === anioViernes) {
+      return item.anio === anioLunes &&
+             item.mesNum === mesLunes &&
+             item.dia >= diaLunes &&
+             item.dia <= diaViernes
+    }
+    // Si la semana inicia a final de mes y termina en el siguiente
+    const perteneceFinMes = item.anio === anioLunes && item.mesNum === mesLunes && item.dia >= diaLunes
+    const perteneceInicioMes = item.anio === anioViernes && item.mesNum === mesViernes && item.dia <= diaViernes
+    return perteneceFinMes || perteneceInicioMes
+  }).length
+})
+
+// 📊 CÁLCULO DINÁMICO Y EXACTO DE RECURRENCIAS
+const calcularRecurrenciaMes = (cedula, anio, mesNum) => {
+  if (!cedula) return 0
+  return historialRemisiones.value.filter(
+    r => String(r.cedula).trim() === String(cedula).trim() &&
+         r.anio === anio &&
+         r.mesNum === mesNum
+  ).length
+}
+
+const calcularRecurrenciaAno = (cedula, anio) => {
+  if (!cedula) return 0
+  return historialRemisiones.value.filter(
+    r => String(r.cedula).trim() === String(cedula).trim() &&
+         r.anio === anio
+  ).length
+}
+
+const contarRegistrosPorDia = (dia) => {
+  return historialRemisiones.value.filter(
+    item => item.anio === anioSeleccionado.value &&
+            item.mesNum === mesNumSeleccionado.value &&
+            item.dia === dia
+  ).length
+}
+
+const seleccionarDia = (dia) => {
+  diaSeleccionado.value = diaSeleccionado.value === dia ? null : dia
+}
+
+const seleccionarTodoElMes = () => {
+  diaSeleccionado.value = null
+}
+
+const mesAnterior = () => {
+  if (anioSeleccionado.value === 2026) {
+    if (mesNumSeleccionado.value > 8) {
+      mesNumSeleccionado.value--
+      diaSeleccionado.value = null
+    }
+  } else {
+    if (mesNumSeleccionado.value > 1) {
+      mesNumSeleccionado.value--
+      diaSeleccionado.value = null
+    } else {
+      anioSeleccionado.value--
+      mesNumSeleccionado.value = 12
+      diaSeleccionado.value = null
+    }
+  }
+}
+
+const mesSiguiente = () => {
+  if (mesNumSeleccionado.value < 12) {
+    mesNumSeleccionado.value++
+    diaSeleccionado.value = null
+  } else {
+    anioSeleccionado.value++
+    mesNumSeleccionado.value = 1
+    diaSeleccionado.value = null
+  }
+}
+
+const historialFiltrado = computed(() => {
+  return historialRemisiones.value.filter(item => {
+    const coincideAnio = item.anio === anioSeleccionado.value
+    const coincideMes = item.mesNum === mesNumSeleccionado.value
+    const coincideDia = diaSeleccionado.value === null || item.dia === diaSeleccionado.value
+
+    const coincideTexto = busquedaHistorial.value === '' ||
+      item.funcionario.toLowerCase().includes(busquedaHistorial.value.toLowerCase()) ||
+      item.cedula.includes(busquedaHistorial.value) ||
+      item.radicado.toLowerCase().includes(busquedaHistorial.value.toLowerCase()) ||
+      (item.dependencia && item.dependencia.toLowerCase().includes(busquedaHistorial.value.toLowerCase()))
+
+    const coincideEstado = filtroEstadoHistorial.value === '' ||
+      item.estadoEnvio === filtroEstadoHistorial.value
+
+    return coincideAnio && coincideMes && coincideDia && coincideTexto && coincideEstado
+  })
+})
+
+// 📊 FILAS COMPLETAS PARA LA PLANTILLA EXCEL
+const MIN_FILAS_EXCEL = 14
+
+const filasExcelCompletas = computed(() => {
+  const filas = [...historialFiltrado.value.map(item => ({ ...item, esVacia: false }))]
+  const faltantes = Math.max(0, MIN_FILAS_EXCEL - filas.length)
+  for (let i = 1; i <= faltantes; i++) {
+    filas.push({
+      id: `blank-row-${i}`,
+      esVacia: true
+    })
+  }
+  return filas
+})
+
+const totalEnviadosGerenciaPeriodo = computed(() => {
+  return historialFiltrado.value.filter(item => item.estadoEnvio === 'ENVIADO_GERENCIA').length
+})
+
+const totalPendientesEnvioPeriodo = computed(() => {
+  return historialFiltrado.value.filter(item => item.estadoEnvio === 'PENDIENTE_ENVIO').length
+})
+
+const limpiarFormularioYVisor = () => {
+  documentLoaded.value = false
+  documentFileName.value = ''
+  customFileUrl.value = ''
+  isPdfFile.value = false
+  formData.nombreFuncionario = ''
+  formData.cedula = ''
+  formData.cargo = ''
+  formData.dependencia = ''
+  formData.fechaInicio = ''
+  formData.fechaFin = ''
+  formData.fechaPermisoTexto = ''
+  formData.horaDetalle = ''
+  formData.horasCalculadas = ''
+  formData.tipoPermiso = 'Compensatorio'
+  formData.motivoManuscrito = ''
+  formData.motivo = ''
+  formData.observaciones = ''
+}
+
+// 🎯 INSERT ORIGINAL PDF OR IMAGE FROM USER'S COMPUTER
+const handleScannedFileUpload = (e) => {
+  const file = e.target.files[0]
+  if (!file) return
+
+  documentFileName.value = file.name
+  isPdfFile.value = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  customFileUrl.value = URL.createObjectURL(file)
+  documentLoaded.value = true
+
+  isScanningOCR.value = true
+  setTimeout(() => {
+    isScanningOCR.value = false
+    if (!formData.nombreFuncionario) {
+      formData.nombreFuncionario = 'Angelica Sandrit Morales Rojas'
+      formData.cedula = '1100964621'
+      formData.cargo = 'Líder Potabilización'
+      formData.dependencia = 'Planta de Tratamiento / Potabilización'
+      formData.fechaPermisoTexto = '18 de Agosto 2026'
+      formData.horaDetalle = '07:00 a 16:00 (8 horas)'
+      formData.fechaInicio = '18/08/2026'
+      formData.fechaFin = '18/08/2026'
+      formData.horasCalculadas = '07:00 a 16:00 (8 horas)'
+      formData.tipoPermiso = 'Compensatorio'
+      formData.motivo = 'Día de descanso compensatorio por haber prestado la función pública de Jurado de Votación (Vicepresidente, Mesa 7) en Elecciones Presidenciales Segunda Vuelta 2026.'
+      formData.observaciones = 'Documento escaneado verificado con éxito.'
+    }
+    lanzarAlertaBootstrap('info', 'OCR Completado', `Se extrajeron los datos del documento ${file.name} correctamente.`)
+  }, 900)
+}
+
+// 🎯 CARGAR PERMISO ORIGINAL DESDE EL HISTORIAL (MUESTRA EL DOCUMENTO ESCANEADO EN TODO EL CUADRO)
+const cargarEnFormulario = (item) => {
+  documentLoaded.value = true
+  documentFileName.value = item.soporte || `Permiso_${item.funcionario.replace(/\s+/g, '_')}_${item.anio}.pdf`
+  
+  if (item.archivoUrl) {
+    customFileUrl.value = item.archivoUrl
+    isPdfFile.value = item.isPdf || false
+  } else {
+    customFileUrl.value = ''
+    isPdfFile.value = false
+  }
+
+  formData.nombreFuncionario = item.funcionario
+  formData.cedula = item.cedula
+  formData.cargo = item.cargo
+  formData.dependencia = item.dependencia
+  formData.tipoPermiso = item.tipo
+  formData.motivo = item.motivo
+  formData.motivoManuscrito = item.motivo
+  formData.fechaPermisoTexto = `${item.dia} de ${todosLosMeses.find(m => m.mesNum === item.mesNum)?.nombre || 'Mes'} ${item.anio}`
+  formData.horaDetalle = item.duracion
+  formData.horasCalculadas = item.duracion
+  formData.fechaInicio = `${String(item.dia).padStart(2, '0')}/${String(item.mesNum).padStart(2, '0')}/${item.anio}`
+  formData.fechaFin = `${String(item.dia).padStart(2, '0')}/${String(item.mesNum).padStart(2, '0')}/${item.anio}`
+  
+  vistaActiva.value = 'formulario'
+  lanzarAlertaBootstrap('info', 'Documento Original Cargado', `Se visualiza el documento original de la solicitud #${item.radicado} (${item.funcionario}).`)
+}
+
+// Confirm and Send to Gerencia (Hora en Formato 24h & Registro del Archivo Original)
+const confirmarYEnviar = async () => {
+  if (!formData.nombreFuncionario || !formData.cedula) {
+    lanzarAlertaBootstrap('warning', 'Sin Información', 'No hay ninguna solicitud cargada para enviar a Gerencia.')
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    await new Promise(resolve => setTimeout(resolve, 750))
+
+    const nuevoRadicado = `PERM-2026-${String(historialRemisiones.value.length + 47).padStart(4, '0')}`
+    const diaNum = parseInt(formData.fechaInicio.split('/')[0]) || diaActual
+    const mesNum = parseInt(formData.fechaInicio.split('/')[1]) || mesActual
+    const anioNum = parseInt(formData.fechaInicio.split('/')[2]) || anioActual
+
+    // Hora en formato exacto de 24 horas (HH:mm)
+    const ahora = new Date()
+    const hora24Actual = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+    const nuevoRegistro = {
+      id: Date.now(),
+      anio: anioNum,
+      mesNum: mesNum,
+      dia: diaNum,
+      radicado: nuevoRadicado,
+      fechaEntrega: `${String(diaActual).padStart(2, '0')}/${String(mesActual).padStart(2, '0')}/${anioActual}`,
+      hora24: hora24Actual,
+      cedula: formData.cedula,
+      funcionario: formData.nombreFuncionario,
+      cargo: formData.cargo || 'Funcionario Acuasan',
+      dependencia: formData.dependencia || 'Operativa',
+      tipo: formData.tipoPermiso,
+      duracion: formData.horasCalculadas || '07:00 a 15:00 (8 horas)',
+      estadoEnvio: 'ENVIADO_GERENCIA',
+      motivo: formData.motivo,
+      soporte: documentFileName.value || 'Permiso_Escaneado.pdf',
+      archivoUrl: customFileUrl.value,
+      isPdf: isPdfFile.value
+    }
+
+    historialRemisiones.value.unshift(nuevoRegistro)
+
+    const nombreEnviado = formData.nombreFuncionario
+    const radicadoGenerado = nuevoRadicado
+
+    limpiarFormularioYVisor()
+
+    lanzarAlertaBootstrap(
+      'success',
+      '¡Permiso Radicado y Enviado a Gerencia!',
+      `Se registró en el sistema a las ${hora24Actual} hrs bajo el radicado #${radicadoGenerado} (${nuevoRegistro.tipo}) para ${nombreEnviado}. El documento y el formulario se han limpiado para procesar la siguiente solicitud.`,
+      7000
+    )
+
+  } catch (error) {
+    lanzarAlertaBootstrap('danger', 'Error de Envío', 'Ocurrió un inconveniente al enviar la solicitud a Gerencia.')
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
 <style scoped>
-.permisos-encargado-view {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+.encargado-view {
+  min-height: 100%;
 }
 
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  background: #ffffff;
-  padding: 20px 24px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: all 0.3s ease;
 }
 
-.view-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0;
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
-.view-subtitle {
-  font-size: 0.9rem;
-  color: #64748b;
-  margin: 4px 0 0 0;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease;
 }
 
-.workspace-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
-@media (max-width: 1024px) {
-  .workspace-grid {
-    grid-template-columns: 1fr;
-  }
+.popover-fade-enter-active,
+.popover-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.upload-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.popover-fade-enter-from,
+.popover-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
-.btn {
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.2s ease;
+/* Acuasan form controls styling */
+.form-control:focus,
+.form-select:focus {
+  border-color: #73be28 !important;
+  box-shadow: 0 0 0 0.25rem rgba(115, 190, 40, 0.2) !important;
 }
 
-.btn-primary {
-  background: #0284c7;
-  color: #ffffff;
+.input-group-text {
+  border-color: #dee2e6;
 }
 
-.btn-primary:hover {
-  background: #0369a1;
+/* ========================================== */
+/* 📊 EXCEL SPREADSHEET GRID & SCROLL SYSTEM */
+/* ========================================== */
+.excel-scroll-wrapper {
+  max-height: 540px;
+  min-height: 420px;
+  overflow-y: auto;
+  overflow-x: auto;
+  background-color: #f8fafc;
+  border-top: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.excel-sheet-grid {
+  border-collapse: collapse !important;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 0.82rem;
+  background-color: #ffffff;
+  width: 100%;
+}
+
+/* Sticky Excel Header to keep column letters fixed when scrolling */
+.excel-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.excel-letter-row th {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 0.72rem !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 3px 6px !important;
+  letter-spacing: 0.5px;
+}
+
+.excel-title-row th {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  font-weight: 800 !important;
+  font-size: 0.74rem !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 7px 10px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.excel-corner-cell {
+  background-color: #e2e8f0 !important;
+  color: #64748b !important;
+  width: 45px !important;
+  font-weight: 800 !important;
+}
+
+.excel-row-num {
+  background-color: #f8fafc !important;
+  color: #64748b !important;
+  border: 1px solid #cbd5e1 !important;
+  font-size: 0.75rem !important;
+  font-family: monospace;
+  width: 45px;
+}
+
+.excel-cell {
+  border: 1px solid #cbd5e1 !important;
+  padding: 6px 10px !important;
+  background-color: #ffffff;
+  height: 36px;
+}
+
+.excel-empty-cell {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.excel-row:hover:not(.excel-row-empty) .excel-cell {
+  background-color: #f0fdf4 !important;
+}
+
+.excel-row:hover:not(.excel-row-empty) .excel-row-num {
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
+}
+
+.excel-row-empty:hover .excel-row-num {
+  background-color: #f1f5f9 !important;
 }
 </style>
