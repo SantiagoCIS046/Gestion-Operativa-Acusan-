@@ -1,11 +1,11 @@
-// Prisma schema file for Acuasan Gestión Operativa
+// Prisma schema file for Acuasan Gestión Operativa (MongoDB Atlas)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
@@ -28,7 +28,7 @@ enum TipoPermiso {
 }
 
 model Permiso {
-  id                String        @id @default(uuid())
+  id                String        @id @default(auto()) @map("_id") @db.ObjectId
   radicado          String        @unique
   cedula            String
   nombreFuncionario String
@@ -68,14 +68,14 @@ enum EstadoHoraExtra {
 }
 
 model HoraExtra {
-  id              String          @id @default(uuid())
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
   cedula          String
   funcionario     String
   cuadrillaArea   String
   fechaOperacion  DateTime
   tipoRecargo     TipoHoraExtra
   cantidadHoras   Float
-  montoEstimado   Decimal         @default(0) @db.Decimal(12, 2)
+  montoEstimado   Float           @default(0)
   estado          EstadoHoraExtra @default(PENDIENTE)
   justificacion   String?
   autorizadoPor   String?
@@ -104,7 +104,7 @@ enum PrioridadPQR {
 }
 
 model PQR {
-  id               String       @id @default(uuid())
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
   radicado         String       @unique
   usuario          String
   cedulaNit        String?

@@ -8,12 +8,13 @@
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:push": "prisma db push"
   },
   "keywords": [
     "acuasan",
     "gestion-operativa",
     "prisma",
+    "mongodb",
     "express"
   ],
   "author": "Acuasan E.S.P.",
@@ -23,6 +24,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "mongodb": "^6.21.0",
     "morgan": "^1.10.0"
   },
   "devDependencies": {
