@@ -2,7 +2,7 @@ import { PermisosService } from './permisos.service.js'
 
 export const PermisosController = {
   /**
-   * Listar todos los permisos
+   * Listar todos los permisos generales
    */
   async listar(req, res) {
     try {
@@ -16,6 +16,48 @@ export const PermisosController = {
       res.status(500).json({
         success: false,
         message: 'Error al listar permisos',
+        error: error.message
+      })
+    }
+  },
+
+  /**
+   * Obtener permisos para el encargado (Operativo / Carga y Procesamiento)
+   * GET /api/permisos/encargado
+   */
+  async listarEncargado(req, res) {
+    try {
+      const permisos = await PermisosService.listarPermisos()
+      res.json({
+        success: true,
+        message: 'Listado de permisos procesados por el encargado',
+        data: permisos
+      })
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener permisos para el encargado',
+        error: error.message
+      })
+    }
+  },
+
+  /**
+   * Obtener permisos validados pendientes de decisión para Gerencia
+   * GET /api/permisos/gerencia/pendientes
+   */
+  async listarGerenciaPendientes(req, res) {
+    try {
+      const permisosPendientes = await PermisosService.listarPermisos({ estado: 'PENDIENTE' })
+      res.json({
+        success: true,
+        message: 'Listado de permisos validados listos para decisión gerencial',
+        data: permisosPendientes
+      })
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener permisos pendientes para gerencia',
         error: error.message
       })
     }
@@ -38,16 +80,17 @@ export const PermisosController = {
   },
 
   /**
-   * Registrar nuevo permiso tras validación OCR
+   * Registrar o validar la extracción OCR y radicar permiso
+   * POST /api/permisos/validar-ocr
    */
-  async registrar(req, res) {
+  async validarOCR(req, res) {
     try {
-      const { cedula, nombreFuncionario, cargo, dependencia, tipo, fechaInicio, fechaFin, justificacion, soporteUrl, ocrConfidence } = req.body
+      const { cedula, nombreFuncionario, cargo, dependencia, tipo, fechaInicio, fechaFin, justificacion, soporteUrl, ocrConfidence, ocrRawPayload } = req.body
 
       if (!cedula || !nombreFuncionario || !tipo || !fechaInicio || !fechaFin) {
         return res.status(400).json({
           success: false,
-          message: 'Faltan campos obligatorios para radicar el permiso'
+          message: 'Faltan campos obligatorios para guardar la validación OCR'
         })
       }
 
@@ -61,12 +104,29 @@ export const PermisosController = {
         fechaFin,
         justificacion,
         soporteUrl,
-        ocrConfidence
+        ocrConfidence,
+        ocrRawPayload
       })
 
       res.status(201).json({
         success: true,
-        message: 'Solicitud de permiso registrada exitosamente',
+        message: 'Validación de OCR guardada exitosamente',
+        data: nuevoPermiso
+      })
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Error al registrar validación OCR', error: error.message })
+    }
+  },
+
+  /**
+   * Registrar nuevo permiso de forma general
+   */
+  async registrar(req, res) {
+    try {
+      const nuevoPermiso = await PermisosService.crearPermiso(req.body)
+      res.status(201).json({
+        success: true,
+        message: 'Solicitud de permiso registrada',
         data: nuevoPermiso
       })
     } catch (error) {
@@ -76,6 +136,7 @@ export const PermisosController = {
 
   /**
    * Aprobación / Rechazo por Gerencia
+   * PUT /api/permisos/:id/dictamen
    */
   async dictaminar(req, res) {
     try {
@@ -102,35 +163,6 @@ export const PermisosController = {
       })
     } catch (error) {
       res.status(500).json({ success: false, message: 'Error al actualizar dictamen de permiso', error: error.message })
-    }
-  },
-
-  /**
-   * Simulación de procesamiento OCR para extracción de texto estructurado
-   */
-  async procesarOCR(req, res) {
-    try {
-      const { archivoUrl } = req.body
-      // En integración real se conecta a Google Cloud Vision / Tesseract / AWS Textract
-      const ocrMockResult = {
-        cedula: '1098765432',
-        nombreFuncionario: 'Carlos Andrés Gómez Ortiz',
-        cargo: 'Operario de Redes',
-        dependencia: 'División Técnica Acueducto',
-        tipoPermiso: 'CALAMIDAD',
-        fechaInicio: '2026-08-15',
-        fechaFin: '2026-08-16',
-        justificacionExtraida: 'Se solicita permiso por calamidad doméstica con soporte médico adjunto.',
-        confianza: 96.5
-      }
-
-      res.json({
-        success: true,
-        message: 'Documento procesado por motor OCR',
-        data: ocrMockResult
-      })
-    } catch (error) {
-      res.status(500).json({ success: false, message: 'Error en procesamiento OCR', error: error.message })
     }
   }
 }
