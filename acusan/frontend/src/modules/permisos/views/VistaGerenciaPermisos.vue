@@ -43,9 +43,9 @@
             </td>
             <td>
               <div class="ocr-score-bar">
-                <span class="score-text">{{ item.ocrScore }}%</span>
+                <span class="score-text">{{ item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95) }}%</span>
                 <div class="progress-bar-bg">
-                  <div class="progress-bar-fill" :style="{ width: item.ocrScore + '%' }"></div>
+                  <div class="progress-bar-fill" :style="{ width: (item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95)) + '%' }"></div>
                 </div>
               </div>
             </td>
@@ -63,55 +63,63 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { permisosService } from '../services/permisosService.js'
 
-const permisos = ref([
-  {
-    id: 1,
-    radicado: 'PERM-2026-0042',
-    funcionario: 'Carlos Andrés Gómez',
-    cargo: 'Operario de Redes',
-    tipo: 'Calamidad Doméstica',
-    fechaInicio: '15/08/2026',
-    fechaFin: '16/08/2026',
-    estado: 'PENDIENTE',
-    ocrScore: 96
-  },
-  {
-    id: 2,
-    radicado: 'PERM-2026-0041',
-    funcionario: 'María Fernanda Ruiz',
-    cargo: 'Analista de Facturación',
-    tipo: 'Cita Médica',
-    fechaInicio: '14/08/2026',
-    fechaFin: '14/08/2026',
-    estado: 'PENDIENTE',
-    ocrScore: 92
-  },
-  {
-    id: 3,
-    radicado: 'PERM-2026-0039',
-    funcionario: 'Jorge Eliécer Prada',
-    cargo: 'Conductor Operativo',
-    tipo: 'Compensatorio',
-    fechaInicio: '12/08/2026',
-    fechaFin: '13/08/2026',
-    estado: 'APROBADO',
-    ocrScore: 98
+const permisos = ref([])
+const cargando = ref(false)
+
+const cargarPermisos = async () => {
+  cargando.value = true
+  try {
+    const lista = await permisosService.obtenerHistorialPermisos()
+    if (lista && lista.length > 0) {
+      permisos.value = lista
+    }
+  } catch (error) {
+    console.error('Error al cargar permisos para gerencia:', error)
+  } finally {
+    cargando.value = false
   }
-])
+}
+
+onMounted(() => {
+  cargarPermisos()
+})
 
 const pendientesCount = computed(() => permisos.value.filter(p => p.estado === 'PENDIENTE').length)
 const aprobadosCount = computed(() => permisos.value.filter(p => p.estado === 'APROBADO').length)
 
-const aprobar = (item) => {
-  item.estado = 'APROBADO'
-  alert(`Permiso ${item.radicado} ha sido APROBADO por Gerencia.`)
+const aprobar = async (item) => {
+  try {
+    await permisosService.dictaminarPermiso(item.id, {
+      estado: 'APROBADO',
+      aprobadoPor: 'Gerencia General Acuasan'
+    })
+    item.estado = 'APROBADO'
+    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido APROBADO por Gerencia y actualizado en la base de datos.`)
+  } catch (error) {
+    console.error('Error al aprobar permiso:', error)
+    alert(`Error al aprobar el permiso: ${error.message}`)
+  }
 }
 
-const rechazar = (item) => {
-  item.estado = 'RECHAZADO'
-  alert(`Permiso ${item.radicado} ha sido RECHAZADO.`)
+const rechazar = async (item) => {
+  const motivo = prompt('Ingrese el motivo del rechazo para Gerencia:', 'No cumple con los requisitos normativos')
+  if (motivo === null) return
+
+  try {
+    await permisosService.dictaminarPermiso(item.id, {
+      estado: 'RECHAZADO',
+      aprobadoPor: 'Gerencia General Acuasan',
+      observaciones: motivo
+    })
+    item.estado = 'RECHAZADO'
+    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido RECHAZADO y registrado en la base de datos.`)
+  } catch (error) {
+    console.error('Error al rechazar permiso:', error)
+    alert(`Error al rechazar el permiso: ${error.message}`)
+  }
 }
 </script>
 

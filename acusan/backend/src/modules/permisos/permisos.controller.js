@@ -85,32 +85,21 @@ export const PermisosController = {
    */
   async validarOCR(req, res) {
     try {
-      const { cedula, nombreFuncionario, cargo, dependencia, tipo, fechaInicio, fechaFin, justificacion, soporteUrl, ocrConfidence, ocrRawPayload } = req.body
+      const { cedula, nombreFuncionario, funcionario } = req.body
+      const nombre = nombreFuncionario || funcionario
 
-      if (!cedula || !nombreFuncionario || !tipo || !fechaInicio || !fechaFin) {
+      if (!cedula || !nombre) {
         return res.status(400).json({
           success: false,
-          message: 'Faltan campos obligatorios para guardar la validación OCR'
+          message: 'Faltan cédula o nombre del funcionario para guardar la validación OCR'
         })
       }
 
-      const nuevoPermiso = await PermisosService.crearPermiso({
-        cedula,
-        nombreFuncionario,
-        cargo,
-        dependencia,
-        tipo,
-        fechaInicio,
-        fechaFin,
-        justificacion,
-        soporteUrl,
-        ocrConfidence,
-        ocrRawPayload
-      })
+      const nuevoPermiso = await PermisosService.crearPermiso(req.body)
 
       res.status(201).json({
         success: true,
-        message: 'Validación de OCR guardada exitosamente',
+        message: 'Validación de OCR guardada y radicada exitosamente',
         data: nuevoPermiso
       })
     } catch (error) {
@@ -120,13 +109,24 @@ export const PermisosController = {
 
   /**
    * Registrar nuevo permiso de forma general
+   * POST /api/permisos
    */
   async registrar(req, res) {
     try {
+      const { cedula, nombreFuncionario, funcionario } = req.body
+      const nombre = nombreFuncionario || funcionario
+
+      if (!cedula || !nombre) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cédula y Nombre de funcionario son requeridos para radicar el permiso.'
+        })
+      }
+
       const nuevoPermiso = await PermisosService.crearPermiso(req.body)
       res.status(201).json({
         success: true,
-        message: 'Solicitud de permiso registrada',
+        message: 'Solicitud de permiso registrada correctamente',
         data: nuevoPermiso
       })
     } catch (error) {

@@ -37,8 +37,13 @@ model Permiso {
   tipo              TipoPermiso
   fechaInicio       DateTime
   fechaFin          DateTime
+  duracion          String?
+  hora24            String?
   justificacion     String?
+  motivoManuscrito  String?
+  soporte           String?
   soporteUrl        String?
+  archivoUrl        String?
   ocrConfidence     Float?        @default(0)
   ocrRawPayload     Json?
   estado            EstadoPermiso @default(PENDIENTE)
