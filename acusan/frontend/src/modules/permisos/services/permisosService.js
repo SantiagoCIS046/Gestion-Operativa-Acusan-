@@ -1,9 +1,17 @@
 /**
  * Permisos API Service
  * Comunicación con el backend de Acuasan Express / Prisma / MongoDB
+ * Incluye token JWT en todas las solicitudes
  */
 
+import authService from '../../auth/services/authService.js'
+
 const API_BASE_URL = '/api/permisos'
+
+const getHeaders = () => ({
+  'Content-Type': 'application/json',
+  ...authService.getAuthHeader()
+})
 
 export const permisosService = {
   /**
@@ -19,8 +27,14 @@ export const permisosService = {
       const url = params.toString() ? `${API_BASE_URL}/encargado?${params.toString()}` : `${API_BASE_URL}/encargado`
       const res = await fetch(url, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
+        headers: getHeaders()
       })
+
+      if (res.status === 401) {
+        authService.logout()
+        window.location.href = '/login'
+        return []
+      }
 
       if (!res.ok) {
         throw new Error(`Error en el servidor (${res.status}): ${res.statusText}`)
@@ -41,9 +55,15 @@ export const permisosService = {
     try {
       const res = await fetch(API_BASE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(datos)
       })
+
+      if (res.status === 401) {
+        authService.logout()
+        window.location.href = '/login'
+        throw new Error('Sesión expirada. Por favor, inicie sesión nuevamente.')
+      }
 
       const data = await res.json()
       if (!res.ok || !data.success) {
@@ -64,7 +84,7 @@ export const permisosService = {
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
+        headers: getHeaders()
       })
 
       const data = await res.json()
@@ -86,7 +106,7 @@ export const permisosService = {
     try {
       const res = await fetch(`${API_BASE_URL}/${id}/dictamen`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ estado, aprobadoPor, observaciones })
       })
 

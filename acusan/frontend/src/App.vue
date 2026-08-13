@@ -1,85 +1,169 @@
 <template>
   <div class="app-shell">
-    <!-- Dark Navy Corporate Sidebar -->
-    <aside class="sidebar">
-      <!-- Brand & Official Acuasan Logo -->
-      <div class="sidebar-brand">
-        <div class="acuasan-emblem-wrapper">
-          <img src="/logo-acuasan.svg" alt="Acuasan 100% Sangileña" class="acuasan-logo-img" />
-        </div>
-
-        <div class="brand-info">
-          <h2 class="brand-title">ACUASAN</h2>
-          <span class="brand-sub">GESTIÓN OPERATIVA</span>
-        </div>
-      </div>
-
-      <!-- Navigation Links -->
-      <nav class="sidebar-nav">
-        <router-link to="/permisos/encargado" class="nav-btn" active-class="active">
-          <span class="nav-icon">📄</span>
-          <span class="nav-text">Permisos</span>
-          <span class="active-indicator-dot"></span>
-        </router-link>
-
-        <router-link to="/horas-extras/gerencia" class="nav-btn" active-class="active">
-          <span class="nav-icon">⏱️</span>
-          <span class="nav-text">Horas Extras</span>
-          <span class="active-indicator-dot"></span>
-        </router-link>
-      </nav>
-
-      <!-- User Profile at bottom -->
-      <div class="sidebar-footer">
-        <div class="user-avatar-circle">JS</div>
-        <div class="user-info">
-          <span class="user-name">Juan Supervisor</span>
-          <span class="user-role">Recursos Humanos</span>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <div class="main-wrapper">
-      <!-- Acuasan Brand Top Stripe -->
-      <div class="brand-color-stripe"></div>
-
-      <!-- Top Header Bar -->
-      <header class="top-header">
-        <div class="header-left">
-          <div class="pending-pill">
-            <span class="dot"></span>
-            <span class="pending-text">3 Pendientes</span>
+    <!-- ===== LAYOUT CON SIDEBAR: Solo visible cuando hay sesión activa ===== -->
+    <template v-if="estaAutenticado">
+      <!-- Dark Navy Corporate Sidebar -->
+      <aside class="sidebar">
+        <!-- Brand & Official Acuasan Logo -->
+        <div class="sidebar-brand">
+          <div class="acuasan-emblem-wrapper">
+            <img src="/logo-acuasan.svg" alt="Acuasan 100% Sangileña" class="acuasan-logo-img" />
+          </div>
+          <div class="brand-info">
+            <h2 class="brand-title">ACUASAN</h2>
+            <span class="brand-sub">GESTIÓN OPERATIVA</span>
           </div>
         </div>
 
-        <div class="header-right">
-          <button class="icon-btn" title="Notificaciones">
-            <span class="icon">🔔</span>
-            <span class="notification-dot"></span>
-          </button>
-          <button class="icon-btn" title="Configuración">
-            <span class="icon">⚙️</span>
-          </button>
-        </div>
-      </header>
+        <!-- Navigation Links (según el rol del usuario) -->
+        <nav class="sidebar-nav">
+          <!-- ENCARGADO: Permisos -->
+          <router-link
+            v-if="tieneAcceso(['ENCARGADO', 'ADMIN'])"
+            to="/permisos/encargado"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">📄</span>
+            <span class="nav-text">Permisos</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
 
-      <!-- Dynamic Page View -->
-      <main class="page-content">
-        <div class="content-container">
-          <router-view />
+          <!-- ENCARGADO y GERENCIA: Horas Extras -->
+          <router-link
+            v-if="tieneAcceso(['ENCARGADO', 'GERENCIA', 'ADMIN'])"
+            to="/horas-extras/gerencia"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">⏱️</span>
+            <span class="nav-text">Horas Extras</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+          <!-- GERENCIA: Dictamen de Permisos -->
+          <router-link
+            v-if="tieneAcceso(['GERENCIA', 'ADMIN'])"
+            to="/permisos/gerencia"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">✅</span>
+            <span class="nav-text">Dictamen Permisos</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+          <!-- GERENCIA y OPERATIVO: PQR -->
+          <router-link
+            v-if="tieneAcceso(['OPERATIVO', 'GERENCIA', 'ADMIN'])"
+            to="/pqr/gestion"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">📋</span>
+            <span class="nav-text">Gestión PQR</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+        </nav>
+
+        <!-- User Profile & Logout at bottom -->
+        <div class="sidebar-footer">
+          <div class="user-avatar-circle">{{ avatarIniciales }}</div>
+          <div class="user-info">
+            <span class="user-name">{{ usuario?.nombre || 'Usuario' }}</span>
+            <span class="user-role">{{ usuario?.cargo || usuario?.rol }}</span>
+          </div>
+          <button
+            class="btn-logout"
+            @click="cerrarSesion"
+            title="Cerrar sesión"
+          >
+            <span>⏻</span>
+          </button>
         </div>
-      </main>
-    </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <div class="main-wrapper">
+        <!-- Acuasan Brand Top Stripe -->
+        <div class="brand-color-stripe"></div>
+
+        <!-- Dynamic Page View -->
+        <main class="page-content">
+          <div class="content-container">
+            <router-view />
+          </div>
+        </main>
+      </div>
+    </template>
+
+    <!-- ===== SOLO ROUTER-VIEW para el Login (sin sidebar) ===== -->
+    <template v-else>
+      <router-view />
+    </template>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import authService from './modules/auth/services/authService.js'
+
+const router = useRouter()
+const route = useRoute()
+
+const estaAutenticado = computed(() => authService.estaAutenticado())
+const usuario = computed(() => authService.getUsuarioActual())
+
+// Iniciales para el avatar (primeras letras del nombre)
+const avatarIniciales = computed(() => {
+  const nombre = usuario.value?.nombre || 'U'
+  return nombre
+    .split(' ')
+    .slice(0, 2)
+    .map(p => p[0])
+    .join('')
+    .toUpperCase()
+})
+
+// Verificar si el usuario tiene uno de los roles dados
+const tieneAcceso = (roles) => {
+  const rol = usuario.value?.rol
+  return roles.includes(rol)
+}
+
+// Etiqueta y clase del rol para el header
+const rolLabel = computed(() => {
+  switch (usuario.value?.rol) {
+    case 'ENCARGADO': return 'Encargado de RRHH'
+    case 'GERENCIA':  return 'Gerencia General'
+    case 'OPERATIVO': return 'Operativo PQR'
+    case 'ADMIN':     return 'Administrador'
+    default: return 'Sistema Activo'
+  }
+})
+
+const rolClass = computed(() => {
+  switch (usuario.value?.rol) {
+    case 'ENCARGADO': return 'role-encargado'
+    case 'GERENCIA':  return 'role-gerencia'
+    case 'OPERATIVO': return 'role-operativo'
+    default: return 'role-default'
+  }
+})
+
+const cerrarSesion = () => {
+  if (confirm('¿Desea cerrar la sesión del Sistema de Gestión Operativa Acuasan?')) {
+    authService.logout()
+    router.replace('/login')
+  }
+}
 </script>
 
 <style scoped>
 .app-shell {
   display: flex;
+  width: 100%;
   min-height: 100vh;
   background-color: #f0f4f8;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -122,9 +206,7 @@
   transition: transform 0.2s ease;
 }
 
-.acuasan-emblem-wrapper:hover {
-  transform: scale(1.05);
-}
+.acuasan-emblem-wrapper:hover { transform: scale(1.05); }
 
 .acuasan-logo-img {
   width: 100%;
@@ -143,7 +225,7 @@
 .brand-sub {
   font-size: 0.65rem;
   font-weight: 700;
-  color: #73be28; /* Acuasan Lime Green */
+  color: #73be28;
   letter-spacing: 0.8px;
   margin-top: 2px;
 }
@@ -179,12 +261,12 @@
 }
 
 .nav-btn.active {
-  background: #004884; /* Acuasan Blue */
+  background: #004884;
   color: #ffffff;
   font-weight: 700;
   box-shadow: 0 3px 10px rgba(0, 72, 132, 0.45);
   border: 1px solid #005fa8;
-  border-left: 4px solid #73be28; /* Acuasan Lime Green Accent */
+  border-left: 4px solid #73be28;
 }
 
 .active-indicator-dot {
@@ -196,20 +278,16 @@
   display: none;
 }
 
-.nav-btn.active .active-indicator-dot {
-  display: block;
-}
+.nav-btn.active .active-indicator-dot { display: block; }
+.nav-icon { font-size: 1rem; }
 
-.nav-icon {
-  font-size: 1rem;
-}
-
+/* Sidebar Footer & Logout */
 .sidebar-footer {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: rgba(0, 0, 0, 0.25);
 }
 
@@ -220,7 +298,7 @@
   background: #004884;
   color: #ffffff;
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -233,10 +311,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex: 1;
 }
 
 .user-name {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: #ffffff;
   white-space: nowrap;
@@ -245,8 +324,34 @@
 }
 
 .user-role {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #8fa7be;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.btn-logout {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.btn-logout:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ffffff;
+  transform: scale(1.05);
 }
 
 /* === MAIN WRAPPER === */
@@ -257,7 +362,6 @@
   min-width: 0;
 }
 
-/* Acuasan Brand Stripe (Green -> Cyan -> Amber) */
 .brand-color-stripe {
   height: 3px;
   width: 100%;
@@ -279,24 +383,28 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
-.pending-pill {
+/* Role badges */
+.role-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #f0fdf4;
-  color: #166534;
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 0.82rem;
   font-weight: 700;
-  border: 1px solid #bbf7d0;
 }
 
-.pending-pill .dot {
+.role-encargado { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+.role-gerencia  { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.role-operativo { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.role-default   { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+
+.role-badge .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #73be28;
+  background: currentColor;
+  opacity: 0.7;
 }
 
 .header-right {
@@ -319,14 +427,8 @@
   transition: background 0.15s ease;
 }
 
-.icon-btn:hover {
-  background: #f1f5f9;
-}
-
-.icon-btn .icon {
-  font-size: 1rem;
-  color: #475569;
-}
+.icon-btn:hover { background: #f1f5f9; }
+.icon-btn .icon { font-size: 1rem; color: #475569; }
 
 .notification-dot {
   position: absolute;
@@ -342,7 +444,7 @@
 /* === PAGE CONTENT === */
 .page-content {
   flex: 1;
-  padding: 20px 24px 32px 24px;
+  padding: 12px 18px 24px 18px;
   box-sizing: border-box;
 }
 

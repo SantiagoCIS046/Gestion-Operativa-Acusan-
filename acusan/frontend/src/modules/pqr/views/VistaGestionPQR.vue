@@ -1,13 +1,14 @@
 <template>
   <div class="gestion-pqr-view">
-    <div class="view-header">
-      <div>
-        <h1 class="view-title">Atención al Usuario & PQR Acuasan</h1>
-        <p class="view-subtitle">Gestión de peticiones, quejas, reclamos y recursos legales en tiempo límite</p>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-primary" @click="nuevoPQR">+ Radicar Nueva PQR</button>
-      </div>
+    <!-- Encabezado con identidad del usuario autenticado -->
+    <PageHeader
+      titulo="Atención al Usuario & PQR"
+      subtitulo="Gestión de peticiones, quejas, reclamos y recursos legales en tiempo límite"
+      icono="📋"
+    />
+
+    <div class="header-actions" style="margin-bottom: 4px;">
+      <button class="btn btn-primary" @click="nuevoPQR">+ Radicar Nueva PQR</button>
     </div>
 
     <div class="pqr-layout">
@@ -63,6 +64,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import PanelAtencionPQR from '../components/PanelAtencionPQR.vue'
+import PageHeader from '../../../components/PageHeader.vue'
 
 const pqrs = ref([
   {

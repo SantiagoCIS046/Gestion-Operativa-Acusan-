@@ -1,19 +1,21 @@
 <template>
   <div class="gerencia-horas-view">
-    <div class="view-header">
-      <div>
-        <h1 class="view-title">Control y Aprobación de Horas Extras</h1>
-        <p class="view-subtitle">Consolidado operativo, recargos y autorizaciones presupuestales de cuadrillas</p>
+    <!-- Encabezado con identidad del usuario autenticado -->
+    <PageHeader
+      titulo="Control y Aprobación de Horas Extras"
+      subtitulo="Consolidado operativo, recargos y autorizaciones presupuestales de cuadrillas"
+      icono="⏱️"
+    />
+
+    <!-- KPI row -->
+    <div class="kpi-grid" style="margin-bottom: 16px;">
+      <div class="kpi-card">
+        <span class="kpi-label">Total Horas Mes</span>
+        <span class="kpi-value">{{ totalHoras }}h</span>
       </div>
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <span class="kpi-label">Total Horas Mes</span>
-          <span class="kpi-value">{{ totalHoras }}h</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">Presupuesto Ejecutado</span>
-          <span class="kpi-value text-emerald-600">${{ formatCurrency(totalMonto) }}</span>
-        </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Presupuesto Ejecutado</span>
+        <span class="kpi-value text-emerald-600">${{ formatCurrency(totalMonto) }}</span>
       </div>
     </div>
 
@@ -30,6 +32,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import TablaHorasExtras from '../components/TablaHorasExtras.vue'
+import PageHeader from '../../../components/PageHeader.vue'
 
 const horasData = ref([
   {

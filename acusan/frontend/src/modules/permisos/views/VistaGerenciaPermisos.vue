@@ -1,63 +1,477 @@
 <template>
   <div class="gerencia-permisos-view">
-    <div class="view-header">
-      <div>
-        <h1 class="view-title">Aprobación de Permisos — Gerencia General</h1>
-        <p class="view-subtitle">Revisión, validación y dictamen final de permisos laborales</p>
+    <!-- Encabezado con identidad del usuario autenticado -->
+    <PageHeader
+      titulo="Aprobación de Permisos — Gerencia"
+      subtitulo="Control gerencial, calendario mensual, horas acumuladas y dictamen de permisos laborales"
+      icono="✅"
+    />
+
+    <!-- KPI Summary Row -->
+    <div class="kpi-banner">
+      <div class="kpi-card highlight-blue">
+        <div class="kpi-icon">📊</div>
+        <div class="kpi-data">
+          <span class="kpi-label">Total Permisos Solicitados</span>
+          <span class="kpi-val">{{ permisosFiltrados.length }}</span>
+          <span class="kpi-sub font-mono">En {{ mesNombreActual }}</span>
+        </div>
       </div>
-      <div class="stats-pills">
-        <span class="pill pill-pending">Pendientes: {{ pendientesCount }}</span>
-        <span class="pill pill-approved">Aprobados hoy: {{ aprobadosCount }}</span>
+
+      <div class="kpi-card highlight-amber">
+        <div class="kpi-icon">⏳</div>
+        <div class="kpi-data">
+          <span class="kpi-label">Pendientes de Dictamen</span>
+          <span class="kpi-val text-amber">{{ pendientesCount }}</span>
+          <span class="kpi-sub">Requieren aprobación gerencial</span>
+        </div>
+      </div>
+
+      <div class="kpi-card highlight-green">
+        <div class="kpi-icon">✔</div>
+        <div class="kpi-data">
+          <span class="kpi-label">Aprobados este Mes</span>
+          <span class="kpi-val text-green">{{ aprobadosCount }}</span>
+          <span class="kpi-sub">Dictamen favorable</span>
+        </div>
+      </div>
+
+      <div class="kpi-card highlight-purple">
+        <div class="kpi-icon">⏱️</div>
+        <div class="kpi-data">
+          <span class="kpi-label">Horas Acumuladas Personal</span>
+          <span class="kpi-val text-purple">{{ totalHorasAcumuladasGlobal }}h</span>
+          <span class="kpi-sub">Total horas en {{ mesNombreActual }}</span>
+        </div>
       </div>
     </div>
 
-    <!-- Permisos Table -->
-    <div class="table-card">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Radicado</th>
-            <th>Funcionario</th>
-            <th>Tipo</th>
-            <th>Periodo</th>
-            <th>Estado</th>
-            <th>OCR Confianza</th>
-            <th class="text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in permisos" :key="item.id">
-            <td class="font-bold">#{{ item.radicado }}</td>
-            <td>
-              <div class="user-meta">
-                <span class="user-name">{{ item.funcionario }}</span>
-                <span class="user-sub">{{ item.cargo }}</span>
+    <!-- Toolbar Controls & View Switcher -->
+    <div class="toolbar-card">
+      <div class="toolbar-left">
+        <!-- View Mode Switcher -->
+        <div class="view-mode-tabs">
+          <button
+            class="tab-btn"
+            :class="{ active: vistaModo === 'excel' }"
+            @click="vistaModo = 'excel'"
+          >
+            📊 Cuadrilla Excel
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: vistaModo === 'calendario' }"
+            @click="vistaModo = 'calendario'"
+          >
+            📅 Calendario Mensual
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: vistaModo === 'resumen' }"
+            @click="vistaModo = 'resumen'"
+          >
+            👥 Acumulados por Empleado
+          </button>
+        </div>
+
+        <!-- Month & Year Selector -->
+        <div class="month-selector">
+          <button class="nav-month-btn" @click="cambiarMes(-1)">◄</button>
+          <span class="month-display">{{ mesNombreActual }} {{ anioSeleccionado }}</span>
+          <button class="nav-month-btn" @click="cambiarMes(1)">►</button>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <!-- Live Search -->
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input
+            v-model="busqueda"
+            type="text"
+            class="search-input"
+            placeholder="Buscar por funcionario, cédula o radicado..."
+          />
+          <button v-if="busqueda" class="clear-search" @click="busqueda = ''">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 1: CUADRILLA ESTILO EXCEL -->
+    <!-- ========================================== -->
+    <div v-if="vistaModo === 'excel'" class="excel-grid-container shadow-sm">
+      <!-- Excel Top Title Bar -->
+      <div class="excel-header-stripe">
+        <div class="excel-stripe-left">
+          <span class="excel-icon-logo">📊</span>
+          <span class="excel-tag">Acuasan_Control_Permisos_{{ mesNombreActual }}_{{ anioSeleccionado }}.xlsx</span>
+        </div>
+        <span class="excel-meta">Total Registros en Hoja: {{ permisosFiltrados.length }}</span>
+      </div>
+
+      <!-- Excel Formula Bar (fx) -->
+      <div class="excel-formula-bar">
+        <div class="cell-name-box">A1</div>
+        <div class="fx-icon">fx</div>
+        <div class="formula-input">
+          <span class="formula-text">=SUMA_HORAS_MES({{ mesNombreActual }}) &rarr; <strong>{{ totalHorasAcumuladasGlobal }} Horas Acumuladas</strong> | Pendientes: <strong>{{ pendientesCount }}</strong></span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="excel-table">
+          <thead>
+            <!-- Excel Letter Column Header Row -->
+            <tr class="excel-col-letters-row">
+              <th class="col-excel-index"></th>
+              <th class="col-letter">A</th>
+              <th class="col-letter">B</th>
+              <th class="col-letter">C</th>
+              <th class="col-letter">D</th>
+              <th class="col-letter">E</th>
+              <th class="col-letter text-center">F</th>
+              <th class="col-letter text-center">G</th>
+              <th class="col-letter text-center">H</th>
+              <th class="col-letter text-center">I</th>
+              <th class="col-letter text-right">J</th>
+            </tr>
+
+            <!-- Excel Header Row -->
+            <tr class="excel-main-header-row">
+              <th class="col-excel-index">#</th>
+              <th>RADICADO</th>
+              <th>FUNCIONARIO & CARGO</th>
+              <th>DEPENDENCIA</th>
+              <th>TIPO PERMISO</th>
+              <th>FECHA & HORA PETICIÓN</th>
+              <th class="text-center">SOLICITUDES / MES</th>
+              <th class="text-center">HORAS ACUM. MES</th>
+              <th class="text-center">CONFIANZA OCR</th>
+              <th class="text-center">ESTADO</th>
+              <th class="text-right">ACCIONES GERENCIALES</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="permisosFiltrados.length === 0">
+              <td colspan="11" class="text-center py-4 text-muted font-mono">
+                [Hoja vacía] No se encontraron registros de permisos para {{ mesNombreActual }} {{ anioSeleccionado }}.
+              </td>
+            </tr>
+            <tr
+              v-for="(item, index) in permisosFiltrados"
+              :key="item.id"
+              :class="{ 'row-even': index % 2 === 1, 'row-pending': item.estado === 'PENDIENTE' }"
+            >
+              <!-- Excel Row Number Header Column -->
+              <td class="col-excel-index">{{ index + 1 }}</td>
+              
+              <!-- A: Radicado -->
+              <td class="col-radicado">#{{ item.radicado }}</td>
+
+              <!-- B: Funcionario & Cargo -->
+              <td>
+                <div class="cell-user">
+                  <span class="user-name">{{ item.funcionario || item.nombreFuncionario }}</span>
+                  <span class="user-sub">{{ item.cargo }}</span>
+                </div>
+              </td>
+
+              <!-- C: Dependencia -->
+              <td>
+                <span class="cell-dep">{{ item.dependencia || 'Planta Operativa' }}</span>
+              </td>
+
+              <!-- D: Tipo Permiso -->
+              <td>
+                <span class="type-pill">{{ item.tipo }}</span>
+              </td>
+
+              <!-- E: Fecha & Hora Petición -->
+              <td>
+                <div class="cell-datetime">
+                  <span class="date-main">📅 {{ item.fechaInicio }}</span>
+                  <span class="time-sub">⏰ {{ item.hora24 }} | {{ item.duracion }}</span>
+                </div>
+              </td>
+
+              <!-- F: Solicitudes del empleado en el mes -->
+              <td class="text-center">
+                <span class="freq-badge">
+                  {{ item.solicitudesMesEmpleado }} {{ item.solicitudesMesEmpleado === 1 ? 'permiso' : 'permisos' }} en el mes
+                </span>
+              </td>
+
+              <!-- G: Horas acumuladas en el mes -->
+              <td class="text-center">
+                <span class="hours-accum-badge">
+                  ⚡ {{ item.horasAcumuladasMesEmpleado }}h acumuladas
+                </span>
+              </td>
+
+              <!-- H: OCR Score -->
+              <td class="text-center">
+                <div class="ocr-score-bar justify-content-center">
+                  <span class="score-text">{{ item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95) }}%</span>
+                  <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" :style="{ width: (item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95)) + '%' }"></div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- I: Estado -->
+              <td class="text-center">
+                <span class="status-badge" :class="'status-' + item.estado.toLowerCase()">
+                  {{ item.estado }}
+                </span>
+              </td>
+
+              <!-- J: Acciones -->
+              <td class="text-right">
+                <div class="actions-group justify-content-end">
+                  <button class="btn btn-xs btn-approve" @click="aprobar(item)" title="Aprobar Permiso en BD">
+                    ✔ Aprobar
+                  </button>
+                  <button class="btn btn-xs btn-reject" @click="rechazar(item)" title="Rechazar Permiso en BD">
+                    ✖ Rechazar
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Excel Sheet Tabs Footer -->
+      <div class="excel-sheets-footer">
+        <div class="sheet-tabs">
+          <button class="sheet-tab active" @click="vistaModo = 'excel'">
+            <span class="sheet-icon">📊</span> Hoja1 - Planilla Permisos
+          </button>
+          <button class="sheet-tab" @click="vistaModo = 'calendario'">
+            <span class="sheet-icon">📅</span> Hoja2 - Calendario Mensual
+          </button>
+          <button class="sheet-tab" @click="vistaModo = 'resumen'">
+            <span class="sheet-icon">👥</span> Hoja3 - Acumulados por Empleado
+          </button>
+        </div>
+        <div class="sheet-status font-mono">
+          <span>LISTO | TECLADO MACRO ACTIVADO</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 2: CALENDARIO INTERACTIVO MENSUAL -->
+    <!-- ========================================== -->
+    <div v-else-if="vistaModo === 'calendario'" class="calendar-container shadow-sm">
+      <div class="calendar-header-bar">
+        <h3 class="calendar-title">📅 Programación de Permisos — {{ mesNombreActual }} {{ anioSeleccionado }}</h3>
+        <div class="calendar-legend">
+          <span class="legend-item"><span class="dot dot-pending"></span> Pendiente</span>
+          <span class="legend-item"><span class="dot dot-approved"></span> Aprobado</span>
+          <span class="legend-item"><span class="dot dot-rejected"></span> Rechazado</span>
+        </div>
+      </div>
+
+      <!-- Days of Week Header -->
+      <div class="calendar-grid-header">
+        <div class="day-name">Lunes</div>
+        <div class="day-name">Martes</div>
+        <div class="day-name">Miércoles</div>
+        <div class="day-name">Jueves</div>
+        <div class="day-name">Viernes</div>
+        <div class="day-name">Sábado</div>
+        <div class="day-name">Domingo</div>
+      </div>
+
+      <!-- Calendar Month Days Grid -->
+      <div class="calendar-grid-body">
+        <div
+          v-for="dia in diasDelMesGrid"
+          :key="dia.id"
+          class="calendar-cell"
+          :class="{ 'cell-other-month': !dia.esMesActual, 'cell-today': dia.esHoy }"
+        >
+          <div class="cell-day-num">
+            <span>{{ dia.numeroDia }}</span>
+            <span v-if="dia.permisos.length > 0" class="badge-day-count">{{ dia.permisos.length }}</span>
+          </div>
+
+          <!-- Permisos chips for this day -->
+          <div class="cell-permisos-list">
+            <div
+              v-for="p in dia.permisos"
+              :key="p.id"
+              class="calendar-permiso-chip"
+              :class="'chip-' + p.estado.toLowerCase()"
+              @click="abrirDetallePermisoModal(p)"
+              :title="`${p.funcionario} - ${p.tipo} (${p.hora24})`"
+            >
+              <div class="chip-top">
+                <span class="chip-name">{{ shortName(p.funcionario || p.nombreFuncionario) }}</span>
+                <span class="chip-time">{{ p.hora24 }}</span>
               </div>
-            </td>
-            <td><span class="type-tag">{{ item.tipo }}</span></td>
-            <td>{{ item.fechaInicio }} al {{ item.fechaFin }}</td>
-            <td>
-              <span class="status-badge" :class="'status-' + item.estado.toLowerCase()">
-                {{ item.estado }}
-              </span>
-            </td>
-            <td>
-              <div class="ocr-score-bar">
-                <span class="score-text">{{ item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95) }}%</span>
-                <div class="progress-bar-bg">
-                  <div class="progress-bar-fill" :style="{ width: (item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95)) + '%' }"></div>
+              <div class="chip-sub">
+                <span class="chip-type-text">{{ p.tipo }}</span>
+                <span class="chip-accum">{{ p.horasAcumuladasMesEmpleado }}h/mes</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 3: RESUMEN ACUMULADO POR EMPLEADO -->
+    <!-- ========================================== -->
+    <div v-else-if="vistaModo === 'resumen'" class="excel-grid-container shadow-sm">
+      <div class="excel-header-stripe bg-purple">
+        <span class="excel-tag">Consolidado Mensual de Permisos Acumulados por Funcionario</span>
+        <span class="excel-meta">Total Funcionarios con Permiso en {{ mesNombreActual }}: {{ resumenEmpleadosAcumulado.length }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="excel-table">
+          <thead>
+            <tr>
+              <th class="col-num">#</th>
+              <th>Funcionario</th>
+              <th>Cédula</th>
+              <th>Cargo</th>
+              <th>Dependencia</th>
+              <th class="text-center">Solicitudes en {{ mesNombreActual }}</th>
+              <th class="text-center">Total Horas Acumuladas en Mes</th>
+              <th class="text-center">Desglose de Estados</th>
+              <th class="text-center">Detalle de Peticiones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="resumenEmpleadosAcumulado.length === 0">
+              <td colspan="9" class="text-center py-4 text-muted">
+                No hay acumulación de permisos registrados para este mes.
+              </td>
+            </tr>
+            <tr
+              v-for="(emp, i) in resumenEmpleadosAcumulado"
+              :key="emp.cedula"
+              :class="{ 'row-even': i % 2 === 1 }"
+            >
+              <td class="col-num">{{ i + 1 }}</td>
+              <td class="font-bold">{{ emp.nombre }}</td>
+              <td class="font-mono">{{ emp.cedula }}</td>
+              <td>{{ emp.cargo }}</td>
+              <td>{{ emp.dependencia }}</td>
+              <td class="text-center">
+                <span class="freq-badge text-lg">
+                  {{ emp.totalSolicitudesMes }} {{ emp.totalSolicitudesMes === 1 ? 'solicitud' : 'solicitudes' }}
+                </span>
+              </td>
+              <td class="text-center">
+                <span class="hours-accum-badge text-lg bg-purple-subtle text-purple">
+                  ⚡ {{ emp.totalHorasAcumuladas }} Horas Acumuladas
+                </span>
+              </td>
+              <td class="text-center">
+                <div class="status-summary-pills">
+                  <span v-if="emp.pendientes > 0" class="pill pill-pending-sm">{{ emp.pendientes }} Pendientes</span>
+                  <span v-if="emp.aprobados > 0" class="pill pill-approved-sm">{{ emp.aprobados }} Aprobados</span>
+                  <span v-if="emp.rechazados > 0" class="pill pill-rejected-sm">{{ emp.rechazados }} Rechazados</span>
+                </div>
+              </td>
+              <td class="text-center">
+                <button class="btn btn-xs btn-outline-primary" @click="verDetallesEmpleado(emp)">
+                  🔍 Ver {{ emp.totalSolicitudesMes }} permisos
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: DETALLE COMPLETO DE PERMISO -->
+    <!-- ========================================== -->
+    <div
+      v-if="modalDetalleVisible && permisoSeleccionado"
+      class="modal fade show d-block"
+      tabindex="-1"
+      style="background: rgba(0,0,0,0.6); z-index: 1080;"
+    >
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content shadow-lg border-0 rounded-4">
+          <div class="modal-header bg-navy text-white rounded-top-4 py-3 px-4">
+            <h5 class="modal-title fw-bold mb-0">
+              📋 Permiso Radicado #{{ permisoSeleccionado.radicado }}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" @click="modalDetalleVisible = false"></button>
+          </div>
+
+          <div class="modal-body p-4">
+            <!-- User Banner -->
+            <div class="user-modal-card mb-3">
+              <div class="avatar-big">{{ getIniciales(permisoSeleccionado.funcionario) }}</div>
+              <div class="user-modal-info">
+                <h4 class="m-0 fw-bold">{{ permisoSeleccionado.funcionario }}</h4>
+                <p class="m-0 text-muted small">{{ permisoSeleccionado.cargo }} — {{ permisoSeleccionado.dependencia }}</p>
+                <p class="m-0 text-muted small font-mono">Cédula: {{ permisoSeleccionado.cedula }}</p>
+              </div>
+            </div>
+
+            <!-- Stats badges in modal -->
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <div class="stat-box bg-blue-subtle text-blue p-2 rounded-3 text-center">
+                  <span class="d-block small text-uppercase fw-bold">Solicitudes en {{ mesNombreActual }}</span>
+                  <span class="fs-4 fw-bold">{{ permisoSeleccionado.solicitudesMesEmpleado }} veces solicitó</span>
                 </div>
               </div>
-            </td>
-            <td class="text-right">
-              <div class="actions-group">
-                <button class="btn btn-xs btn-approve" @click="aprobar(item)" title="Aprobar Permiso">✔ Aprobar</button>
-                <button class="btn btn-xs btn-reject" @click="rechazar(item)" title="Rechazar Permiso">✖ Rechazar</button>
+              <div class="col-6">
+                <div class="stat-box bg-purple-subtle text-purple p-2 rounded-3 text-center">
+                  <span class="d-block small text-uppercase fw-bold">Horas Acumuladas en {{ mesNombreActual }}</span>
+                  <span class="fs-4 fw-bold">{{ permisoSeleccionado.horasAcumuladasMesEmpleado }} Horas Totales</span>
+                </div>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+
+            <!-- Request details grid -->
+            <div class="details-grid p-3 bg-light rounded-3 mb-3">
+              <div class="detail-row">
+                <strong>Tipo de Permiso:</strong> <span>{{ permisoSeleccionado.tipo }}</span>
+              </div>
+              <div class="detail-row">
+                <strong>Fecha Petición:</strong> <span>{{ permisoSeleccionado.fechaInicio }} al {{ permisoSeleccionado.fechaFin }}</span>
+              </div>
+              <div class="detail-row">
+                <strong>Hora Inicio & Duración:</strong> <span>{{ permisoSeleccionado.hora24 }} | {{ permisoSeleccionado.duracion }}</span>
+              </div>
+              <div class="detail-row">
+                <strong>Justificación / Motivo:</strong> <span>{{ permisoSeleccionado.motivo || 'Permiso reglamentario' }}</span>
+              </div>
+              <div class="detail-row">
+                <strong>Confianza OCR:</strong> <span>{{ permisoSeleccionado.ocrScore || 95 }}% de coincidencia</span>
+              </div>
+              <div class="detail-row">
+                <strong>Estado Actual:</strong>
+                <span class="status-badge ms-2" :class="'status-' + permisoSeleccionado.estado.toLowerCase()">
+                  {{ permisoSeleccionado.estado }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Modal Actions -->
+            <div class="d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-secondary" @click="modalDetalleVisible = false">Cerrar</button>
+              <button type="button" class="btn btn-success fw-bold px-3" @click="aprobarModal(permisoSeleccionado)">
+                ✔ Aprobar Permiso
+              </button>
+              <button type="button" class="btn btn-danger fw-bold px-3" @click="rechazarModal(permisoSeleccionado)">
+                ✖ Rechazar Permiso
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -65,10 +479,53 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
+import PageHeader from '../../../components/PageHeader.vue'
 
 const permisos = ref([])
 const cargando = ref(false)
+const busqueda = ref('')
 
+// Vista: 'excel' | 'calendario' | 'resumen'
+const vistaModo = ref('excel')
+
+// Mes y Año seleccionado (Por defecto: Agosto 2026)
+const mesSeleccionado = ref(7) // 0-indexed: 7 = Agosto
+const anioSeleccionado = ref(2026)
+
+const modalDetalleVisible = ref(false)
+const permisoSeleccionado = ref(null)
+
+const mesesNombres = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+]
+
+// Helper para acortar nombres en los chips del calendario y evitar amontonamiento
+const shortName = (nombreCompleto) => {
+  if (!nombreCompleto) return 'Funcionario'
+  const partes = nombreCompleto.trim().split(/\s+/)
+  if (partes.length === 1) return partes[0]
+  if (partes.length === 2) return `${partes[0]} ${partes[1]}`
+  if (partes.length === 3) return `${partes[0]} ${partes[1]}`
+  return `${partes[0]} ${partes[2]}`
+}
+
+const mesNombreActual = computed(() => mesesNombres[mesSeleccionado.value])
+
+const cambiarMes = (delta) => {
+  let nuevoMes = mesSeleccionado.value + delta
+  if (nuevoMes > 11) {
+    mesSeleccionado.value = 0
+    anioSeleccionado.value++
+  } else if (nuevoMes < 0) {
+    mesSeleccionado.value = 11
+    anioSeleccionado.value--
+  } else {
+    mesSeleccionado.value = nuevoMes
+  }
+}
+
+// Cargar permisos desde el Backend/Prisma/MongoDB Atlas
 const cargarPermisos = async () => {
   cargando.value = true
   try {
@@ -87,8 +544,190 @@ onMounted(() => {
   cargarPermisos()
 })
 
-const pendientesCount = computed(() => permisos.value.filter(p => p.estado === 'PENDIENTE').length)
-const aprobadosCount = computed(() => permisos.value.filter(p => p.estado === 'APROBADO').length)
+// Helper para parsear la duración a horas numéricas
+const extraerHorasDuracion = (duracionStr) => {
+  if (!duracionStr) return 4
+  const match = duracionStr.match(/(\d+)\s*horas?/i)
+  if (match) return parseInt(match[1], 10)
+  return 8 // por defecto jornada completa si no especifica
+}
+
+// Helper para parsear fechas string "DD/MM/YYYY"
+const parsearFechaDMY = (fechaStr) => {
+  if (!fechaStr) return new Date(2026, 7, 15)
+  if (fechaStr.includes('/')) {
+    const partes = fechaStr.split('/')
+    if (partes.length === 3) {
+      return new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1, parseInt(partes[0], 10))
+    }
+  }
+  return new Date(fechaStr)
+}
+
+// Permisos procesados con estadísticas acumuladas por empleado en el mes seleccionado
+const permisosProcesados = computed(() => {
+  return permisos.value.map(p => {
+    const fInicio = parsearFechaDMY(p.fechaInicio)
+    const m = fInicio.getMonth()
+    const a = fInicio.getFullYear()
+
+    // Calcular cuántos permisos ha pedido esta misma persona en el mismo mes/año
+    const todosEmpleadoEnMes = permisos.value.filter(item => {
+      const itemF = parsearFechaDMY(item.fechaInicio)
+      const mismaCedulaONombre = (item.cedula && item.cedula === p.cedula) || (item.funcionario === p.funcionario)
+      return mismaCedulaONombre && itemF.getMonth() === m && itemF.getFullYear() === a
+    })
+
+    const solicitudesMesEmpleado = todosEmpleadoEnMes.length
+    const horasAcumuladasMesEmpleado = todosEmpleadoEnMes.reduce((acc, curr) => {
+      return acc + extraerHorasDuracion(curr.duracion)
+    }, 0)
+
+    return {
+      ...p,
+      mesNum: m,
+      anioNum: a,
+      solicitudesMesEmpleado,
+      horasAcumuladasMesEmpleado,
+      horasUnicas: extraerHorasDuracion(p.duracion)
+    }
+  })
+})
+
+// Permisos filtrados por mes, año y texto de búsqueda
+const permisosFiltrados = computed(() => {
+  return permisosProcesados.value.filter(p => {
+    // Filtro mes/año
+    const coincideMes = p.mesNum === mesSeleccionado.value && p.anioNum === anioSeleccionado.value
+
+    // Filtro búsqueda
+    const query = busqueda.value.toLowerCase().trim()
+    const coincideQuery = !query ||
+      (p.funcionario && p.funcionario.toLowerCase().includes(query)) ||
+      (p.nombreFuncionario && p.nombreFuncionario.toLowerCase().includes(query)) ||
+      (p.radicado && p.radicado.toLowerCase().includes(query)) ||
+      (p.cedula && p.cedula.includes(query))
+
+    return coincideMes && coincideQuery
+  })
+})
+
+// Indicadores KPI
+const pendientesCount = computed(() => permisosFiltrados.value.filter(p => p.estado === 'PENDIENTE').length)
+const aprobadosCount = computed(() => permisosFiltrados.value.filter(p => p.estado === 'APROBADO').length)
+
+const totalHorasAcumuladasGlobal = computed(() => {
+  return permisosFiltrados.value.reduce((acc, p) => acc + p.horasUnicas, 0)
+})
+
+// Resumen agrupado por Funcionario (Acumulados del mes)
+const resumenEmpleadosAcumulado = computed(() => {
+  const mapa = {}
+
+  permisosFiltrados.value.forEach(p => {
+    const key = p.cedula || p.funcionario
+    if (!mapa[key]) {
+      mapa[key] = {
+        nombre: p.funcionario || p.nombreFuncionario,
+        cedula: p.cedula || '—',
+        cargo: p.cargo || 'Funcionario Acuasan',
+        dependencia: p.dependencia || 'Operativa',
+        totalSolicitudesMes: 0,
+        totalHorasAcumuladas: 0,
+        pendientes: 0,
+        aprobados: 0,
+        rechazados: 0,
+        permisosList: []
+      }
+    }
+
+    mapa[key].totalSolicitudesMes++
+    mapa[key].totalHorasAcumuladas += p.horasUnicas
+    mapa[key].permisosList.push(p)
+
+    if (p.estado === 'PENDIENTE') mapa[key].pendientes++
+    else if (p.estado === 'APROBADO') mapa[key].aprobados++
+    else if (p.estado === 'RECHAZADO') mapa[key].rechazados++
+  })
+
+  return Object.values(mapa)
+})
+
+// Generador de cuadrícula del calendario mensual (35 a 42 días en grid)
+const diasDelMesGrid = computed(() => {
+  const anio = anioSeleccionado.value
+  const mes = mesSeleccionado.value
+
+  const primerDiaMes = new Date(anio, mes, 1)
+  const ultimoDiaMes = new Date(anio, mes + 1, 0)
+
+  let diaSemanaInicio = primerDiaMes.getDay() // 0 = Dom, 1 = Lun ...
+  if (diaSemanaInicio === 0) diaSemanaInicio = 7 // Ajustar a Lun=1 ... Dom=7
+
+  const totalDiasMes = ultimoDiaMes.getDate()
+  const grid = []
+
+  // Días del mes anterior para rellenar
+  const diasMesAnterior = new Date(anio, mes, 0).getDate()
+  for (let i = diaSemanaInicio - 1; i > 0; i--) {
+    grid.push({
+      id: `prev-${i}`,
+      numeroDia: diasMesAnterior - i + 1,
+      esMesActual: false,
+      permisos: []
+    })
+  }
+
+  // Días del mes actual
+  const hoy = new Date()
+  for (let d = 1; d <= totalDiasMes; d++) {
+    const esHoy = hoy.getDate() === d && hoy.getMonth() === mes && hoy.getFullYear() === anio
+
+    // Filtrar permisos para este día exacto
+    const permisosDia = permisosFiltrados.value.filter(p => {
+      const f = parsearFechaDMY(p.fechaInicio)
+      return f.getDate() === d
+    })
+
+    grid.push({
+      id: `curr-${d}`,
+      numeroDia: d,
+      esMesActual: true,
+      esHoy,
+      permisos: permisosDia
+    })
+  }
+
+  // Completar hasta llenar la cuadrícula de 35 o 42 celdas
+  const celdasRestantes = (42 - grid.length) % 7
+  for (let i = 1; i <= celdasRestantes; i++) {
+    grid.push({
+      id: `next-${i}`,
+      numeroDia: i,
+      esMesActual: false,
+      permisos: []
+    })
+  }
+
+  return grid
+})
+
+// Modal y Acciones
+const abrirDetallePermisoModal = (item) => {
+  permisoSeleccionado.value = item
+  modalDetalleVisible.value = true
+}
+
+const verDetallesEmpleado = (emp) => {
+  if (emp.permisosList && emp.permisosList.length > 0) {
+    abrirDetallePermisoModal(emp.permisosList[0])
+  }
+}
+
+const getIniciales = (nombre) => {
+  if (!nombre) return 'U'
+  return nombre.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+}
 
 const aprobar = async (item) => {
   try {
@@ -97,9 +736,8 @@ const aprobar = async (item) => {
       aprobadoPor: 'Gerencia General Acuasan'
     })
     item.estado = 'APROBADO'
-    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido APROBADO por Gerencia y actualizado en la base de datos.`)
+    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido APROBADO por Gerencia.`)
   } catch (error) {
-    console.error('Error al aprobar permiso:', error)
     alert(`Error al aprobar el permiso: ${error.message}`)
   }
 }
@@ -115,206 +753,654 @@ const rechazar = async (item) => {
       observaciones: motivo
     })
     item.estado = 'RECHAZADO'
-    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido RECHAZADO y registrado en la base de datos.`)
+    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido RECHAZADO.`)
   } catch (error) {
-    console.error('Error al rechazar permiso:', error)
     alert(`Error al rechazar el permiso: ${error.message}`)
   }
+}
+
+const aprobarModal = async (item) => {
+  modalDetalleVisible.value = false
+  await aprobar(item)
+}
+
+const rechazarModal = async (item) => {
+  modalDetalleVisible.value = false
+  await rechazar(item)
 }
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 .gerencia-permisos-view {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
   gap: 16px;
-  background: #ffffff;
-  padding: 20px 24px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-.view-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 0.9rem;
-  color: #64748b;
-  margin: 4px 0 0 0;
-}
-
-.stats-pills {
-  display: flex;
+/* ==================== KPI BANNER ==================== */
+.kpi-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
 }
 
-.pill {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.pill-pending {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.pill-approved {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.table-card {
+.kpi-card {
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-  overflow-x: auto;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
 }
 
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
+.kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  background: #f1f5f9;
 }
 
-.data-table th {
-  background: #f8fafc;
-  padding: 14px 18px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #475569;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.data-table td {
-  padding: 14px 18px;
-  font-size: 0.9rem;
-  border-bottom: 1px solid #f1f5f9;
-  color: #334155;
-  vertical-align: middle;
-}
-
-.user-meta {
+.kpi-data {
   display: flex;
   flex-direction: column;
 }
 
-.user-name {
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.user-sub {
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.type-tag {
-  background: #f1f5f9;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  color: #475569;
-}
-
-.status-badge {
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 0.75rem;
+.kpi-label {
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  color: #64748b;
+  text-uppercase: uppercase;
+  letter-spacing: 0.4px;
 }
 
-.status-pendiente {
-  background: #fef3c7;
-  color: #b45309;
+.kpi-val {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  margin: 1px 0;
 }
 
-.status-aprobado {
-  background: #dcfce7;
-  color: #15803d;
+.kpi-sub {
+  font-size: 0.68rem;
+  color: #94a3b8;
 }
 
-.status-rechazado {
-  background: #fee2e2;
-  color: #b91c1c;
+.highlight-blue .kpi-icon { background: #dbeafe; color: #1e40af; }
+.highlight-amber .kpi-icon { background: #fef3c7; color: #b45309; }
+.highlight-green .kpi-icon { background: #d1fae5; color: #047857; }
+.highlight-purple .kpi-icon { background: #f3e8ff; color: #7e22ce; }
+
+.text-amber { color: #d97706 !important; }
+.text-green { color: #16a34a !important; }
+.text-purple { color: #7e22ce !important; }
+
+/* ==================== TOOLBAR ==================== */
+.toolbar-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
 }
 
-.ocr-score-bar {
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.view-mode-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 2px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.tab-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  background: #ffffff;
+  color: #004884;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.nav-month-btn {
+  background: none;
+  border: none;
+  font-size: 0.78rem;
+  color: #004884;
+  cursor: pointer;
+  padding: 1px 4px;
+}
+
+.month-display {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #0f172a;
+  min-width: 110px;
+  text-align: center;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 0.78rem;
+}
+
+.search-input {
+  padding: 5px 24px 5px 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  width: 230px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #004884;
+  box-shadow: 0 0 0 2px rgba(0, 72, 132, 0.1);
+}
+
+.clear-search {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+/* ==================== VISTA 1: CUADRILLA ESTILO EXCEL AUTÉNTICO ==================== */
+.excel-grid-container {
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.excel-header-stripe {
+  background: #107c41; /* Verde oficial Microsoft Excel */
+  color: #ffffff;
+  padding: 5px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.excel-stripe-left {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.score-text {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #0284c7;
-  min-width: 32px;
+.excel-icon-logo { font-size: 0.9rem; }
+.excel-tag { font-family: monospace; font-weight: 700; letter-spacing: 0.3px; }
+.excel-meta { font-size: 0.7rem; opacity: 0.9; }
+
+/* Barra de Fórmulas de Excel (fx) */
+.excel-formula-bar {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 3px 8px;
+  gap: 6px;
+  font-size: 0.74rem;
 }
 
-.progress-bar-bg {
-  width: 60px;
-  height: 6px;
-  background: #e2e8f0;
+.cell-name-box {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   border-radius: 3px;
+  padding: 1px 10px;
+  font-family: monospace;
+  font-weight: 700;
+  color: #0f172a;
+  min-width: 44px;
+  text-align: center;
+}
+
+.fx-icon {
+  font-family: serif;
+  font-style: italic;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0 4px;
+  font-size: 0.85rem;
+}
+
+.formula-input {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 2px 10px;
+  font-family: monospace;
+  color: #334155;
+  font-size: 0.72rem;
+}
+
+/* Tabla Estilo Excel Grid */
+.excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* Fila de letras de columna Excel (A, B, C...) */
+.excel-col-letters-row th {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 0.65rem !important;
+  text-align: center !important;
+  padding: 2px 4px !important;
+  border: 1px solid #cbd5e1 !important;
+  user-select: none;
+}
+
+/* Fila principal de encabezados */
+.excel-main-header-row th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 800;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.68rem;
+  letter-spacing: 0.3px;
+}
+
+.col-excel-index {
+  width: 32px;
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  font-family: monospace !important;
+  border-right: 2px solid #cbd5e1 !important;
+  user-select: none;
+}
+
+.excel-table td {
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.excel-table tr:hover td {
+  background: #f0f9ff !important;
+}
+
+.row-even td { background: #f8fafc; }
+.row-pending td { background: #fffdf5; }
+
+.col-radicado { font-family: monospace; font-weight: 700; color: #107c41; font-size: 0.76rem; }
+
+.cell-user { display: flex; flex-direction: column; }
+.user-name { font-weight: 700; color: #0f172a; font-size: 0.78rem; }
+.user-sub { font-size: 0.68rem; color: #64748b; }
+
+.cell-dep { font-size: 0.72rem; color: #475569; font-weight: 500; }
+
+.type-pill {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.cell-datetime { display: flex; flex-direction: column; }
+.date-main { font-weight: 700; color: #1e293b; font-size: 0.74rem; }
+.time-sub { font-size: 0.68rem; color: #64748b; }
+
+.freq-badge {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.hours-accum-badge {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+/* Footer de pestañas de hojas Excel */
+.excel-sheets-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #e2e8f0;
+  border-top: 1px solid #cbd5e1;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}
+
+.sheet-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.sheet-tab {
+  background: #cbd5e1;
+  border: 1px solid #94a3b8;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sheet-tab.active {
+  background: #ffffff;
+  color: #107c41;
+  font-weight: 800;
+  border-top: 2px solid #107c41;
+}
+
+.sheet-status {
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+/* Status Badge */
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+.status-pendiente { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.status-aprobado  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.status-rechazado { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+/* OCR Bar */
+.ocr-score-bar { display: flex; align-items: center; gap: 5px; }
+.score-text { font-size: 0.7rem; font-weight: 700; color: #0284c7; }
+.progress-bar-bg { width: 42px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: #0284c7; }
+
+/* Action Buttons */
+.actions-group { display: flex; gap: 3px; }
+.btn-xs { padding: 3px 7px; font-size: 0.7rem; border-radius: 4px; font-weight: 700; border: none; cursor: pointer; }
+.btn-approve { background: #16a34a; color: white; }
+.btn-approve:hover { background: #15803d; }
+.btn-reject { background: #dc2626; color: white; }
+.btn-reject:hover { background: #b91c1c; }
+
+/* ==================== VISTA 2: CALENDARIO MENSUAL ==================== */
+.calendar-container {
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  padding: 12px;
+}
+
+.calendar-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.legend-item { display: flex; align-items: center; gap: 4px; color: #475569; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot-pending { background: #d97706; }
+.dot-approved { background: #16a34a; }
+.dot-rejected { background: #dc2626; }
+
+.calendar-grid-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px 6px 0 0;
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.7rem;
+  color: #334155;
+  padding: 6px 0;
+}
+
+.calendar-grid-body {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-left: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.calendar-cell {
+  min-height: 68px;
+  border-right: 1px solid #cbd5e1;
+  border-top: 1px solid #cbd5e1;
+  padding: 3px 4px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.15s ease;
+}
+
+.calendar-cell:hover { background: #f8fafc; }
+.cell-other-month { background: #f8fafc; opacity: 0.4; }
+.cell-today { background: #f0f9ff; border: 2px solid #0284c7; }
+
+.cell-day-num {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.badge-day-count {
+  background: #0284c7;
+  color: white;
+  border-radius: 50%;
+  width: 15px;
+  height: 15px;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cell-permisos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  max-height: 75px;
+}
+
+.calendar-permiso-chip {
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  border-left: 3px solid #0284c7;
+  transition: transform 0.12s ease;
+  line-height: 1.25;
+}
+
+.calendar-permiso-chip:hover { transform: scale(1.02); }
+
+.chip-pending  { background: #fef3c7; border-left-color: #d97706; color: #92400e; }
+.chip-aprobado { background: #dcfce7; border-left-color: #16a34a; color: #14532d; }
+.chip-rechazado{ background: #fee2e2; border-left-color: #dc2626; color: #7f1d1d; }
+
+.chip-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  white-space: nowrap;
   overflow: hidden;
 }
 
-.progress-bar-fill {
-  height: 100%;
-  background: #0284c7;
+.chip-name {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 1;
+  font-size: 0.68rem;
 }
 
-.text-right {
-  text-align: right;
+.chip-time {
+  font-size: 0.62rem;
+  opacity: 0.9;
+  flex-shrink: 0;
+  font-family: monospace;
+  font-weight: 700;
 }
 
-.actions-group {
+.chip-sub {
   display: flex;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  opacity: 0.9;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s ease;
+.chip-type-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 75px;
+}
+.chip-accum { font-weight: 800; }
+
+/* Status pills in summary view */
+.status-summary-pills { display: flex; gap: 4px; justify-content: center; }
+.pill { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
+.pill-pending-sm { background: #fef3c7; color: #b45309; }
+.pill-approved-sm { background: #dcfce7; color: #15803d; }
+.pill-rejected-sm { background: #fee2e2; color: #b91c1c; }
+
+/* User modal card */
+.user-modal-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #f8fafc;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
 }
 
-.btn-approve {
-  background: #10b981;
-  color: white;
+.avatar-big {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #004884 0%, #002d57 100%);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.btn-approve:hover {
-  background: #059669;
+.details-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.85rem;
 }
 
-.btn-reject {
-  background: #ef4444;
-  color: white;
-}
-
-.btn-reject:hover {
-  background: #dc2626;
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px dashed #cbd5e1;
+  padding-bottom: 6px;
 }
 </style>

@@ -28,6 +28,13 @@
       </div>
     </transition>
 
+    <!-- Encabezado con identidad del usuario autenticado -->
+    <PageHeader
+      titulo="Gestión de Permisos Laborales — Encargado OCR"
+      subtitulo="Radicación, digitalización OCR y control del historial de remisiones a Gerencia"
+      icono="📄"
+    />
+
     <!-- ========================================== -->
     <!-- SCENARIO A: FORMULARIO PRINCIPAL OCR & VISOR ORIGINAL -->
     <!-- ========================================== -->
@@ -766,6 +773,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
+import PageHeader from '../../../components/PageHeader.vue'
 
 // Controls view mode: 'formulario' | 'historial'
 const vistaActiva = ref('formulario')

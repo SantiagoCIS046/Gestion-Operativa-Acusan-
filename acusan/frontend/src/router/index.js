@@ -1,19 +1,27 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import authService from '../modules/auth/services/authService.js'
 
 const routes = [
+  // --- LOGIN (PÚBLICO) ---
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../modules/auth/views/VistaLogin.vue'),
+    meta: { title: 'Iniciar Sesión', public: true }
+  },
+
   // --- MÓDULO DE PERMISOS ---
   {
     path: '/permisos/encargado',
     name: 'PermisosEncargado',
-    // El componente se carga SOLO cuando el usuario visita esta ruta (Lazy Loading)
     component: () => import('../modules/permisos/views/VistaEncargado.vue'),
-    meta: { title: 'Permisos - Encargado OCR', requiresAuth: true, role: 'ENCARGADO' }
+    meta: { title: 'Permisos - Encargado OCR', requiresAuth: true, roles: ['ENCARGADO', 'ADMIN'] }
   },
   {
     path: '/permisos/gerencia',
     name: 'PermisosGerencia',
     component: () => import('../modules/permisos/views/VistaGerenciaPermisos.vue'),
-    meta: { title: 'Permisos - Decisión Gerencial', requiresAuth: true, role: 'GERENCIA' }
+    meta: { title: 'Permisos - Decisión Gerencial', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
   },
 
   // --- MÓDULO DE HORAS EXTRAS ---
@@ -21,7 +29,7 @@ const routes = [
     path: '/horas-extras/gerencia',
     name: 'HorasExtrasGerencia',
     component: () => import('../modules/horas-extras/views/VistaGerenciaHoras.vue'),
-    meta: { title: 'Horas Extras - Control Gerencial', requiresAuth: true, role: 'GERENCIA' }
+    meta: { title: 'Horas Extras - Control Operativo', requiresAuth: true, roles: ['ENCARGADO', 'GERENCIA', 'ADMIN'] }
   },
 
   // --- MÓDULO DE PQR ---
@@ -29,17 +37,23 @@ const routes = [
     path: '/pqr/gestion',
     name: 'GestionPQR',
     component: () => import('../modules/pqr/views/VistaGestionPQR.vue'),
-    meta: { title: 'Gestión PQR Acuasan', requiresAuth: true, role: 'OPERATIVO' }
+    meta: { title: 'Gestión PQR Acuasan', requiresAuth: true, roles: ['OPERATIVO', 'GERENCIA', 'ADMIN'] }
   },
 
   // --- REDIRECCIÓN POR DEFECTO ---
   {
     path: '/',
-    redirect: '/permisos/encargado' // O la vista de login que configures
+    redirect: () => {
+      if (authService.estaAutenticado()) {
+        const rol = authService.getRol()
+        return authService.getRutaInicioPorRol(rol)
+      }
+      return '/login'
+    }
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/permisos/encargado'
+    redirect: '/login'
   }
 ]
 
@@ -48,18 +62,37 @@ const router = createRouter({
   routes
 })
 
-// Navigation Guards (Guardias de Navegación)
-// Para verificar roles y permisos (Encargado vs Gerencia) antes de permitir el acceso
+// Navigation Guards — Control de Acceso por Autenticación y Rol
 router.beforeEach((to, from, next) => {
-  // Configuración de título dinámico en el navegador
-  if (to.meta && to.meta.title) {
+  // Título dinámico en el navegador
+  if (to.meta?.title) {
     document.title = `${to.meta.title} | Acuasan E.S.P.`
   }
-  
-  // Aquí se validaría el token y rol:
-  // const userRole = localStorage.getItem('user_role');
-  // if (to.meta.requiresAuth && !userRole) return next('/login');
-  
+
+  const estaAutenticado = authService.estaAutenticado()
+  const rolActual = authService.getRol()
+
+  // Si la ruta es pública, dejar pasar
+  if (to.meta?.public) {
+    // Si ya está autenticado y va al login, redirigir al módulo correspondiente
+    if (estaAutenticado && to.name === 'Login') {
+      return next(authService.getRutaInicioPorRol(rolActual))
+    }
+    return next()
+  }
+
+  // Ruta privada sin sesión → login
+  if (to.meta?.requiresAuth && !estaAutenticado) {
+    return next('/login')
+  }
+
+  // Verificar que el rol del usuario tenga acceso a esta ruta
+  if (to.meta?.roles && !to.meta.roles.includes(rolActual)) {
+    // Redirigir al módulo que le corresponde según su rol
+    const rutaCorrecta = authService.getRutaInicioPorRol(rolActual)
+    return next(rutaCorrecta)
+  }
+
   next()
 })
 

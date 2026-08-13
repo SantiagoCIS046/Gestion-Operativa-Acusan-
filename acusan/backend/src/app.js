@@ -3,13 +3,20 @@ import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
 
+// Cargar variables de entorno primero
+dotenv.config()
+
 // Rutas modulares
+import authRoutes from './modules/auth/auth.routes.js'
 import permisosRoutes from './modules/permisos/permisos.routes.js'
 import horasExtrasRoutes from './modules/horas-extras/horas-extras.routes.js'
 import pqrRoutes from './modules/pqr/pqr.routes.js'
 
-// Cargar variables de entorno
-dotenv.config()
+// Middlewares de autenticación
+import { verificarToken, verificarRol } from './middlewares/auth.middleware.js'
+
+// Seed de usuarios iniciales
+import { AuthService } from './modules/auth/auth.service.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -20,7 +27,7 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
 
-// Endpoint de verificación / salud
+// Endpoint de verificación / salud (público)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
@@ -29,10 +36,13 @@ app.get('/api/health', (req, res) => {
   })
 })
 
-// Registro de módulos
-app.use('/api/permisos', permisosRoutes)
-app.use('/api/horas-extras', horasExtrasRoutes)
-app.use('/api/pqr', pqrRoutes)
+// --- RUTAS PÚBLICAS ---
+app.use('/api/auth', authRoutes)
+
+// --- RUTAS PRIVADAS (requieren JWT) ---
+app.use('/api/permisos', verificarToken, permisosRoutes)
+app.use('/api/horas-extras', verificarToken, horasExtrasRoutes)
+app.use('/api/pqr', verificarToken, pqrRoutes)
 
 // Manejador global de rutas no encontradas (404)
 app.use((req, res) => {
@@ -54,11 +64,17 @@ app.use((err, req, res, next) => {
 
 // Iniciar servidor solo si no está en modo test
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`=========================================`)
     console.log(`  ACUASAN E.S.P. - SERVIDOR OPERATIVO    `)
     console.log(`  API en ejecución: http://localhost:${PORT}`)
     console.log(`=========================================`)
+    // Asegurar usuarios semilla al arrancar
+    try {
+      await AuthService.asegurarUsuariosIniciales()
+    } catch (e) {
+      console.warn('Advertencia al inicializar usuarios:', e.message)
+    }
   })
 }
 

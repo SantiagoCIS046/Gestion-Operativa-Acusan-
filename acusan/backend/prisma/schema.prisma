@@ -131,3 +131,49 @@ model PQR {
 
   @@map("pqrs")
 }
+
+// -------------------------------------------------------------
+// MÓDULO: AUTENTICACIÓN DE USUARIOS
+// -------------------------------------------------------------
+enum RolUsuario {
+  ENCARGADO
+  GERENCIA
+  OPERATIVO
+  ADMIN
+}
+
+model Usuario {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  nombre        String
+  email         String     @unique
+  password      String
+  rol           RolUsuario
+  cedula        String?
+  cargo         String?
+  activo        Boolean    @default(true)
+  ultimoAcceso  DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  accesos       RegistroAcceso[]
+
+  @@map("usuarios")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: REGISTRO DE ACCESOS (AUDIT LOG)
+// -------------------------------------------------------------
+model RegistroAcceso {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  usuarioId   String     @db.ObjectId
+  usuario     Usuario    @relation(fields: [usuarioId], references: [id])
+  nombreUsuario String
+  emailUsuario  String
+  rolUsuario    RolUsuario
+  cargoUsuario  String?
+  ipAddress   String?
+  userAgent   String?
+  fechaAcceso DateTime   @default(now())
+
+  @@map("registros_acceso")
+}
