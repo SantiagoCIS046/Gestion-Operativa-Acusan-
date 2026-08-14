@@ -71,8 +71,8 @@ const formatearParaFrontend = (p) => {
     archivoUrl: p.archivoUrl || '',
     isPdf: p.soporte ? p.soporte.toLowerCase().endsWith('.pdf') : false,
     estado: p.estado,
-    estadoEnvio: p.estado === 'PENDIENTE' ? 'ENVIADO_GERENCIA' : p.estado,
-    aprobadoPor: p.aprobadoPor,
+    estadoEnvio: p.estado === 'PENDIENTE' ? 'APROBADO' : p.estado,
+    aprobadoPor: p.aprobadoPor || 'Registro Directo',
     fechaAprobacion: p.fechaAprobacion,
     ocrConfidence: p.ocrConfidence,
     anio,
@@ -105,7 +105,7 @@ export const PermisosService = {
         duracion: '08:00 a 12:00 (4 horas)',
         justificacion: 'Cita médica especialista.',
         soporte: 'Certificado_EPS_Sanitas.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       },
       {
         radicado: 'PERM-2026-0041',
@@ -120,7 +120,7 @@ export const PermisosService = {
         duracion: '10:00 a 12:00 (2 horas)',
         justificacion: 'Diligencia bancaria.',
         soporte: 'Permiso_Sandra_V.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       },
       {
         radicado: 'PERM-2026-0042',
@@ -135,7 +135,7 @@ export const PermisosService = {
         duracion: '08:00 a 12:00 (4 horas)',
         justificacion: 'Cita médica especialista - Urología.',
         soporte: 'Certificado_EPS_Sanitas.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       },
       {
         radicado: 'PERM-2026-0043',
@@ -150,7 +150,7 @@ export const PermisosService = {
         duracion: '07:00 a 15:00 (8 horas)',
         justificacion: 'Día compensatorio por labor dominical en jornada de recolección especial.',
         soporte: 'Compensatorio_JPrada.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       },
       {
         radicado: 'PERM-2026-0044',
@@ -165,7 +165,7 @@ export const PermisosService = {
         duracion: '14:00 a 16:00 (2 horas)',
         justificacion: 'Diligencia notarial y bancaria personal impostergable.',
         soporte: 'Solicitud_Permiso_Laboral.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       },
       {
         radicado: 'PERM-2026-0045',
@@ -180,7 +180,7 @@ export const PermisosService = {
         duracion: '08:00 a 16:00 (16 horas)',
         justificacion: 'Emergencia por filtración e inundación en vivienda familiar.',
         soporte: 'Acta_Calamidad_HF.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       },
       {
         radicado: 'PERM-2026-0046',
@@ -195,7 +195,7 @@ export const PermisosService = {
         duracion: '10:00 a 16:00 (6 horas)',
         justificacion: 'Examen de certificación en sustancias químicas.',
         soporte: 'Certificado_Examen_MG.pdf',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO'
       }
     ]
 
@@ -271,7 +271,8 @@ export const PermisosService = {
         ocrConfidence: datos.ocrConfidence || 0.98,
         ocrRawPayload: datos.ocrRawPayload || {},
         observaciones: datos.observaciones || '',
-        estado: 'PENDIENTE'
+        estado: 'APROBADO',
+        aprobadoPor: datos.aprobadoPor || 'Registro Directo'
       }
     })
 

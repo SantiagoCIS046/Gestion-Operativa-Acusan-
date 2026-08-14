@@ -11,6 +11,7 @@ import authRoutes from './modules/auth/auth.routes.js'
 import permisosRoutes from './modules/permisos/permisos.routes.js'
 import horasExtrasRoutes from './modules/horas-extras/horas-extras.routes.js'
 import pqrRoutes from './modules/pqr/pqr.routes.js'
+import radicadosRoutes from './modules/radicados/radicados.routes.js'
 
 // Middlewares de autenticación
 import { verificarToken, verificarRol } from './middlewares/auth.middleware.js'
@@ -39,10 +40,12 @@ app.get('/api/health', (req, res) => {
 // --- RUTAS PÚBLICAS ---
 app.use('/api/auth', authRoutes)
 
-// --- RUTAS PRIVADAS (requieren JWT) ---
+// --- RUTAS PRIVADAS & MODULARES ---
 app.use('/api/permisos', verificarToken, permisosRoutes)
 app.use('/api/horas-extras', verificarToken, horasExtrasRoutes)
 app.use('/api/pqr', verificarToken, pqrRoutes)
+app.use('/api/radicados', radicadosRoutes)
+
 
 // Manejador global de rutas no encontradas (404)
 app.use((req, res) => {

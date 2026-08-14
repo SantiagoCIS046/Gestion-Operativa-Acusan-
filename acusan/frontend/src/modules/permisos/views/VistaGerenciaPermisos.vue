@@ -1,10 +1,38 @@
 <template>
   <div class="gerencia-permisos-view">
+    <!-- ========================================== -->
+    <!-- BOOTSTRAP TOAST / ALERT BANNER NOTIFICATIONS -->
+    <!-- ========================================== -->
+    <transition name="toast-slide">
+      <div
+        v-if="alertaBootstrap.visible"
+        :class="['alert', `alert-${alertaBootstrap.tipo}`, 'alert-dismissible', 'fade', 'show', 'd-flex', 'align-items-center', 'shadow-sm', 'mb-3', 'rounded-3']"
+        role="alert"
+      >
+        <div class="me-2 fs-5">
+          <span v-if="alertaBootstrap.tipo === 'success'">✔</span>
+          <span v-else-if="alertaBootstrap.tipo === 'danger'">⚠️</span>
+          <span v-else-if="alertaBootstrap.tipo === 'warning'">⚡</span>
+          <span v-else>ℹ️</span>
+        </div>
+        <div class="flex-grow-1">
+          <strong class="d-block">{{ alertaBootstrap.titulo }}</strong>
+          <span class="small">{{ alertaBootstrap.mensaje }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close"
+          @click="alertaBootstrap.visible = false"
+        ></button>
+      </div>
+    </transition>
+
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
-      titulo="Aprobación de Permisos — Gerencia"
-      subtitulo="Control gerencial, calendario mensual, horas acumuladas y dictamen de permisos laborales"
-      icono="✅"
+      titulo="Consulta y Control de Permisos Laborales — Gerencia"
+      subtitulo="Consulta gerencial, calendario mensual, plantilla Excel y acumulados por funcionario"
+      icono="📊"
     />
 
     <!-- KPI Summary Row -->
@@ -19,20 +47,20 @@
       </div>
 
       <div class="kpi-card highlight-amber">
-        <div class="kpi-icon">⏳</div>
+        <div class="kpi-icon">📋</div>
         <div class="kpi-data">
-          <span class="kpi-label">Pendientes de Dictamen</span>
-          <span class="kpi-val text-amber">{{ pendientesCount }}</span>
-          <span class="kpi-sub">Requieren aprobación gerencial</span>
+          <span class="kpi-label">Permisos Registrados</span>
+          <span class="kpi-val text-amber">{{ permisosFiltrados.length }}</span>
+          <span class="kpi-sub">Total radicados este mes</span>
         </div>
       </div>
 
       <div class="kpi-card highlight-green">
-        <div class="kpi-icon">✔</div>
+        <div class="kpi-icon">📁</div>
         <div class="kpi-data">
-          <span class="kpi-label">Aprobados este Mes</span>
-          <span class="kpi-val text-green">{{ aprobadosCount }}</span>
-          <span class="kpi-sub">Dictamen favorable</span>
+          <span class="kpi-label">Radicaciones Procesadas</span>
+          <span class="kpi-val text-green">{{ permisosFiltrados.length }}</span>
+          <span class="kpi-sub">En el sistema</span>
         </div>
       </div>
 
@@ -115,7 +143,7 @@
         <div class="cell-name-box">A1</div>
         <div class="fx-icon">fx</div>
         <div class="formula-input">
-          <span class="formula-text">=SUMA_HORAS_MES({{ mesNombreActual }}) &rarr; <strong>{{ totalHorasAcumuladasGlobal }} Horas Acumuladas</strong> | Pendientes: <strong>{{ pendientesCount }}</strong></span>
+          <span class="formula-text">=SUMA_HORAS_MES({{ mesNombreActual }}) &rarr; <strong>{{ totalHorasAcumuladasGlobal }} Horas Acumuladas</strong> | Permisos Registrados: <strong>{{ permisosFiltrados.length }}</strong></span>
         </div>
       </div>
 
@@ -133,8 +161,6 @@
               <th class="col-letter text-center">F</th>
               <th class="col-letter text-center">G</th>
               <th class="col-letter text-center">H</th>
-              <th class="col-letter text-center">I</th>
-              <th class="col-letter text-right">J</th>
             </tr>
 
             <!-- Excel Header Row -->
@@ -148,20 +174,18 @@
               <th class="text-center">SOLICITUDES / MES</th>
               <th class="text-center">HORAS ACUM. MES</th>
               <th class="text-center">CONFIANZA OCR</th>
-              <th class="text-center">ESTADO</th>
-              <th class="text-right">ACCIONES GERENCIALES</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="permisosFiltrados.length === 0">
-              <td colspan="11" class="text-center py-4 text-muted font-mono">
+              <td colspan="10" class="text-center py-4 text-muted font-mono">
                 [Hoja vacía] No se encontraron registros de permisos para {{ mesNombreActual }} {{ anioSeleccionado }}.
               </td>
             </tr>
             <tr
               v-for="(item, index) in permisosFiltrados"
               :key="item.id"
-              :class="{ 'row-even': index % 2 === 1, 'row-pending': item.estado === 'PENDIENTE' }"
+              :class="{ 'row-even': index % 2 === 1 }"
             >
               <!-- Excel Row Number Header Column -->
               <td class="col-excel-index">{{ index + 1 }}</td>
@@ -218,46 +242,9 @@
                   </div>
                 </div>
               </td>
-
-              <!-- I: Estado -->
-              <td class="text-center">
-                <span class="status-badge" :class="'status-' + item.estado.toLowerCase()">
-                  {{ item.estado }}
-                </span>
-              </td>
-
-              <!-- J: Acciones -->
-              <td class="text-right">
-                <div class="actions-group justify-content-end">
-                  <button class="btn btn-xs btn-approve" @click="aprobar(item)" title="Aprobar Permiso en BD">
-                    ✔ Aprobar
-                  </button>
-                  <button class="btn btn-xs btn-reject" @click="rechazar(item)" title="Rechazar Permiso en BD">
-                    ✖ Rechazar
-                  </button>
-                </div>
-              </td>
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Excel Sheet Tabs Footer -->
-      <div class="excel-sheets-footer">
-        <div class="sheet-tabs">
-          <button class="sheet-tab active" @click="vistaModo = 'excel'">
-            <span class="sheet-icon">📊</span> Hoja1 - Planilla Permisos
-          </button>
-          <button class="sheet-tab" @click="vistaModo = 'calendario'">
-            <span class="sheet-icon">📅</span> Hoja2 - Calendario Mensual
-          </button>
-          <button class="sheet-tab" @click="vistaModo = 'resumen'">
-            <span class="sheet-icon">👥</span> Hoja3 - Acumulados por Empleado
-          </button>
-        </div>
-        <div class="sheet-status font-mono">
-          <span>LISTO | TECLADO MACRO ACTIVADO</span>
-        </div>
       </div>
     </div>
 
@@ -267,11 +254,6 @@
     <div v-else-if="vistaModo === 'calendario'" class="calendar-container shadow-sm">
       <div class="calendar-header-bar">
         <h3 class="calendar-title">📅 Programación de Permisos — {{ mesNombreActual }} {{ anioSeleccionado }}</h3>
-        <div class="calendar-legend">
-          <span class="legend-item"><span class="dot dot-pending"></span> Pendiente</span>
-          <span class="legend-item"><span class="dot dot-approved"></span> Aprobado</span>
-          <span class="legend-item"><span class="dot dot-rejected"></span> Rechazado</span>
-        </div>
       </div>
 
       <!-- Days of Week Header -->
@@ -304,7 +286,6 @@
               v-for="p in dia.permisos"
               :key="p.id"
               class="calendar-permiso-chip"
-              :class="'chip-' + p.estado.toLowerCase()"
               @click="abrirDetallePermisoModal(p)"
               :title="`${p.funcionario} - ${p.tipo} (${p.hora24})`"
             >
@@ -341,13 +322,12 @@
               <th>Dependencia</th>
               <th class="text-center">Solicitudes en {{ mesNombreActual }}</th>
               <th class="text-center">Total Horas Acumuladas en Mes</th>
-              <th class="text-center">Desglose de Estados</th>
               <th class="text-center">Detalle de Peticiones</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="resumenEmpleadosAcumulado.length === 0">
-              <td colspan="9" class="text-center py-4 text-muted">
+              <td colspan="8" class="text-center py-4 text-muted">
                 No hay acumulación de permisos registrados para este mes.
               </td>
             </tr>
@@ -372,13 +352,6 @@
                 </span>
               </td>
               <td class="text-center">
-                <div class="status-summary-pills">
-                  <span v-if="emp.pendientes > 0" class="pill pill-pending-sm">{{ emp.pendientes }} Pendientes</span>
-                  <span v-if="emp.aprobados > 0" class="pill pill-approved-sm">{{ emp.aprobados }} Aprobados</span>
-                  <span v-if="emp.rechazados > 0" class="pill pill-rejected-sm">{{ emp.rechazados }} Rechazados</span>
-                </div>
-              </td>
-              <td class="text-center">
                 <button class="btn btn-xs btn-outline-primary" @click="verDetallesEmpleado(emp)">
                   🔍 Ver {{ emp.totalSolicitudesMes }} permisos
                 </button>
@@ -398,7 +371,7 @@
       tabindex="-1"
       style="background: rgba(0,0,0,0.6); z-index: 1080;"
     >
-      <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content shadow-lg border-0 rounded-4">
           <div class="modal-header bg-navy text-white rounded-top-4 py-3 px-4">
             <h5 class="modal-title fw-bold mb-0">
@@ -408,6 +381,22 @@
           </div>
 
           <div class="modal-body p-4">
+            <!-- Selector si el empleado tiene múltiples permisos en el mes -->
+            <div v-if="empleadoPermisosSeleccionados.length > 1" class="mb-3 p-2 bg-light rounded-3 border">
+              <label class="form-label small fw-bold text-secondary mb-1">Permisos registrados de este funcionario en el mes:</label>
+              <div class="d-flex flex-wrap gap-1">
+                <button
+                  v-for="p in empleadoPermisosSeleccionados"
+                  :key="p.id"
+                  class="btn btn-xs fw-semibold px-2 py-1"
+                  :class="permisoSeleccionado.id === p.id ? 'btn-primary' : 'btn-outline-secondary'"
+                  @click="permisoSeleccionado = p"
+                >
+                  📄 #{{ p.radicado }} ({{ p.fechaInicio }})
+                </button>
+              </div>
+            </div>
+
             <!-- User Banner -->
             <div class="user-modal-card mb-3">
               <div class="avatar-big">{{ getIniciales(permisoSeleccionado.funcionario) }}</div>
@@ -446,28 +435,130 @@
                 <strong>Hora Inicio & Duración:</strong> <span>{{ permisoSeleccionado.hora24 }} | {{ permisoSeleccionado.duracion }}</span>
               </div>
               <div class="detail-row">
-                <strong>Justificación / Motivo:</strong> <span>{{ permisoSeleccionado.motivo || 'Permiso reglamentario' }}</span>
+                <strong>Soporte / Archivo Adjunto:</strong> <span>📁 {{ permisoSeleccionado.soporte || 'Permiso_Escaneado.pdf' }}</span>
               </div>
               <div class="detail-row">
                 <strong>Confianza OCR:</strong> <span>{{ permisoSeleccionado.ocrScore || 95 }}% de coincidencia</span>
               </div>
-              <div class="detail-row">
-                <strong>Estado Actual:</strong>
-                <span class="status-badge ms-2" :class="'status-' + permisoSeleccionado.estado.toLowerCase()">
-                  {{ permisoSeleccionado.estado }}
+            </div>
+
+            <!-- EVIDENCIA / EXCUSA DE PERMISO Y JUSTIFICACIÓN DESTACADA -->
+            <div class="p-3 bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-3 mb-3">
+              <div class="fw-bold mb-1 d-flex align-items-center justify-content-between" style="font-size: 0.88rem;">
+                <span class="d-flex align-items-center gap-2">
+                  <span>✍️</span>
+                  <span>Excusa / Motivo de la Solicitud:</span>
                 </span>
+                <span class="badge bg-warning text-dark border border-warning px-2 py-1">Soporte Verificado OCR</span>
+              </div>
+              <p class="mb-0 small fst-italic text-dark bg-white p-2 rounded border border-warning-subtle">
+                "{{ permisoSeleccionado.motivo || permisoSeleccionado.justificacion || 'Permiso laboral con justificación reglamentaria adjunta.' }}"
+              </p>
+              <div v-if="permisoSeleccionado.motivoManuscrito" class="mt-2 pt-2 border-top border-warning-subtle small text-muted">
+                <strong>Texto Manuscrito Extraído:</strong> <span>{{ permisoSeleccionado.motivoManuscrito }}</span>
+              </div>
+            </div>
+
+            <!-- VISOR DE DOCUMENTO PDF / EVIDENCIA ORIGINAL ENVIADA POR ENCARGADO -->
+            <div class="pdf-viewer-section mt-3 pt-3 border-top">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold text-primary m-0 d-flex align-items-center gap-2" style="color: #004884 !important;">
+                  <span>📄</span>
+                  <span>Documentos Escaneados & Evidencia Adjunta</span>
+                </h6>
+
+                <!-- Botones de conmutación de vista de documentos -->
+                <div class="d-flex align-items-center gap-2">
+                  <div class="btn-group btn-group-sm" role="group">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary py-1 px-2 fw-bold"
+                      :class="{ active: vistaDocumentoModo === 'ambos' }"
+                      @click="vistaDocumentoModo = 'ambos'"
+                    >
+                      📜 Ambos Documentos
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary py-1 px-2 fw-bold"
+                      :class="{ active: vistaDocumentoModo === 'solicitud' }"
+                      @click="vistaDocumentoModo = 'solicitud'"
+                    >
+                      📄 Solicitud
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary py-1 px-2 fw-bold"
+                      :class="{ active: vistaDocumentoModo === 'evidencia' }"
+                      @click="vistaDocumentoModo = 'evidencia'"
+                    >
+                      📑 Evidencia / Excusa
+                    </button>
+                  </div>
+
+                  <a
+                    v-if="getUrlDocumento(permisoSeleccionado)"
+                    :href="getUrlDocumento(permisoSeleccionado)"
+                    target="_blank"
+                    class="btn btn-sm btn-outline-primary fw-semibold d-inline-flex align-items-center gap-1"
+                    title="Abrir PDF en pestaña nueva del navegador"
+                  >
+                    <span>↗️ Abrir PDF</span>
+                  </a>
+                </div>
+              </div>
+
+              <!-- Viewport del PDF / Documento Escaneado Real y Evidencia -->
+              <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2" style="min-height: 480px; max-height: 620px;">
+                <!-- IF CUSTOM UPLOADED PDF FILE -->
+                <iframe
+                  v-if="esPdfDocumento(permisoSeleccionado)"
+                  :src="getUrlDocumento(permisoSeleccionado) + '#toolbar=1&navpanes=0'"
+                  class="w-100 h-100 rounded-3 border-0 bg-white"
+                  style="min-height: 520px;"
+                  title="Visor PDF Permiso Original"
+                ></iframe>
+
+                <!-- IF IMAGES / SCANS OF SOLICITUD AND EVIDENCIA/EXCUSA -->
+                <div v-else class="w-100 d-flex flex-column align-items-center gap-3">
+                  <!-- Página 1: Solicitud de Permiso Laboral Oficial Escaneada -->
+                  <div
+                    v-if="vistaDocumentoModo === 'ambos' || vistaDocumentoModo === 'solicitud'"
+                    class="w-100 text-center"
+                  >
+                    <div class="badge bg-primary text-white mb-2 shadow-sm px-3 py-1 fw-bold">
+                      📄 PÁGINA 1: SOLICITUD DE PERMISO LABORAL OFICIAL ESCANEADA
+                    </div>
+                    <img
+                      src="/scans/solicitud_permiso_scan.png"
+                      alt="Solicitud de Permiso Laboral Original Escaneada Acuasan"
+                      class="img-fluid rounded shadow bg-white border w-100"
+                      style="max-width: 760px; object-fit: contain;"
+                    />
+                  </div>
+
+                  <!-- Página 2: Evidencia / Excusa Adjunta Escaneada -->
+                  <div
+                    v-if="vistaDocumentoModo === 'ambos' || vistaDocumentoModo === 'evidencia'"
+                    class="w-100 text-center mt-2"
+                  >
+                    <div class="badge bg-success text-white mb-2 shadow-sm px-3 py-1 fw-bold">
+                      📑 PÁGINA 2: EVIDENCIA Y EXCUSA ADJUNTA (CERTIFICADO / SOPORTE)
+                    </div>
+                    <img
+                      src="/scans/evidencia_e18_scan.png"
+                      alt="Formulario E-18 Evidencia y Excusa Adjunta Escaneada"
+                      class="img-fluid rounded shadow bg-white border w-100"
+                      style="max-width: 760px; object-fit: contain;"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
             <!-- Modal Actions -->
             <div class="d-flex justify-content-end gap-2">
               <button type="button" class="btn btn-secondary" @click="modalDetalleVisible = false">Cerrar</button>
-              <button type="button" class="btn btn-success fw-bold px-3" @click="aprobarModal(permisoSeleccionado)">
-                ✔ Aprobar Permiso
-              </button>
-              <button type="button" class="btn btn-danger fw-bold px-3" @click="rechazarModal(permisoSeleccionado)">
-                ✖ Rechazar Permiso
-              </button>
             </div>
           </div>
         </div>
@@ -485,6 +576,20 @@ const permisos = ref([])
 const cargando = ref(false)
 const busqueda = ref('')
 
+const alertaBootstrap = ref({
+  visible: false,
+  tipo: 'success',
+  titulo: '',
+  mensaje: ''
+})
+
+const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
+  alertaBootstrap.value = { visible: true, tipo, titulo, mensaje }
+  setTimeout(() => {
+    alertaBootstrap.value.visible = false
+  }, duracion)
+}
+
 // Vista: 'excel' | 'calendario' | 'resumen'
 const vistaModo = ref('excel')
 
@@ -494,6 +599,7 @@ const anioSeleccionado = ref(2026)
 
 const modalDetalleVisible = ref(false)
 const permisoSeleccionado = ref(null)
+const vistaDocumentoModo = ref('ambos')
 
 const mesesNombres = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -532,9 +638,20 @@ const cargarPermisos = async () => {
     const lista = await permisosService.obtenerHistorialPermisos()
     if (lista && lista.length > 0) {
       permisos.value = lista
+      lanzarAlertaBootstrap(
+        'success',
+        'Permisos Cargados Exitosamente',
+        `Se han obtenido ${lista.length} registros de permisos laborales desde el servidor de Acuasan.`,
+        4500
+      )
     }
   } catch (error) {
     console.error('Error al cargar permisos para gerencia:', error)
+    lanzarAlertaBootstrap(
+      'danger',
+      'Error de Conexión',
+      error.message || 'No se pudo cargar la lista de permisos desde la base de datos.'
+    )
   } finally {
     cargando.value = false
   }
@@ -613,9 +730,6 @@ const permisosFiltrados = computed(() => {
 })
 
 // Indicadores KPI
-const pendientesCount = computed(() => permisosFiltrados.value.filter(p => p.estado === 'PENDIENTE').length)
-const aprobadosCount = computed(() => permisosFiltrados.value.filter(p => p.estado === 'APROBADO').length)
-
 const totalHorasAcumuladasGlobal = computed(() => {
   return permisosFiltrados.value.reduce((acc, p) => acc + p.horasUnicas, 0)
 })
@@ -634,9 +748,6 @@ const resumenEmpleadosAcumulado = computed(() => {
         dependencia: p.dependencia || 'Operativa',
         totalSolicitudesMes: 0,
         totalHorasAcumuladas: 0,
-        pendientes: 0,
-        aprobados: 0,
-        rechazados: 0,
         permisosList: []
       }
     }
@@ -644,10 +755,6 @@ const resumenEmpleadosAcumulado = computed(() => {
     mapa[key].totalSolicitudesMes++
     mapa[key].totalHorasAcumuladas += p.horasUnicas
     mapa[key].permisosList.push(p)
-
-    if (p.estado === 'PENDIENTE') mapa[key].pendientes++
-    else if (p.estado === 'APROBADO') mapa[key].aprobados++
-    else if (p.estado === 'RECHAZADO') mapa[key].rechazados++
   })
 
   return Object.values(mapa)
@@ -713,60 +820,38 @@ const diasDelMesGrid = computed(() => {
 })
 
 // Modal y Acciones
-const abrirDetallePermisoModal = (item) => {
+const empleadoPermisosSeleccionados = ref([])
+
+const abrirDetallePermisoModal = (item, listaCompleta = []) => {
   permisoSeleccionado.value = item
+  empleadoPermisosSeleccionados.value = listaCompleta.length > 0 ? listaCompleta : [item]
   modalDetalleVisible.value = true
 }
 
 const verDetallesEmpleado = (emp) => {
   if (emp.permisosList && emp.permisosList.length > 0) {
-    abrirDetallePermisoModal(emp.permisosList[0])
+    abrirDetallePermisoModal(emp.permisosList[0], emp.permisosList)
   }
+}
+
+const getUrlDocumento = (p) => {
+  if (!p) return '/scans/solicitud_permiso_scan.png'
+  if (p.archivoUrl && p.archivoUrl.trim()) return p.archivoUrl
+  if (p.customFileUrl && p.customFileUrl.trim()) return p.customFileUrl
+  if (p.soporteUrl && p.soporteUrl.trim()) return p.soporteUrl
+  return '/scans/solicitud_permiso_scan.png'
+}
+
+const esPdfDocumento = (p) => {
+  const url = getUrlDocumento(p)
+  if (p?.isPdf) return true
+  if (p?.soporte && p.soporte.toLowerCase().endsWith('.pdf')) return true
+  return url.toLowerCase().includes('.pdf') || url.startsWith('blob:')
 }
 
 const getIniciales = (nombre) => {
   if (!nombre) return 'U'
   return nombre.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
-}
-
-const aprobar = async (item) => {
-  try {
-    await permisosService.dictaminarPermiso(item.id, {
-      estado: 'APROBADO',
-      aprobadoPor: 'Gerencia General Acuasan'
-    })
-    item.estado = 'APROBADO'
-    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido APROBADO por Gerencia.`)
-  } catch (error) {
-    alert(`Error al aprobar el permiso: ${error.message}`)
-  }
-}
-
-const rechazar = async (item) => {
-  const motivo = prompt('Ingrese el motivo del rechazo para Gerencia:', 'No cumple con los requisitos normativos')
-  if (motivo === null) return
-
-  try {
-    await permisosService.dictaminarPermiso(item.id, {
-      estado: 'RECHAZADO',
-      aprobadoPor: 'Gerencia General Acuasan',
-      observaciones: motivo
-    })
-    item.estado = 'RECHAZADO'
-    alert(`Permiso #${item.radicado} (${item.funcionario}) ha sido RECHAZADO.`)
-  } catch (error) {
-    alert(`Error al rechazar el permiso: ${error.message}`)
-  }
-}
-
-const aprobarModal = async (item) => {
-  modalDetalleVisible.value = false
-  await aprobar(item)
-}
-
-const rechazarModal = async (item) => {
-  modalDetalleVisible.value = false
-  await rechazar(item)
 }
 </script>
 
@@ -778,6 +863,20 @@ const rechazarModal = async (item) => {
   flex-direction: column;
   gap: 16px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Transiciones para la Alerta Bootstrap */
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 /* ==================== KPI BANNER ==================== */
@@ -1027,9 +1126,19 @@ const rechazarModal = async (item) => {
   font-size: 0.72rem;
 }
 
-/* Tabla Estilo Excel Grid */
+/* Tabla Estilo Excel Grid con Scroll Automático */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-height: calc(100vh - 280px);
+  min-height: 250px;
+  -webkit-overflow-scrolling: touch;
+}
+
 .excel-table {
   width: 100%;
+  min-width: 960px;
   border-collapse: collapse;
   font-size: 0.76rem;
   font-family: 'Inter', -apple-system, sans-serif;

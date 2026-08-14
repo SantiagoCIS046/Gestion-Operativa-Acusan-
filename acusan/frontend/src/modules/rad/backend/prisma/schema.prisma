@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Radicado {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  numeroRadicado   String   @unique
+  fechaRadicacion  DateTime @default(now())
+
+  // ── Campos del documento PDF ──
+  peticionario     String            // Remitente / Quien radica
+  dependencia      String            // Empresa destinataria
+  destinatario     String?           // Funcionario destinatario (ej. 940 - Ruiz Suarez Luz Marina)
+  asunto           String?           // Asunto del documento
+  referencia       String?           // Referencia del documento (ej. Código de suscriptor)
+  fechaDocumento   String?           // Fecha y hora del sello del radicado (ej. 22/jul/2026 5:31 PM)
+  lugarFecha       String?           // Lugar y fecha de la carta (ej. Pinchote, 22 Julio de 2026)
+  numeroRadicadoPdf String?          // Número de radicado impreso en el PDF (ej. Rad. 2640000645)
+
+  // ── Campos operacionales ──
+  correoDrive      String?
+  registradoPor    String?           // Persona que hace el radicado en el sistema
+  contexto         String?           // Observaciones adicionales
+  estado           String   @default("Pendiente")
+  fechaVencimiento DateTime
+  urlDrive         String?
+  archivoNombre    String?
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  nombre    String
+  password  String
+  rol       String?  @default("OPERATIVO")
+  cedula    String?
+  activo    Boolean? @default(true)
+
+  @@map("usuarios")
+}

@@ -21,7 +21,7 @@ const routes = [
     path: '/permisos/gerencia',
     name: 'PermisosGerencia',
     component: () => import('../modules/permisos/views/VistaGerenciaPermisos.vue'),
-    meta: { title: 'Permisos - Decisión Gerencial', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
+    meta: { title: 'Permisos - Consulta Gerencial', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
   },
 
   // --- MÓDULO DE HORAS EXTRAS ---
@@ -39,6 +39,16 @@ const routes = [
     component: () => import('../modules/pqr/views/VistaGestionPQR.vue'),
     meta: { title: 'Gestión PQR Acuasan', requiresAuth: true, roles: ['OPERATIVO', 'GERENCIA', 'ADMIN'] }
   },
+
+  // --- MÓDULO DE RADICADOS ---
+  {
+    path: '/radicados/gestion',
+    name: 'GestionRadicados',
+    component: () => import('../modules/radicados/views/VistaRadicados.vue'),
+    meta: { title: 'Gestión de Radicados | Acuasan', requiresAuth: true, roles: ['RADICADOS', 'ENCARGADO', 'ADMIN'] }
+  },
+
+
 
   // --- REDIRECCIÓN POR DEFECTO ---
   {

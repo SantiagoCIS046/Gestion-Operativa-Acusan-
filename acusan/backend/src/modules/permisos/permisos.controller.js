@@ -48,16 +48,16 @@ export const PermisosController = {
    */
   async listarGerenciaPendientes(req, res) {
     try {
-      const permisosPendientes = await PermisosService.listarPermisos({ estado: 'PENDIENTE' })
+      const permisos = await PermisosService.listarPermisos()
       res.json({
         success: true,
-        message: 'Listado de permisos validados listos para decisión gerencial',
-        data: permisosPendientes
+        message: 'Listado consolidado de permisos para consulta gerencial',
+        data: permisos
       })
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: 'Error al obtener permisos pendientes para gerencia',
+        message: 'Error al obtener permisos para consulta gerencial',
         error: error.message
       })
     }

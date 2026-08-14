@@ -140,7 +140,9 @@ enum RolUsuario {
   GERENCIA
   OPERATIVO
   ADMIN
+  RADICADOS
 }
+
 
 model Usuario {
   id            String     @id @default(auto()) @map("_id") @db.ObjectId
@@ -177,3 +179,39 @@ model RegistroAcceso {
 
   @@map("registros_acceso")
 }
+
+// -------------------------------------------------------------
+// MÓDULO: GESTIÓN DE RADICADOS DOCUMENTALES & VENCIMIENTOS
+// -------------------------------------------------------------
+model Radicado {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  numeroRadicado    String   @unique
+  fechaRadicacion   DateTime @default(now())
+
+  // Campos del documento PDF / OCR
+  peticionario      String
+  dependencia       String
+  destinatario      String?
+  asunto            String?
+  referencia        String?
+  fechaDocumento    String?
+  lugarFecha        String?
+  numeroRadicadoPdf String?
+
+  // Campos operacionales
+  correoDrive       String?
+  registradoPor     String?
+  contexto          String?
+  estado            String   @default("Pendiente")
+  fechaVencimiento  DateTime
+  urlDrive          String?
+  archivoNombre     String?
+  archivoUrl        String?
+  archivoBase64     String?
+  createdAt         DateTime @default(now())
+
+  updatedAt         DateTime @updatedAt
+
+  @@map("radicados")
+}
+

@@ -41,15 +41,15 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- GERENCIA: Dictamen de Permisos -->
+          <!-- GERENCIA: Consulta de Permisos -->
           <router-link
             v-if="tieneAcceso(['GERENCIA', 'ADMIN'])"
             to="/permisos/gerencia"
             class="nav-btn"
             active-class="active"
           >
-            <span class="nav-icon">✅</span>
-            <span class="nav-text">Dictamen Permisos</span>
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Consulta Permisos</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
@@ -64,6 +64,20 @@
             <span class="nav-text">Gestión PQR</span>
             <span class="active-indicator-dot"></span>
           </router-link>
+
+          <!-- RADICADOS: Exclusivo Eliana, Román y Admin -->
+          <router-link
+            v-if="tieneAcceso(['RADICADOS', 'ENCARGADO', 'ADMIN'])"
+            to="/radicados/gestion"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">📑</span>
+            <span class="nav-text">Radicados</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+
         </nav>
 
         <!-- User Profile & Logout at bottom -->

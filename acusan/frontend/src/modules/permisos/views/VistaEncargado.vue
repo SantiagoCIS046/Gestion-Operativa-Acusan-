@@ -31,7 +31,7 @@
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
       titulo="Gestión de Permisos Laborales — Encargado OCR"
-      subtitulo="Radicación, digitalización OCR y control del historial de remisiones a Gerencia"
+      subtitulo="Radicación, digitalización OCR y control del historial de permisos laborales"
       icono="📄"
     />
 
@@ -231,7 +231,7 @@
                 </span>
               </div>
               <p class="text-muted small mb-0">
-                Revise y rectifique los datos extraídos del PDF antes de confirmar el envío a Gerencia.
+                Revise y rectifique los datos extraídos del PDF antes de confirmar el registro del permiso.
               </p>
             </div>
 
@@ -389,12 +389,12 @@
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label mb-1 fw-semibold text-secondary small">Observaciones para Gerencia (Opcional)</label>
+                  <label class="form-label mb-1 fw-semibold text-secondary small">Observaciones (Opcional)</label>
                   <textarea
                     v-model="formData.observaciones"
                     rows="2"
                     class="form-control form-control-sm"
-                    placeholder="Observación o nota adicional para la Gerencia General..."
+                    placeholder="Observación o nota adicional..."
                     :disabled="!documentLoaded"
                   ></textarea>
                 </div>
@@ -418,7 +418,7 @@
                   >
                     <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
                     <span v-else>▶</span>
-                    <span>{{ isSubmitting ? 'Enviando a Gerencia...' : 'Confirmar y Enviar a Gerencia' }}</span>
+                    <span>{{ isSubmitting ? 'Registrando Permiso...' : 'Confirmar y Radicar Permiso' }}</span>
                   </button>
                 </div>
               </form>
@@ -475,7 +475,8 @@
             <div class="d-flex align-items-center gap-2">
               <select v-model="filtroEstadoHistorial" class="form-select form-select-sm" style="width: auto;">
                 <option value="">Todos los Estados (Columna Estado)</option>
-                <option value="ENVIADO_GERENCIA">✔ Enviados a Gerencia</option>
+                <option value="ENVIADO_GERENCIA">✔ Permisos Registrados</option>
+                <option value="APROBADO">✔ Permisos Registrados</option>
                 <option value="PENDIENTE_ENVIO">⏳ Pendientes de Envío</option>
               </select>
 
@@ -590,7 +591,7 @@
                   <th class="text-center">TIPO DE PERMISO</th>
                   <th class="text-center">DURACIÓN</th>
                   <th class="text-center">RECURRENCIA (MES / AÑO)</th>
-                  <th class="text-center">ESTADO GERENCIA</th>
+                  <th class="text-center">ESTADO</th>
                   <th class="text-center">ACCIÓN</th>
                 </tr>
               </thead>
@@ -670,10 +671,10 @@
                     <!-- Col J: Estado de Remisión -->
                     <td class="excel-cell text-center">
                       <span
-                        v-if="fila.estadoEnvio === 'ENVIADO_GERENCIA'"
+                        v-if="fila.estadoEnvio === 'ENVIADO_GERENCIA' || fila.estadoEnvio === 'APROBADO' || fila.estado === 'APROBADO'"
                         class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"
                       >
-                        ✔ Enviado a Gerencia
+                        ✔ Permiso Registrado
                       </span>
                       <span
                         v-else
@@ -724,7 +725,7 @@
               <span>LISTO • RECUENTO ACTIVO: <strong>{{ historialFiltrado.length }} registros</strong> en {{ etiquetaCronograma }}</span>
             </div>
             <div class="d-flex gap-3">
-              <span>ENVIADOS GERENCIA: <strong class="text-success">{{ totalEnviadosGerenciaPeriodo }}</strong></span>
+              <span>TOTAL REGISTRADOS: <strong class="text-success">{{ totalEnviadosGerenciaPeriodo }}</strong></span>
               <span>PENDIENTES: <strong class="text-warning">{{ totalPendientesEnvioPeriodo }}</strong></span>
               <span>100% ZOOM</span>
             </div>
@@ -1184,7 +1185,7 @@ const filasExcelCompletas = computed(() => {
 })
 
 const totalEnviadosGerenciaPeriodo = computed(() => {
-  return historialFiltrado.value.filter(item => item.estadoEnvio === 'ENVIADO_GERENCIA').length
+  return historialFiltrado.value.filter(item => item.estadoEnvio === 'ENVIADO_GERENCIA' || item.estadoEnvio === 'APROBADO' || item.estado === 'APROBADO').length
 })
 
 const totalPendientesEnvioPeriodo = computed(() => {
@@ -1367,7 +1368,8 @@ const confirmarYEnviar = async () => {
         dependencia: formData.dependencia || 'Operativa',
         tipo: formData.tipoPermiso,
         duracion: formData.horasCalculadas || '07:00 a 15:00 (8 horas)',
-        estadoEnvio: 'ENVIADO_GERENCIA',
+        estadoEnvio: 'APROBADO',
+        estado: 'APROBADO',
         motivo: formData.motivo,
         soporte: documentFileName.value || 'Permiso_Escaneado.pdf',
         archivoUrl: customFileUrl.value,
@@ -1390,14 +1392,14 @@ const confirmarYEnviar = async () => {
 
     lanzarAlertaBootstrap(
       'success',
-      '¡Permiso Guardado en Base de Datos y Enviado a Gerencia!',
+      '¡Permiso Radicado y Registrado Exitosamente!',
       `Se radicó con éxito en MongoDB Atlas a las ${hora24Actual} hrs con Radicado #${radicadoGenerado} (${payload.tipo}) para ${nombreEnviado}. Formulario y visor listos para procesar la siguiente solicitud.`,
       7500
     )
 
   } catch (error) {
     console.error('Error al radicar permiso:', error)
-    lanzarAlertaBootstrap('danger', 'Error de Envío', error.message || 'Ocurrió un inconveniente al enviar la solicitud a Gerencia.')
+    lanzarAlertaBootstrap('danger', 'Error de Envío', error.message || 'Ocurrió un inconveniente al radicar la solicitud.')
   } finally {
     isSubmitting.value = false
   }

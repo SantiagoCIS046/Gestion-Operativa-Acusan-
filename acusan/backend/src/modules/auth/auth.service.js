@@ -4,20 +4,28 @@ import jwt from 'jsonwebtoken'
 
 const USUARIOS_SEMILLA = [
   {
+    nombre: 'Eliana',
+    email: 'eliana@acuasan.com',
+    password: 'acuasan2026',
+    rol: 'RADICADOS',
+    cedula: '11009004',
+    cargo: 'Encargada de Radicaciones'
+  },
+  {
+    nombre: 'Román',
+    email: 'roman@acuasan.com',
+    password: 'acuasan2026',
+    rol: 'ENCARGADO',
+    cedula: '11009002',
+    cargo: 'Encargado de Permisos, Horas Extras y Radicados'
+  },
+  {
     nombre: 'Gerencia General Acuasan',
     email: 'gerencia@acuasan.com',
     password: 'acuasan2026',
     rol: 'GERENCIA',
     cedula: '11009001',
     cargo: 'Gerente General'
-  },
-  {
-    nombre: 'Encargado Permisos & Horas Extras',
-    email: 'encargado@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'ENCARGADO',
-    cedula: '11009002',
-    cargo: 'Encargado de RRHH y Control de Cuadrillas'
   },
   {
     nombre: 'Atención al Ciudadano PQR',
@@ -62,12 +70,22 @@ export const AuthService = {
             }
           })
           console.log(`✔ Usuario oficial ${u.email} (${u.rol}) asegurado en BD.`)
+        } else {
+          // Actualizar nombre y rol de Román o Eliana si ya existen
+          await prisma.usuario.update({
+            where: { id: existe.id },
+            data: {
+              nombre: u.nombre,
+              cargo: u.cargo
+            }
+          })
         }
       }
     } catch (err) {
       console.warn('Error al verificar usuarios iniciales:', err.message)
     }
   },
+
 
   /**
    * Login: verifica credenciales, registra el acceso y retorna token JWT + datos de usuario
@@ -168,8 +186,9 @@ export const AuthService = {
     }
 
     // Normalizar rol
-    const rolesValidos = ['ENCARGADO', 'GERENCIA', 'OPERATIVO', 'ADMIN']
+    const rolesValidos = ['ENCARGADO', 'GERENCIA', 'OPERATIVO', 'ADMIN', 'RADICADOS']
     const rolNormalizado = rol.toUpperCase().trim()
+
     if (!rolesValidos.includes(rolNormalizado)) {
       throw { status: 400, message: `Rol no válido. Los roles permitidos son: ${rolesValidos.join(', ')}` }
     }

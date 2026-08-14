@@ -150,17 +150,18 @@ export const authService = {
 
     // Mapeo dinámico de áreas institucionales de Acuasan (actuales y futuras)
     const mapaDestinatarios = {
-      GERENCIA: '/permisos/gerencia',         // Dictamen Gerencial & Visión Global 360°
-      ENCARGADO: '/permisos/encargado',       // Permisos OCR & Horas Extras Operativas
+      GERENCIA: '/permisos/gerencia',         // Consulta Gerencial & Visión Global 360°
+      ENCARGADO: '/permisos/encargado',       // Permisos OCR & Horas Extras Operativas (Román)
       OPERATIVO: '/pqr/gestion',              // Atención al Ciudadano PQR
+      RADICADOS: '/radicados/gestion',        // Módulo exclusivo para Eliana
       ADMIN: '/permisos/encargado',           // Administración de TI
-      // Áreas/roles futuros pre-configurados
       TALENTO_HUMANO: '/permisos/encargado',
       CUADRILLAS_OBRA: '/horas-extras/gerencia',
       ATENCION_CIUDADANA: '/pqr/gestion'
     }
 
-    return mapaDestinatarios[rolNorm] || '/permisos/encargado'
+    return mapaDestinatarios[rolNorm] || '/radicados/gestion'
+
   },
 
   /**
