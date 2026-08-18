@@ -684,15 +684,26 @@
 
                     <!-- Col K: Acción -->
                     <td class="excel-cell text-center">
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold"
-                        style="font-size: 0.75rem;"
-                        @click="cargarEnFormulario(fila)"
-                        title="Cargar el documento escaneado original y datos en el formulario"
-                      >
-                        Cargar en Permisos
-                      </button>
+                      <div class="d-flex justify-content-center align-items-center gap-1">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold"
+                          style="font-size: 0.72rem;"
+                          @click="cargarEnFormulario(fila)"
+                          title="Cargar y ver el documento en el formulario"
+                        >
+                          📂 Cargar
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-danger py-0 px-2 fw-semibold"
+                          style="font-size: 0.72rem;"
+                          @click="confirmarEliminarPermiso(fila)"
+                          title="Eliminar este permiso del historial"
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      </div>
                     </td>
                   </template>
 
@@ -766,6 +777,35 @@
         </div>
       </div>
     </div>
+
+    <!-- BOOTSTRAP DELETE CONFIRMATION MODAL -->
+    <div
+      v-if="modalEliminarVisible"
+      class="modal fade show d-block"
+      tabindex="-1"
+      style="background: rgba(0, 0, 0, 0.55); z-index: 1065;"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg rounded-3 border-0">
+          <div class="modal-header bg-danger text-white py-2 px-3">
+            <h6 class="modal-title fw-bold mb-0">🗑️ Eliminar Permiso del Historial</h6>
+            <button type="button" class="btn-close btn-close-white" @click="modalEliminarVisible = false"></button>
+          </div>
+          <div class="modal-body p-3">
+            <p class="mb-2 text-dark">
+              ¿Está seguro de que desea eliminar el permiso con Radicado <strong class="text-danger">#{{ permisoAEliminar?.radicado }}</strong> perteneciente a <strong>{{ permisoAEliminar?.funcionario }}</strong>?
+            </p>
+            <div class="alert alert-warning py-2 px-3 mb-0 small rounded-2">
+              ⚠️ Esta acción removerá el registro del historial permanentemente.
+            </div>
+          </div>
+          <div class="modal-footer py-2 px-3 border-top bg-light">
+            <button type="button" class="btn btn-sm btn-secondary" @click="modalEliminarVisible = false">Cancelar</button>
+            <button type="button" class="btn btn-sm btn-danger fw-bold" @click="ejecutarEliminacion">Sí, Eliminar Permiso</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -803,6 +843,36 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
       alertaBootstrap.visible = false
     }, duracion)
   }
+}
+
+// BOOTSTRAP DELETE MODAL STATE
+const modalEliminarVisible = ref(false)
+const permisoAEliminar = ref(null)
+
+const confirmarEliminarPermiso = (item) => {
+  permisoAEliminar.value = item
+  modalEliminarVisible.value = true
+}
+
+const ejecutarEliminacion = async () => {
+  if (!permisoAEliminar.value) return
+  const radicado = permisoAEliminar.value.radicado || permisoAEliminar.value.id
+  const nombre = permisoAEliminar.value.funcionario || permisoAEliminar.value.nombreFuncionario || 'Funcionario'
+
+  await permisosService.eliminarPermiso(radicado)
+  historialRemisiones.value = historialRemisiones.value.filter(
+    r => String(r.id) !== String(radicado) && String(r.radicado) !== String(radicado)
+  )
+
+  modalEliminarVisible.value = false
+  permisoAEliminar.value = null
+
+  // Si el documento que se visualizaba fue el eliminado, limpiar
+  if (documentFileName.value.includes(radicado)) {
+    limpiarFormularioYVisor()
+  }
+
+  lanzarAlertaBootstrap('success', 'Permiso Eliminado', `El permiso #${radicado} (${nombre}) ha sido eliminado del historial correctamente.`)
 }
 
 // BOOTSTRAP REJECT MODAL STATE

@@ -135,6 +135,28 @@ export const permisosService = {
   },
 
   /**
+   * Elimina un permiso del almacenamiento local y backend
+   */
+  async eliminarPermiso(idORadicado) {
+    const lista = obtenerDbLocalPermisos()
+    const filtrada = lista.filter(p => String(p.id) !== String(idORadicado) && String(p.radicado) !== String(idORadicado))
+    guardarDbLocalPermisos(filtrada)
+
+    if (backendPermisosDisponible) {
+      try {
+        await fetch(`${API_BASE_URL}/${idORadicado}`, {
+          method: 'DELETE',
+          headers: getHeaders()
+        })
+      } catch (e) {
+        backendPermisosDisponible = false
+      }
+    }
+
+    return true
+  },
+
+  /**
    * Obtiene el detalle de un permiso por su ID
    */
   async obtenerPermisoPorId(id) {
