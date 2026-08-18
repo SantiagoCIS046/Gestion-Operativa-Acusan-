@@ -772,7 +772,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
@@ -903,135 +903,8 @@ const formData = reactive({
   observaciones: ''
 })
 
-// Detailed History of Remissions (Horas en Formato 24h)
-const historialRemisiones = ref([
-  {
-    id: 1,
-    anio: 2026,
-    mesNum: 8,
-    dia: 17,
-    radicado: 'PERM-2026-0040',
-    fechaEntrega: '17/08/2026',
-    hora24: '08:15',
-    cedula: '1098345672',
-    funcionario: 'Carlos Andrés Mendoza Ruiz',
-    cargo: 'Técnico Operario - Acueducto',
-    dependencia: 'Mantenimiento de Acueducto',
-    tipo: 'Cita Médica',
-    duracion: '08:00 a 12:00 (4 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Cita médica especialista.',
-    soporte: 'Certificado_EPS_Sanitas.pdf'
-  },
-  {
-    id: 2,
-    anio: 2026,
-    mesNum: 8,
-    dia: 18,
-    radicado: 'PERM-2026-0041',
-    fechaEntrega: '18/08/2026',
-    hora24: '10:00',
-    cedula: '63456789',
-    funcionario: 'Sandra Milena Villamizar',
-    cargo: 'Auxiliar Administrativa',
-    dependencia: 'Recursos Humanos',
-    tipo: 'Personal',
-    duracion: '10:00 a 12:00 (2 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Diligencia bancaria.',
-    soporte: 'Permiso_Sandra_V.pdf'
-  },
-  {
-    id: 3,
-    anio: 2026,
-    mesNum: 8,
-    dia: 18,
-    radicado: 'PERM-2026-0042',
-    fechaEntrega: '18/08/2026',
-    hora24: '09:30',
-    cedula: '1098345672',
-    funcionario: 'Carlos Andrés Mendoza Ruiz',
-    cargo: 'Técnico Operario - Acueducto',
-    dependencia: 'Mantenimiento de Acueducto',
-    tipo: 'Cita Médica',
-    duracion: '08:00 a 12:00 (4 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Cita médica especialista - Urología.',
-    soporte: 'Certificado_EPS_Sanitas.pdf'
-  },
-  {
-    id: 4,
-    anio: 2026,
-    mesNum: 8,
-    dia: 19,
-    radicado: 'PERM-2026-0043',
-    fechaEntrega: '19/08/2026',
-    hora24: '11:15',
-    cedula: '13888999',
-    funcionario: 'Jorge Eliécer Prada Santos',
-    cargo: 'Conductor Operativo Cuadrilla',
-    dependencia: 'Aseo y Rutas Urbanas',
-    tipo: 'Compensatorio',
-    duracion: '07:00 a 15:00 (8 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Día compensatorio por labor dominical en jornada de recolección especial.',
-    soporte: 'Compensatorio_JPrada.pdf'
-  },
-  {
-    id: 5,
-    anio: 2026,
-    mesNum: 8,
-    dia: 20,
-    radicado: 'PERM-2026-0044',
-    fechaEntrega: '20/08/2026',
-    hora24: '14:00',
-    cedula: '1098765432',
-    funcionario: 'María Fernanda Ruiz Ortiz',
-    cargo: 'Analista de Facturación y Cartera',
-    dependencia: 'Comercial y Facturación',
-    tipo: 'Personal',
-    duracion: '14:00 a 16:00 (2 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Diligencia notarial y bancaria personal impostergable.',
-    soporte: 'Solicitud_Permiso_Laboral.pdf'
-  },
-  {
-    id: 6,
-    anio: 2026,
-    mesNum: 8,
-    dia: 21,
-    radicado: 'PERM-2026-0045',
-    fechaEntrega: '21/08/2026',
-    hora24: '08:45',
-    cedula: '91234567',
-    funcionario: 'Héctor Fabio Ramírez',
-    cargo: 'Operario de Redes de Alcantarillado',
-    dependencia: 'Alcantarillado Principal',
-    tipo: 'Calamidad Doméstica',
-    duracion: '08:00 a 16:00 (16 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Emergencia por filtración e inundación en vivienda familiar.',
-    soporte: 'Acta_Calamidad_HF.pdf'
-  },
-  {
-    id: 7,
-    anio: 2026,
-    mesNum: 8,
-    dia: 21,
-    radicado: 'PERM-2026-0046',
-    fechaEntrega: '21/08/2026',
-    hora24: '16:20',
-    cedula: '1098444555',
-    funcionario: 'Mauricio Gómez Santos',
-    cargo: 'Operador Planta de Tratamiento',
-    dependencia: 'Planta de Tratamiento de Agua',
-    tipo: 'Estudio / Capacitación',
-    duracion: '10:00 a 16:00 (6 horas)',
-    estadoEnvio: 'ENVIADO_GERENCIA',
-    motivo: 'Examen de certificación en sustancias químicas.',
-    soporte: 'Certificado_Examen_MG.pdf'
-  }
-])
+// Historial de Remisiones (Inicia vacío y solo contiene los permisos reales radicados)
+const historialRemisiones = ref([])
 
 // 📅 CÁLCULO DE LA SEMANA LABORAL (LUNES A VIERNES) RELACIONADA AL MES
 const obtenerRangoSemanaLaboral = () => {
@@ -1295,18 +1168,27 @@ const cargarHistorialDesdeBackend = async () => {
   isLoadingHistorial.value = true
   try {
     const lista = await permisosService.obtenerHistorialPermisos()
-    if (lista && lista.length > 0) {
-      historialRemisiones.value = lista
-    }
+    historialRemisiones.value = Array.isArray(lista) ? lista : []
   } catch (error) {
-    console.warn('Backend en inicialización o sin conexión, usando datos precargados:', error)
+    historialRemisiones.value = []
   } finally {
     isLoadingHistorial.value = false
   }
 }
 
+const onStorageChange = (e) => {
+  if (e.key === 'acuasan_permisos_db' || !e.key) {
+    cargarHistorialDesdeBackend()
+  }
+}
+
 onMounted(() => {
   cargarHistorialDesdeBackend()
+  window.addEventListener('storage', onStorageChange)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', onStorageChange)
 })
 
 // Confirm and Send to Gerencia (Guardar en Base de Datos MongoDB & Formato 24h)
