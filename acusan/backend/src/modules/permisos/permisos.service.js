@@ -89,7 +89,6 @@ export const PermisosService = {
    */
   async asegurarSemillaInicial() {
     const conteo = await prisma.permiso.count()
-    if (conteo > 0) return
 
     const semillas = [
       {
@@ -99,8 +98,8 @@ export const PermisosService = {
         cargo: 'Técnico Operario - Acueducto',
         dependencia: 'Mantenimiento de Acueducto',
         tipo: 'MEDICO',
-        fechaInicio: new Date(2026, 7, 10, 8, 15),
-        fechaFin: new Date(2026, 7, 10, 12, 0),
+        fechaInicio: new Date(2026, 7, 17, 8, 15),
+        fechaFin: new Date(2026, 7, 17, 12, 0),
         hora24: '08:15',
         duracion: '08:00 a 12:00 (4 horas)',
         justificacion: 'Cita médica especialista.',
@@ -114,8 +113,8 @@ export const PermisosService = {
         cargo: 'Auxiliar Administrativa',
         dependencia: 'Recursos Humanos',
         tipo: 'PERSONAL',
-        fechaInicio: new Date(2026, 7, 11, 10, 0),
-        fechaFin: new Date(2026, 7, 11, 12, 0),
+        fechaInicio: new Date(2026, 7, 18, 10, 0),
+        fechaFin: new Date(2026, 7, 18, 12, 0),
         hora24: '10:00',
         duracion: '10:00 a 12:00 (2 horas)',
         justificacion: 'Diligencia bancaria.',
@@ -129,8 +128,8 @@ export const PermisosService = {
         cargo: 'Técnico Operario - Acueducto',
         dependencia: 'Mantenimiento de Acueducto',
         tipo: 'MEDICO',
-        fechaInicio: new Date(2026, 7, 12, 9, 30),
-        fechaFin: new Date(2026, 7, 12, 12, 0),
+        fechaInicio: new Date(2026, 7, 18, 9, 30),
+        fechaFin: new Date(2026, 7, 18, 12, 0),
         hora24: '09:30',
         duracion: '08:00 a 12:00 (4 horas)',
         justificacion: 'Cita médica especialista - Urología.',
@@ -144,8 +143,8 @@ export const PermisosService = {
         cargo: 'Conductor Operativo Cuadrilla',
         dependencia: 'Aseo y Rutas Urbanas',
         tipo: 'COMPENSATORIO',
-        fechaInicio: new Date(2026, 7, 12, 11, 15),
-        fechaFin: new Date(2026, 7, 12, 15, 0),
+        fechaInicio: new Date(2026, 7, 19, 11, 15),
+        fechaFin: new Date(2026, 7, 19, 15, 0),
         hora24: '11:15',
         duracion: '07:00 a 15:00 (8 horas)',
         justificacion: 'Día compensatorio por labor dominical en jornada de recolección especial.',
@@ -159,8 +158,8 @@ export const PermisosService = {
         cargo: 'Analista de Facturación y Cartera',
         dependencia: 'Comercial y Facturación',
         tipo: 'PERSONAL',
-        fechaInicio: new Date(2026, 7, 13, 14, 0),
-        fechaFin: new Date(2026, 7, 13, 16, 0),
+        fechaInicio: new Date(2026, 7, 20, 14, 0),
+        fechaFin: new Date(2026, 7, 20, 16, 0),
         hora24: '14:00',
         duracion: '14:00 a 16:00 (2 horas)',
         justificacion: 'Diligencia notarial y bancaria personal impostergable.',
@@ -174,8 +173,8 @@ export const PermisosService = {
         cargo: 'Operario de Redes de Alcantarillado',
         dependencia: 'Alcantarillado Principal',
         tipo: 'CALAMIDAD',
-        fechaInicio: new Date(2026, 7, 14, 8, 45),
-        fechaFin: new Date(2026, 7, 14, 16, 0),
+        fechaInicio: new Date(2026, 7, 21, 8, 45),
+        fechaFin: new Date(2026, 7, 21, 16, 0),
         hora24: '08:45',
         duracion: '08:00 a 16:00 (16 horas)',
         justificacion: 'Emergencia por filtración e inundación en vivienda familiar.',
@@ -189,8 +188,8 @@ export const PermisosService = {
         cargo: 'Operador Planta de Tratamiento',
         dependencia: 'Planta de Tratamiento de Agua',
         tipo: 'ESTUDIO',
-        fechaInicio: new Date(2026, 7, 15, 16, 20),
-        fechaFin: new Date(2026, 7, 15, 18, 0),
+        fechaInicio: new Date(2026, 7, 21, 16, 20),
+        fechaFin: new Date(2026, 7, 21, 18, 0),
         hora24: '16:20',
         duracion: '10:00 a 16:00 (6 horas)',
         justificacion: 'Examen de certificación en sustancias químicas.',
@@ -199,8 +198,20 @@ export const PermisosService = {
       }
     ]
 
-    for (const item of semillas) {
-      await prisma.permiso.create({ data: item })
+    if (conteo === 0) {
+      for (const item of semillas) {
+        await prisma.permiso.create({ data: item })
+      }
+    } else {
+      for (const item of semillas) {
+        const existente = await prisma.permiso.findUnique({ where: { radicado: item.radicado } })
+        if (existente) {
+          await prisma.permiso.update({
+            where: { radicado: item.radicado },
+            data: { fechaInicio: item.fechaInicio, fechaFin: item.fechaFin }
+          })
+        }
+      }
     }
   },
 

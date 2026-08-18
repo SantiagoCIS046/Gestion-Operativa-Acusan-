@@ -1,5 +1,31 @@
 <template>
   <div class="gestion-pqr-view">
+    <!-- Bootstrap Toast / Alert Notification Banner -->
+    <transition name="toast-slide">
+      <div
+        v-if="alertaBootstrap.visible"
+        :class="['alert', `alert-${alertaBootstrap.tipo}`, 'alert-dismissible', 'fade', 'show', 'd-flex', 'align-items-center', 'shadow-sm', 'mb-3', 'rounded-3']"
+        role="alert"
+      >
+        <div class="me-2 fs-5">
+          <span v-if="alertaBootstrap.tipo === 'success'">✔</span>
+          <span v-else-if="alertaBootstrap.tipo === 'danger'">⚠️</span>
+          <span v-else-if="alertaBootstrap.tipo === 'warning'">⚡</span>
+          <span v-else>ℹ️</span>
+        </div>
+        <div class="flex-grow-1">
+          <strong class="d-block">{{ alertaBootstrap.titulo }}</strong>
+          <span class="small">{{ alertaBootstrap.mensaje }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn-close"
+          aria-label="Close"
+          @click="alertaBootstrap.visible = false"
+        ></button>
+      </div>
+    </transition>
+
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
       titulo="Atención al Usuario & PQR"
@@ -66,6 +92,20 @@ import { ref, computed } from 'vue'
 import PanelAtencionPQR from '../components/PanelAtencionPQR.vue'
 import PageHeader from '../../../components/PageHeader.vue'
 
+const alertaBootstrap = ref({
+  visible: false,
+  tipo: 'success',
+  titulo: '',
+  mensaje: ''
+})
+
+const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
+  alertaBootstrap.value = { visible: true, tipo, titulo, mensaje }
+  setTimeout(() => {
+    alertaBootstrap.value.visible = false
+  }, duracion)
+}
+
 const pqrs = ref([
   {
     id: 1,
@@ -119,17 +159,17 @@ const filteredPqrs = computed(() => {
 const procesarRespuesta = (payload) => {
   if (selectedPqr.value) {
     selectedPqr.value.estado = 'RESUELTO'
-    alert(`PQR ${selectedPqr.value.radicado} respondida con éxito y notificada.`)
+    lanzarAlertaBootstrap('success', 'Respuesta Registrada', `PQR ${selectedPqr.value.radicado} respondida con éxito y notificada al usuario.`)
   }
 }
 
 const escalarCuadrilla = (item) => {
   item.estado = 'EN_TRAMITE'
-  alert(`PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
+  lanzarAlertaBootstrap('warning', 'PQR Escalada', `PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
 }
 
 const nuevoPQR = () => {
-  alert('Apertura de formulario de radicación ciudadana...')
+  lanzarAlertaBootstrap('info', 'Formulario PQR', 'Apertura de formulario de radicación ciudadana en módulo PQR.')
 }
 </script>
 

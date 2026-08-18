@@ -39,7 +39,7 @@
           <div class="form-group">
             <div class="label-row flex-header">
               <label for="password">Contraseña de Acceso</label>
-              <a href="#" class="forgot-pass-link" onclick="event.preventDefault(); alert('Por favor contacta al administrador del sistema para restablecer tu clave.');">¿Olvidó su contraseña?</a>
+              <a href="#" class="forgot-pass-link" onclick="event.preventDefault(); mostrarNotificacion('Por favor contacta al administrador del sistema para restablecer tu clave.', 'info');">¿Olvidó su contraseña?</a>
             </div>
             <div class="input-with-icon">
               <span class="input-icon">🔒</span>
@@ -55,7 +55,7 @@
           </button>
 
           <div class="acuasan-card-footer">
-            <p class="new-user-text">¿Es un nuevo funcionario? <a href="#" onclick="event.preventDefault(); alert('Solicita tu registro con el administrador de sistemas.');">Crear Nuevo Usuario</a></p>
+            <p class="new-user-text">¿Es un nuevo funcionario? <a href="#" onclick="event.preventDefault(); mostrarNotificacion('Solicita tu registro con el administrador de sistemas.', 'info');">Crear Nuevo Usuario</a></p>
             <p class="ssl-text">🔒 Conexión Segura SSL - Acuasan © 2026</p>
           </div>
         </form>

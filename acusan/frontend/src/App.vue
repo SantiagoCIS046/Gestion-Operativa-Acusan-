@@ -89,7 +89,7 @@
           </div>
           <button
             class="btn-logout"
-            @click="cerrarSesion"
+            @click="abrirModalCerrarSesion"
             title="Cerrar sesión"
           >
             <span>⏻</span>
@@ -115,16 +115,57 @@
     <template v-else>
       <router-view />
     </template>
+
+    <!-- ========================================== -->
+    <!-- MODAL BOOTSTRAP COMPACTO Y PROFESIONAL: CIERRE DE SESIÓN -->
+    <!-- ========================================== -->
+    <transition name="fade">
+      <div v-if="modalCerrarSesionVisible" class="modal fade show d-block" tabindex="-1" style="background: rgba(2, 20, 38, 0.55); backdrop-filter: blur(3px); z-index: 1080;">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 360px;">
+          <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden bg-white">
+            <div class="modal-header border-bottom py-2 px-3 bg-light d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.92rem; letter-spacing: 0.2px;">Confirmar Salida</h6>
+              </div>
+              <button type="button" class="btn-close btn-close-sm ms-auto" style="font-size: 0.75rem;" @click="modalCerrarSesionVisible = false"></button>
+            </div>
+            
+            <div class="modal-body p-3">
+              <p class="text-dark fw-semibold mb-1" style="font-size: 0.88rem;">¿Desea cerrar la sesión activa?</p>
+              <p class="text-muted mb-0" style="font-size: 0.78rem; line-height: 1.35;">
+                Saldrá del <strong>Sistema de Gestión Operativa Acuasan</strong>. Sus cambios guardados se mantendrán seguros.
+              </p>
+            </div>
+
+            <div class="modal-footer border-0 bg-light py-2 px-3 d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-sm btn-light border text-secondary fw-semibold px-3 rounded-2" style="font-size: 0.8rem;" @click="modalCerrarSesionVisible = false">
+                Cancelar
+              </button>
+              <button type="button" class="btn btn-sm btn-danger fw-bold px-3 rounded-2 d-inline-flex align-items-center gap-1 shadow-sm" style="font-size: 0.8rem;" @click="confirmarCerrarSesion">
+                <span>Cerrar Sesión</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import authService from './modules/auth/services/authService.js'
 
 const router = useRouter()
 const route = useRoute()
+
+const modalCerrarSesionVisible = ref(false)
 
 const estaAutenticado = computed(() => authService.estaAutenticado())
 const usuario = computed(() => authService.getUsuarioActual())
@@ -166,11 +207,14 @@ const rolClass = computed(() => {
   }
 })
 
-const cerrarSesion = () => {
-  if (confirm('¿Desea cerrar la sesión del Sistema de Gestión Operativa Acuasan?')) {
-    authService.logout()
-    router.replace('/login')
-  }
+const abrirModalCerrarSesion = () => {
+  modalCerrarSesionVisible.value = true
+}
+
+const confirmarCerrarSesion = () => {
+  modalCerrarSesionVisible.value = false
+  authService.logout()
+  router.replace('/login')
 }
 </script>
 

@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "buildCommand": "cd acusan/frontend && npm install && npm run build",
+  "outputDirectory": "acusan/frontend/dist",
+  "installCommand": "cd acusan/frontend && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

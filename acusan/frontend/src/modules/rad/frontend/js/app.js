@@ -250,7 +250,7 @@ async function iniciarSesion(email, password) {
         errorMsg.textContent = `⚠️ ${msg}`;
         errorMsg.style.display = 'block';
       } else {
-        alert(msg);
+        mostrarNotificacion(msg, 'error');
       }
     }
   } catch (error) {
@@ -259,7 +259,7 @@ async function iniciarSesion(email, password) {
       errorMsg.textContent = '⚠️ No se pudo conectar con el servidor de autenticación de Acuasan.';
       errorMsg.style.display = 'block';
     } else {
-      alert('No se pudo conectar con el servidor de autenticación de Acuasan.');
+      mostrarNotificacion('No se pudo conectar con el servidor de autenticación de Acuasan.', 'error');
     }
   }
 }

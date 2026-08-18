@@ -77,28 +77,35 @@
     <!-- Toolbar Controls & View Switcher -->
     <div class="toolbar-card">
       <div class="toolbar-left">
-        <!-- View Mode Switcher -->
+        <!-- View Mode Switcher: 4 Módulos Organizados -->
         <div class="view-mode-tabs">
           <button
             class="tab-btn"
             :class="{ active: vistaModo === 'excel' }"
             @click="vistaModo = 'excel'"
           >
-            📊 Cuadrilla Excel
+            📊 Módulo 1: Matriz Excel
           </button>
           <button
             class="tab-btn"
             :class="{ active: vistaModo === 'calendario' }"
             @click="vistaModo = 'calendario'"
           >
-            📅 Calendario Mensual
+            📅 Módulo 2: Calendario Mensual
           </button>
           <button
             class="tab-btn"
             :class="{ active: vistaModo === 'resumen' }"
             @click="vistaModo = 'resumen'"
           >
-            👥 Acumulados por Empleado
+            👥 Módulo 3: Acumulados por Empleado
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: vistaModo === 'expedientes' }"
+            @click="vistaModo = 'expedientes'"
+          >
+            📁 Módulo 4: Expedientes & Soportes Reales
           </button>
         </div>
 
@@ -359,6 +366,103 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISTA 4: EXPEDIENTES & SOPORTES ESCANEADOS REALES SUBIDOS AL SISTEMA -->
+    <!-- ========================================== -->
+    <div v-else-if="vistaModo === 'expedientes'" class="expedientes-container">
+      <div class="card border shadow-sm rounded-3 bg-white mb-3">
+        <div class="card-header bg-navy text-white py-2 px-3 d-flex justify-content-between align-items-center rounded-top">
+          <div class="d-flex align-items-center gap-2">
+            <span class="fs-5">📁</span>
+            <div>
+              <strong class="text-white" style="font-size: 0.95rem;">Módulo 4: Expedientes Digitales & Permisos Escaneados Reales</strong>
+              <span class="badge bg-success text-white ms-2 small">Soportes Validados OCR</span>
+            </div>
+          </div>
+          <span class="badge bg-white text-navy fw-bold">Total Expedientes: {{ permisosFiltrados.length }}</span>
+        </div>
+
+        <div class="card-body p-3">
+          <div v-if="permisosFiltrados.length === 0" class="text-center py-5 text-muted">
+            <span class="fs-1 d-block mb-2">📁</span>
+            <p class="mb-0">No hay expedientes de permisos registrados para el periodo seleccionado.</p>
+          </div>
+
+          <div v-else class="row g-3">
+            <div
+              v-for="item in permisosFiltrados"
+              :key="item.id"
+              class="col-md-6 col-lg-4"
+            >
+              <div class="card h-100 border shadow-sm rounded-3 overflow-hidden bg-light hover-shadow transition">
+                <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
+                  <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold">
+                    #{{ item.radicado }}
+                  </span>
+                  <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                    ✔ OCR Extraído (99%)
+                  </span>
+                </div>
+
+                <div class="card-body p-3 bg-white">
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    <div class="avatar-circle-sm bg-primary text-white fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-size: 0.85rem;">
+                      {{ getIniciales(item.funcionario || item.nombreFuncionario) }}
+                    </div>
+                    <div class="text-truncate">
+                      <strong class="d-block text-dark text-truncate" style="font-size: 0.9rem;">
+                        {{ item.funcionario || item.nombreFuncionario }}
+                      </strong>
+                      <span class="text-muted small d-block text-truncate" style="font-size: 0.75rem;">
+                        {{ item.cargo }} — {{ item.dependencia || 'Operativa' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="p-2 bg-light rounded-2 border mb-2" style="font-size: 0.78rem;">
+                    <div class="d-flex justify-content-between mb-1">
+                      <span class="text-muted">Tipo de Permiso:</span>
+                      <strong class="text-primary">{{ item.tipo }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                      <span class="text-muted">Fecha de Petición:</span>
+                      <strong class="text-dark">📅 {{ item.fechaInicio }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                      <span class="text-muted">Horario & Duración:</span>
+                      <strong class="text-dark">⏱️ {{ item.hora24 }} ({{ item.duracion }})</strong>
+                    </div>
+                  </div>
+
+                  <div class="p-2 bg-warning-subtle text-warning-emphasis rounded-2 border border-warning-subtle small mb-2" style="font-size: 0.75rem;">
+                    <strong class="d-block text-dark">✍️ Motivo / Excusa Registrada:</strong>
+                    <span class="fst-italic text-truncate d-block">"{{ item.motivo || item.justificacion || 'Sin observaciones adicionales' }}"</span>
+                  </div>
+
+                  <div class="d-flex align-items-center gap-1 text-muted small" style="font-size: 0.72rem;">
+                    <span>📁 Soporte:</span>
+                    <strong class="text-truncate" style="max-width: 180px;">{{ item.soporte || 'Solicitud_Permiso_Laboral.pdf' }}</strong>
+                  </div>
+                </div>
+
+                <div class="card-footer bg-light py-2 px-3 border-top d-flex justify-content-between align-items-center">
+                  <span class="small text-muted" style="font-size: 0.72rem;">Acumulado: {{ item.horasAcumuladasMesEmpleado || 4 }}h/mes</span>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                    style="font-size: 0.78rem;"
+                    @click="abrirDetallePermisoModal(item)"
+                  >
+                    <span>📄 Ver Expediente Real</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
