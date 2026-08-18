@@ -82,17 +82,24 @@
 
         <!-- User Profile & Logout at bottom -->
         <div class="sidebar-footer">
-          <div class="user-avatar-circle">{{ avatarIniciales }}</div>
-          <div class="user-info">
-            <span class="user-name">{{ usuario?.nombre || 'Usuario' }}</span>
-            <span class="user-role">{{ usuario?.cargo || usuario?.rol }}</span>
+          <div class="sidebar-footer-user">
+            <div class="user-avatar-circle">{{ avatarIniciales }}</div>
+            <div class="user-info">
+              <span class="user-name">{{ usuario?.nombre || 'Usuario' }}</span>
+              <span class="user-role">{{ usuario?.cargo || usuario?.rol }}</span>
+            </div>
           </div>
           <button
             class="btn-logout"
             @click="abrirModalCerrarSesion"
             title="Cerrar sesión"
           >
-            <span>⏻</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Cerrar Sesión</span>
           </button>
         </div>
       </aside>
@@ -344,9 +351,16 @@ const confirmarCerrarSesion = () => {
   padding: 12px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   background: rgba(0, 0, 0, 0.25);
+}
+
+.sidebar-footer-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .user-avatar-circle {
@@ -390,26 +404,27 @@ const confirmarCerrarSesion = () => {
 }
 
 .btn-logout {
-  width: 30px;
-  height: 30px;
+  padding: 6px 12px;
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #fca5a5;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 6px;
+  white-space: nowrap;
   transition: all 0.2s ease;
+  letter-spacing: 0.2px;
 }
 
 .btn-logout:hover {
   background: rgba(239, 68, 68, 0.35);
   border-color: rgba(239, 68, 68, 0.6);
   color: #ffffff;
-  transform: scale(1.05);
+  transform: scale(1.03);
 }
 
 /* === MAIN WRAPPER === */
