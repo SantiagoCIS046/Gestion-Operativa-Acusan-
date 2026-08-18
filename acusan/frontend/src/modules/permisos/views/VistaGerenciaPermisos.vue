@@ -783,8 +783,19 @@ const cargarPermisos = async () => {
   }
 }
 
+const onStorageChange = (e) => {
+  if (e.key === 'acuasan_permisos_db' || !e.key) {
+    cargarPermisos()
+  }
+}
+
 onMounted(() => {
   cargarPermisos()
+  window.addEventListener('storage', onStorageChange)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', onStorageChange)
 })
 
 // Helper para parsear la duración a horas numéricas

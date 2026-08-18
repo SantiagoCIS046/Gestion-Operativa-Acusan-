@@ -689,16 +689,24 @@ const CargarLista = async (silencioso = false) => {
   }
 }
 
+const onStorageChange = (e) => {
+  if (e.key === 'acuasan_radicados_db' || !e.key) {
+    CargarLista(true)
+  }
+}
+
 onMounted(() => {
   CargarLista()
-  // Auto-actualización automática en tiempo real cada 6 segundos
+  window.addEventListener('storage', onStorageChange)
+  // Auto-actualización periódica silenciosa
   timerAutoRefresh = setInterval(() => {
     CargarLista(true)
-  }, 6000)
+  }, 5000)
 })
 
 onUnmounted(() => {
   if (timerAutoRefresh) clearInterval(timerAutoRefresh)
+  window.removeEventListener('storage', onStorageChange)
 })
 
 const toggleHistorial = () => {

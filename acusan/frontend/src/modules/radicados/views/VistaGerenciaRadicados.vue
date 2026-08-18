@@ -515,16 +515,24 @@ const cargarDatos = async (silencioso = false) => {
   }
 }
 
+const onStorageChange = (e) => {
+  if (e.key === 'acuasan_radicados_db' || !e.key) {
+    cargarDatos(true)
+  }
+}
+
 onMounted(() => {
   cargarDatos()
-  // Auto-refresco en tiempo real cada 7 segundos para que Gerencia vea nuevas subidas de Eliana y Román
+  window.addEventListener('storage', onStorageChange)
+  // Actualización periódica silenciosa desde la base local reactiva
   timerAutoRefresh = setInterval(() => {
     cargarDatos(true)
-  }, 7000)
+  }, 5000)
 })
 
 onUnmounted(() => {
   if (timerAutoRefresh) clearInterval(timerAutoRefresh)
+  window.removeEventListener('storage', onStorageChange)
 })
 
 // Helper para días restantes
