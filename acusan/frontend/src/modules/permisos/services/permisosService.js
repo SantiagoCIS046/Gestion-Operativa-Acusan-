@@ -85,13 +85,30 @@ export const permisosService = {
    * Radica un nuevo permiso extraído vía OCR o diligenciado
    */
   async crearPermiso(datos) {
+    const ahora = new Date()
+    let dia = parseInt((datos.fechaInicio || '').split('/')[0], 10) || ahora.getDate()
+    let mesNum = parseInt((datos.fechaInicio || '').split('/')[1], 10) || (ahora.getMonth() + 1)
+    let anio = parseInt((datos.fechaInicio || '').split('/')[2], 10) || ahora.getFullYear()
+
+    const radicadoNum = `PERM-2026-${String(Math.floor(1000 + Math.random() * 9000))}`
+    const funcionario = datos.nombreFuncionario || datos.funcionario || 'Funcionario Acuasan'
+    const fechaEntrega = `${String(dia).padStart(2, '0')}/${String(mesNum).padStart(2, '0')}/${anio}`
+
     const nuevoPermiso = {
       ...datos,
-      id: `PERM-2026-${String(Math.floor(1000 + Math.random() * 9000))}`,
-      radicado: datos.radicado || `PERM-2026-${String(Math.floor(1000 + Math.random() * 9000))}`,
-      estado: 'PENDIENTE',
-      confianzaOCR: 98,
-      createdAt: new Date().toISOString()
+      id: datos.id || radicadoNum,
+      radicado: datos.radicado || radicadoNum,
+      dia,
+      mesNum,
+      anio,
+      funcionario,
+      nombreFuncionario: funcionario,
+      fechaEntrega,
+      fechaInicio: fechaEntrega,
+      estado: datos.estado || 'APROBADO',
+      estadoEnvio: datos.estadoEnvio || 'APROBADO',
+      confianzaOCR: datos.confianzaOCR || 98,
+      createdAt: ahora.toISOString()
     }
 
     const lista = obtenerDbLocalPermisos()

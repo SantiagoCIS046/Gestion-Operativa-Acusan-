@@ -1023,20 +1023,80 @@ const mesSiguiente = () => {
   }
 }
 
-const historialFiltrado = computed(() => {
-  return historialRemisiones.value.filter(item => {
-    const coincideAnio = item.anio === anioSeleccionado.value
-    const coincideMes = item.mesNum === mesNumSeleccionado.value
-    const coincideDia = diaSeleccionado.value === null || item.dia === diaSeleccionado.value
+const normalizarItem = (item) => {
+  if (!item) return null
+  let dia = item.dia
+  let mesNum = item.mesNum
+  let anio = item.anio
 
+  const fechaRef = item.fechaInicio || item.fechaEntrega || item.createdAt || ''
+  if ((!dia || !mesNum || !anio) && fechaRef) {
+    if (fechaRef.includes('/')) {
+      const parts = fechaRef.split('/')
+      dia = dia || parseInt(parts[0], 10)
+      mesNum = mesNum || parseInt(parts[1], 10)
+      anio = anio || parseInt(parts[2], 10)
+    } else if (fechaRef.includes('-')) {
+      const d = new Date(fechaRef)
+      if (!isNaN(d.getTime())) {
+        dia = dia || d.getDate()
+        mesNum = mesNum || (d.getMonth() + 1)
+        anio = anio || d.getFullYear()
+      }
+    }
+  }
+
+  const funcionario = item.funcionario || item.nombreFuncionario || ''
+  const cedula = String(item.cedula || '')
+  const radicado = item.radicado || item.id || ''
+  const dependencia = item.dependencia || 'Operativa'
+  const fechaEntrega = item.fechaEntrega || item.fechaInicio || (dia && mesNum && anio ? `${String(dia).padStart(2, '0')}/${String(mesNum).padStart(2, '0')}/${anio}` : '')
+
+  return {
+    ...item,
+    dia: dia || diaActual,
+    mesNum: mesNum || mesActual,
+    anio: anio || anioActual,
+    funcionario,
+    nombreFuncionario: funcionario,
+    cedula,
+    radicado,
+    dependencia,
+    fechaEntrega,
+    fechaInicio: fechaEntrega,
+    hora24: item.hora24 || '08:00',
+    duracion: item.duracion || item.horasCalculadas || '07:00 a 15:00 (8 horas)',
+    cargo: item.cargo || 'Funcionario Acuasan',
+    tipo: item.tipo || item.tipoPermiso || 'Compensatorio',
+    tipoPermiso: item.tipo || item.tipoPermiso || 'Compensatorio',
+    estado: item.estado || 'APROBADO',
+    estadoEnvio: item.estadoEnvio || item.estado || 'APROBADO',
+    soporte: item.soporte || 'Permiso_Escaneado.pdf'
+  }
+}
+
+const historialFiltrado = computed(() => {
+  const listaNormalizada = historialRemisiones.value.map(normalizarItem).filter(Boolean)
+
+  return listaNormalizada.filter(item => {
     const coincideTexto = busquedaHistorial.value === '' ||
       item.funcionario.toLowerCase().includes(busquedaHistorial.value.toLowerCase()) ||
       item.cedula.includes(busquedaHistorial.value) ||
       item.radicado.toLowerCase().includes(busquedaHistorial.value.toLowerCase()) ||
       (item.dependencia && item.dependencia.toLowerCase().includes(busquedaHistorial.value.toLowerCase()))
 
+    // Si el usuario escribe una búsqueda, buscar globalmente en todos los periodos
+    if (busquedaHistorial.value.trim()) {
+      return coincideTexto
+    }
+
+    const coincideAnio = item.anio === anioSeleccionado.value
+    const coincideMes = item.mesNum === mesNumSeleccionado.value
+    const coincideDia = diaSeleccionado.value === null || item.dia === diaSeleccionado.value
+
     const coincideEstado = filtroEstadoHistorial.value === '' ||
-      item.estadoEnvio === filtroEstadoHistorial.value
+      item.estadoEnvio === filtroEstadoHistorial.value ||
+      item.estado === filtroEstadoHistorial.value
 
     return coincideAnio && coincideMes && coincideDia && coincideTexto && coincideEstado
   })
