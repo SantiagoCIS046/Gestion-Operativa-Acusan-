@@ -1223,15 +1223,6 @@ const handleScannedFileUpload = (e) => {
   documentLoaded.value = true
   isScanningOCR.value = true
 
-  // Extraer nombre aproximado a partir del nombre del archivo si es posible
-  const rawBaseName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
-  let nombreExtraido = ''
-  if (/angelica/i.test(rawBaseName)) {
-    nombreExtraido = 'Angelica Sandrit Morales Rojas'
-  } else {
-    nombreExtraido = rawBaseName.replace(/permiso|solicitud|laboral|scan|2026/gi, '').trim()
-  }
-
   // Convertir a Data URL (Base64) para que persista en base de datos y nunca expire
   const reader = new FileReader()
   reader.onload = (event) => {
@@ -1239,25 +1230,29 @@ const handleScannedFileUpload = (e) => {
 
     setTimeout(() => {
       isScanningOCR.value = false
-      if (nombreExtraido) {
-        formData.nombreFuncionario = nombreExtraido
-      } else {
-        formData.nombreFuncionario = 'Angelica Sandrit Morales Rojas'
-      }
-      formData.cedula = '1100964621'
-      formData.cargo = 'Líder Potabilización'
-      formData.dependencia = 'Planta de Tratamiento / Potabilización'
-      formData.fechaPermisoTexto = `${diaActual} de ${todosLosMeses.find(m => m.mesNum === mesActual)?.nombre || 'Agosto'} ${anioActual}`
-      formData.horaDetalle = '07:00 a 16:00 (8 horas)'
-      formData.fechaInicio = `${String(diaActual).padStart(2, '0')}/${String(mesActual).padStart(2, '0')}/${anioActual}`
-      formData.fechaFin = `${String(diaActual).padStart(2, '0')}/${String(mesActual).padStart(2, '0')}/${anioActual}`
-      formData.horasCalculadas = '07:00 a 16:00 (8 horas)'
-      formData.tipoPermiso = 'Compensatorio'
-      formData.motivoManuscrito = 'Jurado Votaciones presidencia 21 de Junio 2026'
-      formData.motivo = 'Día de descanso compensatorio por haber prestado la función pública de Jurado de Votación (Vicepresidente, Mesa 7) en Elecciones Presidenciales Segunda Vuelta 2026.'
-      formData.observaciones = 'Documento escaneado verificado con éxito y almacenado en el sistema.'
 
-      lanzarAlertaBootstrap('info', 'Documento PDF Cargado', `Se extrajeron los datos y se vinculó el archivo ${file.name} correctamente.`)
+      // ⚠️ No se sobreescriben los campos: el usuario debe leer el PDF y completar
+      // el formulario manualmente con los datos correctos del documento escaneado.
+      // Solo se limpia lo estrictamente necesario para comenzar un nuevo registro.
+      formData.nombreFuncionario = ''
+      formData.cedula = ''
+      formData.cargo = ''
+      formData.dependencia = ''
+      formData.fechaPermisoTexto = ''
+      formData.horaDetalle = ''
+      formData.horasCalculadas = ''
+      formData.fechaInicio = ''
+      formData.fechaFin = ''
+      formData.tipoPermiso = 'Compensatorio'
+      formData.motivoManuscrito = ''
+      formData.motivo = ''
+      formData.observaciones = ''
+
+      lanzarAlertaBootstrap(
+        'info',
+        '📄 Documento Cargado — Complete el Formulario',
+        `El archivo "${file.name}" fue cargado. Por favor, lea el PDF y complete los datos del permiso en el formulario.`
+      )
     }, 700)
   }
 
@@ -1268,6 +1263,7 @@ const handleScannedFileUpload = (e) => {
 
   reader.readAsDataURL(file)
 }
+
 
 // 🎯 CARGAR PERMISO ORIGINAL DESDE EL HISTORIAL (MUESTRA EL DOCUMENTO ESPECÍFICO DEL PERMISO SELECCIONADO)
 const cargarEnFormulario = (item) => {
