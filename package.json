@@ -1,8 +1,22 @@
 {
-  "name": "gestion-operativa-acuasan-root",
-  "version": "1.0.0",
+  "name": "gestion-operativa-acuasan",
   "private": true,
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "build": "cd acusan/frontend && npm install && npm run build"
+    "dev": "vite acusan/frontend",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "lucide-vue-next": "^1.0.0",
+    "moment": "^2.30.1",
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "vite": "^8.2.0"
   }
 }
