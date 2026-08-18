@@ -106,7 +106,9 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
   }, duracion)
 }
 
-const pqrs = ref([
+const STORAGE_KEY_PQR = 'acuasan_pqr_db'
+
+const PQRS_INICIALES = [
   {
     id: 1,
     radicado: 'PQR-2026-0811',
@@ -143,9 +145,28 @@ const pqrs = ref([
     fechaVencimiento: '15/08/2026',
     estado: 'RESUELTO'
   }
-])
+]
 
-const selectedPqr = ref(pqrs.value[0])
+const obtenerDbLocalPqr = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PQR)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch (e) {}
+  localStorage.setItem(STORAGE_KEY_PQR, JSON.stringify(PQRS_INICIALES))
+  return [...PQRS_INICIALES]
+}
+
+const guardarDbLocalPqr = (lista) => {
+  try {
+    localStorage.setItem(STORAGE_KEY_PQR, JSON.stringify(lista))
+  } catch (e) {}
+}
+
+const pqrs = ref(obtenerDbLocalPqr())
+const selectedPqr = ref(pqrs.value[0] || null)
 const busqueda = ref('')
 
 const filteredPqrs = computed(() => {
@@ -159,17 +180,35 @@ const filteredPqrs = computed(() => {
 const procesarRespuesta = (payload) => {
   if (selectedPqr.value) {
     selectedPqr.value.estado = 'RESUELTO'
+    guardarDbLocalPqr(pqrs.value)
     lanzarAlertaBootstrap('success', 'Respuesta Registrada', `PQR ${selectedPqr.value.radicado} respondida con éxito y notificada al usuario.`)
   }
 }
 
 const escalarCuadrilla = (item) => {
   item.estado = 'EN_TRAMITE'
+  guardarDbLocalPqr(pqrs.value)
   lanzarAlertaBootstrap('warning', 'PQR Escalada', `PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
 }
 
 const nuevoPQR = () => {
-  lanzarAlertaBootstrap('info', 'Formulario PQR', 'Apertura de formulario de radicación ciudadana en módulo PQR.')
+  const nuevoRad = `PQR-2026-${Math.floor(1000 + Math.random() * 9000)}`
+  const nuevaPqr = {
+    id: Date.now(),
+    radicado: nuevoRad,
+    usuario: 'Usuario Ciudadano San Gil',
+    matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
+    direccion: 'Sector San Gil',
+    motivo: 'Solicitud ciudadana ingresada vía ventanilla',
+    descripcion: 'Petición formal para revisión por parte de la cuadrilla técnica.',
+    fechaRadicado: new Date().toLocaleDateString('es-CO'),
+    fechaVencimiento: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString('es-CO'),
+    estado: 'ABIERTO'
+  }
+  pqrs.value.unshift(nuevaPqr)
+  selectedPqr.value = nuevaPqr
+  guardarDbLocalPqr(pqrs.value)
+  lanzarAlertaBootstrap('success', 'PQR Radicada', `Se radicó con éxito el expediente ${nuevoRad}.`)
 }
 </script>
 

@@ -676,17 +676,6 @@ import { ref, computed, onMounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
-// ── Datos semilla de respaldo para modo demo / sin backend ──
-const PERMISOS_DEMO = [
-  { id: 'PERM-2026-0040', radicado: 'PERM-2026-0040', funcionario: 'María López', nombreFuncionario: 'María López', cedula: '1098765401', cargo: 'Fontanera', dependencia: 'Operativa', tipo: 'CALAMIDAD_DOMESTICA', estado: 'APROBADO', dia: 17, mes: 8, anio: 2026, fechaInicio: '17/08/2026', hora24: '07:00', duracion: '4h', motivo: 'Emergencia familiar urgente', justificacion: 'Urgencia doméstica comprobada', horasAcumuladasMesEmpleado: 4, confianzaOCR: 99, soporte: 'Solicitud_Permiso_Laboral.pdf', urlDocumento: '/scans/solicitud_permiso_scan.png' },
-  { id: 'PERM-2026-0041', radicado: 'PERM-2026-0041', funcionario: 'Carlos Ruiz', nombreFuncionario: 'Carlos Ruiz', cedula: '1098765402', cargo: 'Técnico Acueducto', dependencia: 'Redes', tipo: 'CITA_MEDICA', estado: 'PENDIENTE', dia: 18, mes: 8, anio: 2026, fechaInicio: '18/08/2026', hora24: '09:00', duracion: '2h', motivo: 'Cita médica EPS Sanitas', justificacion: 'Consulta médica general', horasAcumuladasMesEmpleado: 2, confianzaOCR: 97, soporte: 'Solicitud_Permiso_Laboral.pdf', urlDocumento: '/scans/solicitud_permiso_scan.png' },
-  { id: 'PERM-2026-0042', radicado: 'PERM-2026-0042', funcionario: 'Ana Gómez', nombreFuncionario: 'Ana Gómez', cedula: '1098765403', cargo: 'Operadora Alcantarillado', dependencia: 'Alcantarillado', tipo: 'DILIGENCIA_PERSONAL', estado: 'APROBADO', dia: 18, mes: 8, anio: 2026, fechaInicio: '18/08/2026', hora24: '14:00', duracion: '3h', motivo: 'Trámite Registraduría Nacional', justificacion: 'Formulario E-18', horasAcumuladasMesEmpleado: 3, confianzaOCR: 99, soporte: 'Evidencia_E18.pdf', urlDocumento: '/scans/evidencia_e18_scan.png' },
-  { id: 'PERM-2026-0043', radicado: 'PERM-2026-0043', funcionario: 'Pedro Martínez', nombreFuncionario: 'Pedro Martínez', cedula: '1098765404', cargo: 'Auxiliar Administrativo', dependencia: 'Administrativa', tipo: 'CITA_MEDICA', estado: 'APROBADO', dia: 19, mes: 8, anio: 2026, fechaInicio: '19/08/2026', hora24: '08:00', duracion: '4h', motivo: 'Cita especialista traumatología', justificacion: 'Urgencia médica certificada', horasAcumuladasMesEmpleado: 4, confianzaOCR: 98, soporte: 'Solicitud_Permiso_Laboral.pdf', urlDocumento: '/scans/solicitud_permiso_scan.png' },
-  { id: 'PERM-2026-0044', radicado: 'PERM-2026-0044', funcionario: 'Luisa Hernández', nombreFuncionario: 'Luisa Hernández', cedula: '1098765405', cargo: 'Laboratorista Agua', dependencia: 'Calidad', tipo: 'LICENCIA_LUTO', estado: 'APROBADO', dia: 20, mes: 8, anio: 2026, fechaInicio: '20/08/2026', hora24: '07:00', duracion: '8h', motivo: 'Fallecimiento familiar', justificacion: 'Registro civil defunción', horasAcumuladasMesEmpleado: 8, confianzaOCR: 99, soporte: 'Solicitud_Permiso_Laboral.pdf', urlDocumento: '/scans/solicitud_permiso_scan.png' },
-  { id: 'PERM-2026-0045', radicado: 'PERM-2026-0045', funcionario: 'Jorge Torres', nombreFuncionario: 'Jorge Torres', cedula: '1098765406', cargo: 'Fontanero Senior', dependencia: 'Operativa', tipo: 'CALAMIDAD_DOMESTICA', estado: 'PENDIENTE', dia: 21, mes: 8, anio: 2026, fechaInicio: '21/08/2026', hora24: '06:00', duracion: '4h', motivo: 'Emergencia vivienda inundación', justificacion: 'Reporte emergencia municipal', horasAcumuladasMesEmpleado: 4, confianzaOCR: 96, soporte: 'Solicitud_Permiso_Laboral.pdf', urlDocumento: '/scans/solicitud_permiso_scan.png' },
-  { id: 'PERM-2026-0046', radicado: 'PERM-2026-0046', funcionario: 'Sandra Vargas', nombreFuncionario: 'Sandra Vargas', cedula: '1098765407', cargo: 'Auxiliar Acueducto', dependencia: 'Redes', tipo: 'DILIGENCIA_PERSONAL', estado: 'RECHAZADO', dia: 21, mes: 8, anio: 2026, fechaInicio: '21/08/2026', hora24: '10:00', duracion: '2h', motivo: 'Diligencia banco personal', justificacion: 'Trámite bancario urgente', horasAcumuladasMesEmpleado: 2, confianzaOCR: 95, soporte: 'Solicitud_Permiso_Laboral.pdf', urlDocumento: '/scans/solicitud_permiso_scan.png' }
-]
-
 const permisos = ref([])
 const cargando = ref(false)
 const busqueda = ref('')
@@ -698,7 +687,7 @@ const alertaBootstrap = ref({
   mensaje: ''
 })
 
-const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
+const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 4000) => {
   alertaBootstrap.value = { visible: true, tipo, titulo, mensaje }
   setTimeout(() => {
     alertaBootstrap.value.visible = false
@@ -746,38 +735,14 @@ const cambiarMes = (delta) => {
   }
 }
 
-// Cargar permisos desde el Backend/Prisma/MongoDB Atlas (con fallback a datos demo)
+// Cargar permisos oficiales del sistema
 const cargarPermisos = async () => {
   cargando.value = true
   try {
-    let lista = []
-    try {
-      lista = await permisosService.obtenerHistorialPermisos()
-    } catch {
-      lista = []
-    }
-
-    // Si la API devolvió datos reales úsalos, sino usar datos de demostración
-    if (lista && lista.length > 0) {
-      permisos.value = lista
-      lanzarAlertaBootstrap(
-        'success',
-        'Permisos Cargados',
-        `${lista.length} permisos cargados correctamente.`,
-        3000
-      )
-    } else {
-      permisos.value = PERMISOS_DEMO
-      lanzarAlertaBootstrap(
-        'info',
-        'Modo Demostración',
-        'Mostrando datos de la semana operativa (17-21 Agosto 2026). El servidor no está disponible.',
-        5000
-      )
-    }
+    const lista = await permisosService.obtenerHistorialPermisos()
+    permisos.value = lista || []
   } catch (error) {
-    console.warn('Usando datos de demostración:', error)
-    permisos.value = PERMISOS_DEMO
+    console.error('Error al cargar permisos:', error)
   } finally {
     cargando.value = false
   }

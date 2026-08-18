@@ -74,7 +74,9 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
   }, duracion)
 }
 
-const horasData = ref([
+const STORAGE_KEY_HORAS = 'acuasan_horas_db'
+
+const HORAS_INICIALES = [
   {
     id: 101,
     cedula: '91234567',
@@ -108,7 +110,27 @@ const horasData = ref([
     montoEstimado: 55000,
     estado: 'APROBADO'
   }
-])
+]
+
+const obtenerDbLocalHoras = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_HORAS)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch (e) {}
+  localStorage.setItem(STORAGE_KEY_HORAS, JSON.stringify(HORAS_INICIALES))
+  return [...HORAS_INICIALES]
+}
+
+const guardarDbLocalHoras = (lista) => {
+  try {
+    localStorage.setItem(STORAGE_KEY_HORAS, JSON.stringify(lista))
+  } catch (e) {}
+}
+
+const horasData = ref(obtenerDbLocalHoras())
 
 const totalHoras = computed(() => {
   return horasData.value.reduce((acc, curr) => acc + curr.cantidadHoras, 0)
@@ -120,11 +142,13 @@ const totalMonto = computed(() => {
 
 const aprobarHora = (item) => {
   item.estado = 'APROBADO'
+  guardarDbLocalHoras(horasData.value)
   lanzarAlertaBootstrap('success', 'Horas Aprobadas', `Registro de horas para ${item.funcionario} aprobado.`)
 }
 
 const rechazarHora = (item) => {
   item.estado = 'RECHAZADO'
+  guardarDbLocalHoras(horasData.value)
   lanzarAlertaBootstrap('danger', 'Horas Rechazadas', `Registro de horas para ${item.funcionario} rechazado.`)
 }
 
