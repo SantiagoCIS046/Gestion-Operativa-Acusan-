@@ -615,13 +615,26 @@
               <!-- Viewport del PDF / Documento Escaneado Real y Evidencia -->
               <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2" style="min-height: 480px; max-height: 620px;">
                 <!-- IF CUSTOM UPLOADED PDF FILE -->
-                <iframe
+                <object
                   v-if="esPdfDocumento(permisoSeleccionado)"
-                  :src="getUrlDocumento(permisoSeleccionado) + '#toolbar=1&navpanes=0'"
-                  class="w-100 h-100 rounded-3 border-0 bg-white"
+                  :data="getUrlDocumento(permisoSeleccionado)"
+                  type="application/pdf"
+                  class="w-100 rounded-3 border-0 bg-white"
                   style="min-height: 520px;"
-                  title="Visor PDF Permiso Original"
-                ></iframe>
+                >
+                  <iframe
+                    :src="getUrlDocumento(permisoSeleccionado)"
+                    class="w-100 h-100 rounded-3 border-0 bg-white"
+                    style="min-height: 520px;"
+                    title="Visor PDF Permiso Original"
+                  >
+                    <div class="p-4 text-center bg-light">
+                      <a :href="getUrlDocumento(permisoSeleccionado)" target="_blank" class="btn btn-primary btn-sm">
+                        📥 Abrir / Descargar PDF del Permiso
+                      </a>
+                    </div>
+                  </iframe>
+                </object>
 
                 <!-- IF IMAGES / SCANS OF SOLICITUD AND EVIDENCIA/EXCUSA -->
                 <div v-else class="w-100 d-flex flex-column align-items-center gap-3">
