@@ -258,11 +258,112 @@ const extraerCamposPdf = (texto) => {
   return resultado
 }
 
+// Memoria en caliente para entornos sin base de datos activa (Vercel/Offline)
+let RADICADOS_IN_MEMORY = [
+  {
+    id: 'RAD-1241',
+    numeroRadicado: 'RAD-1241',
+    numeroRadicadoPdf: '2610000648',
+    peticionario: 'Yadira Velásquez Masey - Presidenta JAC Vereda El Congual',
+    remitente: 'Yadira Velásquez Masey',
+    dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
+    destinatario: 'Ruiz Suarez Luz Marina - Gerencia General',
+    asunto: 'Respuesta Radicado Acuasan EI.CE-ESP - Solicitud de Visita Técnica y Medidor',
+    tipoDocumento: 'Derecho de Petición',
+    registradoPor: 'Eliana',
+    estado: 'Resuelto',
+    prioridad: 'ALTA',
+    fechaRadicacion: new Date('2026-08-18T08:30:00.000Z'),
+    fechaVencimiento: new Date('2026-08-24T00:00:00.000Z'),
+    contexto: 'Petición formal para revisión técnica de acometida y suministro en sector rural.',
+    urlDocumento: '/scans/solicitud_permiso_scan.png'
+  },
+  {
+    id: 'RAD-1729',
+    numeroRadicado: 'RAD-1729',
+    numeroRadicadoPdf: '2610000649',
+    peticionario: 'Laura Dulcey Nieves - Urbanización Bella Isla',
+    remitente: 'Laura Dulcey Nieves',
+    dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
+    destinatario: 'Área de Facturación y Medición',
+    asunto: 'Solicitud de revisión de factura y aforo por variación de consumo',
+    tipoDocumento: 'Reclamo',
+    registradoPor: 'Román',
+    estado: 'Pendiente',
+    prioridad: 'ALTA',
+    fechaRadicacion: new Date('2026-08-18T09:45:00.000Z'),
+    fechaVencimiento: new Date('2026-08-24T00:00:00.000Z'),
+    contexto: 'La usuaria reporta incremento atípico en tarifa durante el último periodo facturado.',
+    urlDocumento: '/scans/evidencia_e18_scan.png'
+  },
+  {
+    id: 'RAD-1845',
+    numeroRadicado: 'RAD-1845',
+    numeroRadicadoPdf: '2640000712',
+    peticionario: 'Carlos Arturo Gómez Prada - Barrio San Martín',
+    remitente: 'Carlos Arturo Gómez',
+    dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
+    destinatario: 'Dirección Operativa y Alcantarillado',
+    asunto: 'Reporte de hundimiento en pozo de inspección y mantenimiento preventivo',
+    tipoDocumento: 'Petición Técnica',
+    registradoPor: 'Eliana',
+    estado: 'Pendiente',
+    prioridad: 'CRITICA',
+    fechaRadicacion: new Date('2026-08-18T10:15:00.000Z'),
+    fechaVencimiento: new Date('2026-08-21T00:00:00.000Z'),
+    contexto: 'Urgencia técnica por riesgo de filtración en vía pública principal.',
+    urlDocumento: '/scans/solicitud_permiso_scan.png'
+  },
+  {
+    id: 'RAD-1902',
+    numeroRadicado: 'RAD-1902',
+    numeroRadicadoPdf: '2640000780',
+    peticionario: 'María Esperanza Cárdenas - Sector Santander',
+    remitente: 'María Esperanza Cárdenas',
+    dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
+    destinatario: 'Subgerencia Comercial',
+    asunto: 'Certificación de estratificación socioeconómica para subsidio',
+    tipoDocumento: 'Solicitud',
+    registradoPor: 'Román',
+    estado: 'Resuelto',
+    prioridad: 'MEDIA',
+    fechaRadicacion: new Date('2026-08-17T14:20:00.000Z'),
+    fechaVencimiento: new Date('2026-08-31T00:00:00.000Z'),
+    contexto: 'Trámite concluido con entrega de certificado digital oficial.',
+    urlDocumento: '/scans/solicitud_permiso_scan.png'
+  },
+  {
+    id: 'RAD-1930',
+    numeroRadicado: 'RAD-1930',
+    numeroRadicadoPdf: '2640000805',
+    peticionario: 'Junta de Acción Comunal Barrio José Antonio Galán',
+    remitente: 'JAC José Antonio Galán',
+    dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
+    destinatario: 'Dirección Técnica de Redes de Acueducto',
+    asunto: 'Solicitud de ampliación de redes y optimización de presión sector alto',
+    tipoDocumento: 'Derecho de Petición',
+    registradoPor: 'Eliana',
+    estado: 'Pendiente',
+    prioridad: 'MEDIA',
+    fechaRadicacion: new Date('2026-08-18T11:10:00.000Z'),
+    fechaVencimiento: new Date('2026-09-01T00:00:00.000Z'),
+    contexto: 'Radicado recién ingresado vía ventanilla única por Eliana.',
+    urlDocumento: '/scans/evidencia_e18_scan.png'
+  }
+]
+
 export const RadicadosService = {
   async obtenerTodos() {
-    return await prisma.radicado.findMany({
-      orderBy: { fechaRadicacion: 'desc' }
-    })
+    try {
+      const dbRadicados = await prisma.radicado.findMany({
+        orderBy: { fechaRadicacion: 'desc' }
+      })
+      if (dbRadicados && dbRadicados.length > 0) return dbRadicados
+      return RADICADOS_IN_MEMORY
+    } catch (e) {
+      console.warn('DB no disponible para radicados, respondiendo con datos en memoria:', e.message)
+      return RADICADOS_IN_MEMORY
+    }
   },
 
   async crear(payload) {
@@ -275,60 +376,55 @@ export const RadicadosService = {
     const numeroRadicado = `RAD-${Math.floor(1000 + Math.random() * 9000)}`
     const fechaVencimiento = moment().add(parseInt(diasParaVencer) || 10, 'days').toDate()
 
-    const nuevo = await prisma.radicado.create({
-      data: {
-        numeroRadicado,
-        peticionario,
-        dependencia,
-        correoDrive: correoDrive || 'encargada@acuasan.gov.co',
-        registradoPor: registradoPor || peticionario || 'Encargada',
-        contexto: contexto || 'Registro documental de radicación.',
-        destinatario: destinatario || null,
-        asunto: asunto || null,
-        referencia: referencia || null,
-        fechaDocumento: fechaDocumento || null,
-        lugarFecha: lugarFecha || null,
-        numeroRadicadoPdf: numeroRadicadoPdf || null,
-        fechaVencimiento,
-        archivoNombre: archivoNombre || null,
-        archivoUrl: archivoUrl || null,
-        archivoBase64: archivoBase64 || null
-      }
-    })
-
-
-    try {
-      const localFileName = `Radicado_${numeroRadicado}_${(peticionario || 'Doc').replace(/[^a-zA-Z0-9]/g, '_')}.txt`
-      const localFilePath = path.join(DRIVE_LOCAL_DIR, localFileName)
-      const content = [
-        `NUMERO RADICADO SISTEMA: ${numeroRadicado}`,
-        `NUMERO RADICADO PDF:     ${numeroRadicadoPdf || 'N/A'}`,
-        `FECHA REGISTRO:          ${moment().format('YYYY-MM-DD HH:mm')}`,
-        `FECHA DOCUMENTO PDF:     ${fechaDocumento || 'N/A'}`,
-        `LUGAR Y FECHA CARTA:     ${lugarFecha || 'N/A'}`,
-        `REMITENTE/PETICIONARIO:  ${peticionario}`,
-        `EMPRESA DESTINATARIA:    ${dependencia}`,
-        `DESTINATARIO (FUNC.):    ${destinatario || 'N/A'}`,
-        `ASUNTO:                  ${asunto || 'N/A'}`,
-        `REFERENCIA:              ${referencia || 'N/A'}`,
-        `REGISTRADO POR:          ${registradoPor || peticionario}`,
-        `CONTEXTO:                ${contexto || 'N/A'}`,
-        `FECHA VENCIMIENTO:       ${moment(fechaVencimiento).format('YYYY-MM-DD')}`
-      ].join('\n')
-
-      fs.writeFileSync(localFilePath, content, 'utf8')
-    } catch (e) {
-      console.warn('Advertencia guardando copia local de radicado:', e.message)
+    const itemData = {
+      id: numeroRadicado,
+      numeroRadicado,
+      peticionario,
+      dependencia,
+      correoDrive: correoDrive || 'encargada@acuasan.gov.co',
+      registradoPor: registradoPor || 'Encargada',
+      contexto: contexto || 'Registro documental de radicación.',
+      destinatario: destinatario || null,
+      asunto: asunto || null,
+      referencia: referencia || null,
+      fechaDocumento: fechaDocumento || null,
+      lugarFecha: lugarFecha || null,
+      numeroRadicadoPdf: numeroRadicadoPdf || null,
+      fechaRadicacion: new Date(),
+      fechaVencimiento,
+      estado: 'Pendiente',
+      archivoNombre: archivoNombre || null,
+      archivoUrl: archivoUrl || null,
+      archivoBase64: archivoBase64 || null
     }
 
-    return nuevo
+    try {
+      const nuevo = await prisma.radicado.create({
+        data: itemData
+      })
+      return nuevo
+    } catch (e) {
+      console.warn('DB no disponible, guardando radicado en memoria:', e.message)
+      RADICADOS_IN_MEMORY.unshift(itemData)
+      return itemData
+    }
   },
 
   async actualizarEstado(id, estado) {
-    return await prisma.radicado.update({
-      where: { id: String(id) },
-      data: { estado }
-    })
+    try {
+      return await prisma.radicado.update({
+        where: { id: String(id) },
+        data: { estado }
+      })
+    } catch (e) {
+      console.warn('DB no disponible, actualizando estado en memoria:', e.message)
+      const idx = RADICADOS_IN_MEMORY.findIndex(r => r.id === id || r.numeroRadicado === id)
+      if (idx !== -1) {
+        RADICADOS_IN_MEMORY[idx].estado = estado
+        return RADICADOS_IN_MEMORY[idx]
+      }
+      return { id, estado }
+    }
   },
 
   async extraerPdf(dataBuffer, mimeType, originalname) {
