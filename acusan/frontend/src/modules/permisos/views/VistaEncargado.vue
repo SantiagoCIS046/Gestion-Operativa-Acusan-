@@ -1213,8 +1213,241 @@ const limpiarFormularioYVisor = () => {
   formData.observaciones = ''
 }
 
-// 🎯 INSERT ORIGINAL PDF OR IMAGE FROM USER'S COMPUTER
-const handleScannedFileUpload = (e) => {
+// ═══════════════════════════════════════════════════════════════════════════
+// 📄 MOTOR DE EXTRACCIÓN DE DATOS — FORMULARIO LABORAL ACUASAN
+//    Etapa 1: Extracción de texto nativo PDF (100% exacto para PDFs digitales)
+//    Etapa 2: OCR avanzado con Tesseract LSTM + preprocesamiento de imagen
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Preprocesar imagen para mejorar OCR ─────────────────────────────────────
+const preprocesarImagenOCR = (sourceCanvas) => {
+  const w = sourceCanvas.width
+  const h = sourceCanvas.height
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+
+  // 1. Dibujar original
+  ctx.drawImage(sourceCanvas, 0, 0)
+
+  // 2. Convertir a escala de grises con alto contraste
+  const imgData = ctx.getImageData(0, 0, w, h)
+  const data = imgData.data
+  for (let i = 0; i < data.length; i += 4) {
+    // Luminosidad perceptual (formula estándar)
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    // Umbral adaptativo: pixels oscuros → negro puro, claros → blanco puro
+    const val = lum < 128 ? 0 : 255
+    data[i] = data[i + 1] = data[i + 2] = val
+    data[i + 3] = 255
+  }
+  ctx.putImageData(imgData, 0, 0)
+  return canvas
+}
+
+// ── Renderizar PDF a canvas de alta resolución ───────────────────────────────
+const pdfACanvas = async (dataUrl) => {
+  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
+  GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString()
+
+  // Decodificar Base64 → Uint8Array
+  const base64 = dataUrl.split(',')[1]
+  const binary = atob(base64)
+  const typedArray = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) typedArray[i] = binary.charCodeAt(i)
+
+  const pdfDoc = await getDocument({ data: typedArray }).promise
+  const page = await pdfDoc.getPage(1)
+
+  // 3.5× → ~2450px ancho para A4, ideal para OCR
+  const viewport = page.getViewport({ scale: 3.5 })
+  const canvas = document.createElement('canvas')
+  canvas.width = viewport.width
+  canvas.height = viewport.height
+  const ctx = canvas.getContext('2d')
+  await page.render({ canvasContext: ctx, viewport }).promise
+  return { canvas, pdfDoc, page }
+}
+
+// ── Extraer texto nativo del PDF (sin OCR, 100% exacto) ──────────────────────
+const extraerTextoNativoPDF = async (dataUrl) => {
+  try {
+    const { canvas, pdfDoc, page } = await pdfACanvas(dataUrl)
+
+    // getTextContent devuelve el texto embebido en el PDF
+    const content = await page.getTextContent()
+    const textoTotal = content.items.map(i => i.str).join(' ')
+
+    // Si el PDF tiene texto real (no imagen), usar ese texto
+    if (textoTotal.trim().length > 40) {
+      return { texto: textoTotal, canvas, fuente: 'nativo' }
+    }
+    // Si el texto es muy poco, es un PDF de imagen → necesita OCR
+    return { texto: '', canvas, fuente: 'imagen' }
+  } catch (err) {
+    return { texto: '', canvas: null, fuente: 'error' }
+  }
+}
+
+// ── Parser de formulario ACUASAN (robusto a errores de OCR) ─────────────────
+const parsearTextoPermiso = (texto) => {
+  // Normalizar espacios y saltos de línea
+  const t = texto
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+
+  const campos = {}
+
+  // ── NOMBRE ──────────────────────────────────────────────────────────────
+  // Patrones: "NOMBRE: Juan Pérez" / "NOMBRE:Juan" / con cargo al lado
+  const rxNombres = [
+    /NOMBRE[:\s*]+([A-ZÁÉÍÓÚÑa-záéíóúñ][A-ZÁÉÍÓÚÑa-záéíóúñ .,'-]{4,60})(?:\s+CARGO|$)/i,
+    /NOMBRE[:\s*]+([^\n]{5,60})(?=\s*CARGO|\n)/i,
+    /\bNOMBRE\b[^\w]+([\w][^\n]{4,55})/i
+  ]
+  for (const rx of rxNombres) {
+    const m = t.match(rx)
+    if (m && m[1]) {
+      const nombre = m[1].trim().replace(/\s{2,}/g, ' ')
+      // Validar que no es basura OCR (debe tener al menos 2 palabras o 8 chars)
+      if (nombre.length >= 5 && /[a-záéíóúñA-ZÁÉÍÓÚÑ]/.test(nombre)) {
+        campos.nombreFuncionario = nombre
+        break
+      }
+    }
+  }
+
+  // ── CARGO ────────────────────────────────────────────────────────────────
+  const rxCargos = [
+    /CARGO[:\s*]+([A-ZÁÉÍÓÚÑa-záéíóúñ][A-ZÁÉÍÓÚÑa-záéíóúñ .,/'-]{2,50})(?:\n|FECHA|$)/i,
+    /CARGO[:\s*]+([^\n]{3,50})(?=\n|FECHA)/i
+  ]
+  for (const rx of rxCargos) {
+    const m = t.match(rx)
+    if (m && m[1] && m[1].trim().length > 2) {
+      campos.cargo = m[1].trim()
+      break
+    }
+  }
+
+  // ── CÉDULA ───────────────────────────────────────────────────────────────
+  // Formatos: "CC 1100964621", "C.C. 1100964621", número de 6-12 dígitos
+  const rxCedulas = [
+    /\b(?:CC|C\.C\.|C\.C|CEDULA|CÉDULA|NIT)[.:\s]+(\d{6,12})\b/i,
+    /\bID[\s:]+(\d{6,12})\b/i,
+    // En el formulario de la orden médica aparece "OC 91071263"
+    /\bOC\s+(\d{6,12})\b/i
+  ]
+  for (const rx of rxCedulas) {
+    const m = t.match(rx)
+    if (m) { campos.cedula = m[1]; break }
+  }
+  // Buscar cualquier número largo si no se encontró
+  if (!campos.cedula) {
+    const allNums = [...t.matchAll(/\b(\d{8,12})\b/g)]
+    if (allNums.length > 0) campos.cedula = allNums[0][1]
+  }
+
+  // ── FECHA ────────────────────────────────────────────────────────────────
+  // Formatos: "03-08-2026", "03/08/2026", "3 de agosto de 2026"
+  const nombresMes = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const mesesTexto = {
+    enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6,
+    julio:7, agosto:8, septiembre:9, octubre:10, noviembre:11, diciembre:12
+  }
+
+  const rxFechas = [
+    // DD-MM-YYYY o DD/MM/YYYY (el más común en el formulario ACUASAN)
+    /(?:FECHA[^:]*?[:\s]+)?(\d{1,2})[.\-\/](\d{1,2})[.\-\/](20\d{2})/i,
+    // "3 de agosto de 2026"
+    /(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?(20\d{2})/i
+  ]
+  for (const rx of rxFechas) {
+    const m = t.match(rx)
+    if (m) {
+      let dd, mm, aaaa
+      if (/de/.test(rx.source)) {
+        dd = m[1]; mm = String(mesesTexto[m[2].toLowerCase()] || 1); aaaa = m[3]
+      } else {
+        dd = m[1]; mm = m[2]; aaaa = m[3]
+      }
+      dd = dd.padStart(2, '0'); mm = mm.padStart(2, '0')
+      campos.fechaInicio = `${dd}/${mm}/${aaaa}`
+      campos.fechaFin = `${dd}/${mm}/${aaaa}`
+      campos.fechaPermisoTexto = `${parseInt(dd)} de ${nombresMes[parseInt(mm)]} de ${aaaa}`
+      break
+    }
+  }
+
+  // ── HORARIO ──────────────────────────────────────────────────────────────
+  // "HORA: 2:00pm - 6:00pm" / "2:00pm 6:00pm" / "07:00 a 16:00"
+  const rxHoras = [
+    /HORA[:\s]+(\d{1,2}[:h]\d{0,2}\s*(?:am|pm)?)[\s\-–\/]+(\d{1,2}[:h]\d{0,2}\s*(?:am|pm)?)/i,
+    /(\d{1,2}[:h]\d{2}\s*(?:am|pm))\s*[-–]\s*(\d{1,2}[:h]\d{2}\s*(?:am|pm))/i,
+    /(\d{1,2}[:h]\d{2})\s+[aA]\s+(\d{1,2}[:h]\d{2})/
+  ]
+  for (const rx of rxHoras) {
+    const m = t.match(rx)
+    if (m) {
+      const h1 = m[1].trim(), h2 = m[2].trim()
+      campos.horaDetalle = `${h1} a ${h2}`
+      campos.horasCalculadas = `${h1} a ${h2}`
+      break
+    }
+  }
+
+  // ── TIPO DE PERMISO ──────────────────────────────────────────────────────
+  // En el form ACUASAN hay casillas que el OCR lee como [X], (X), |X|, ☑, ✓
+  // El orden de prioridad sigue la lógica del formulario
+  const marcado = (patron) => new RegExp(`(?:[xX☑✓✗⊠⊡❎☒]{1,2})[\\s]*${patron}|${patron}[\\s]*(?:[xX☑✓✗⊠⊡❎☒]{1,2})`, 'i').test(t)
+
+  if (marcado('M[eé]dico') || marcado('Cita'))        campos.tipoPermiso = 'Médico'
+  else if (marcado('Personal'))                        campos.tipoPermiso = 'Personal'
+  else if (marcado('Compensatorio') || marcado('Comp')) campos.tipoPermiso = 'Compensatorio'
+  else if (/cita\s+m[eé]dica/i.test(t))               campos.tipoPermiso = 'Médico'
+  else if (/compensatorio/i.test(t))                   campos.tipoPermiso = 'Compensatorio'
+  else if (/personal/i.test(t))                        campos.tipoPermiso = 'Personal'
+  else if (/m[eé]dic/i.test(t))                        campos.tipoPermiso = 'Médico'
+
+  // ── MOTIVO / JUSTIFICACIÓN ───────────────────────────────────────────────
+  const rxMotivos = [
+    /(?:MOTIVO|JUSTIFICACI[OÓ]N|OBSERVACI[OÓ]N)[:\s]+([^\n]{8,})/i,
+    /(?:POR[:\s]+)([^\n]{10,})/i
+  ]
+  for (const rx of rxMotivos) {
+    const m = t.match(rx)
+    if (m && m[1].trim().length > 6) {
+      campos.motivoManuscrito = m[1].trim()
+      break
+    }
+  }
+
+  return campos
+}
+
+// ── Aplicar campos extraídos al formulario Vue ────────────────────────────────
+const aplicarCampos = (campos) => {
+  if (campos.nombreFuncionario) formData.nombreFuncionario = campos.nombreFuncionario
+  if (campos.cedula)            formData.cedula = campos.cedula
+  if (campos.cargo)             formData.cargo = campos.cargo
+  if (campos.dependencia)       formData.dependencia = campos.dependencia
+  if (campos.fechaInicio)       formData.fechaInicio = campos.fechaInicio
+  if (campos.fechaFin)          formData.fechaFin = campos.fechaFin
+  if (campos.fechaPermisoTexto) formData.fechaPermisoTexto = campos.fechaPermisoTexto
+  if (campos.horaDetalle)       formData.horaDetalle = campos.horaDetalle
+  if (campos.horasCalculadas)   formData.horasCalculadas = campos.horasCalculadas
+  if (campos.tipoPermiso)       formData.tipoPermiso = campos.tipoPermiso
+  if (campos.motivoManuscrito)  formData.motivoManuscrito = campos.motivoManuscrito
+}
+
+// 🎯 MANEJADOR PRINCIPAL: Subir PDF o imagen con extracción automática
+const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
   if (!file) return
 
@@ -1223,42 +1456,127 @@ const handleScannedFileUpload = (e) => {
   documentLoaded.value = true
   isScanningOCR.value = true
 
-  // Convertir a Data URL (Base64) para que persista en base de datos y nunca expire
+  // Limpiar formulario
+  formData.nombreFuncionario = ''
+  formData.cedula = ''
+  formData.cargo = ''
+  formData.dependencia = ''
+  formData.fechaPermisoTexto = ''
+  formData.horaDetalle = ''
+  formData.horasCalculadas = ''
+  formData.fechaInicio = ''
+  formData.fechaFin = ''
+  formData.tipoPermiso = 'Compensatorio'
+  formData.motivoManuscrito = ''
+  formData.motivo = ''
+  formData.observaciones = ''
+
   const reader = new FileReader()
-  reader.onload = (event) => {
+  reader.onload = async (event) => {
     customFileUrl.value = event.target.result
 
-    setTimeout(() => {
-      isScanningOCR.value = false
+    try {
+      let textoParsear = ''
+      let fuenteExtraccion = 'desconocida'
 
-      // ⚠️ No se sobreescriben los campos: el usuario debe leer el PDF y completar
-      // el formulario manualmente con los datos correctos del documento escaneado.
-      // Solo se limpia lo estrictamente necesario para comenzar un nuevo registro.
-      formData.nombreFuncionario = ''
-      formData.cedula = ''
-      formData.cargo = ''
-      formData.dependencia = ''
-      formData.fechaPermisoTexto = ''
-      formData.horaDetalle = ''
-      formData.horasCalculadas = ''
-      formData.fechaInicio = ''
-      formData.fechaFin = ''
-      formData.tipoPermiso = 'Compensatorio'
-      formData.motivoManuscrito = ''
-      formData.motivo = ''
-      formData.observaciones = ''
+      if (isPdfFile.value) {
+        // ── ETAPA 1: Intentar extracción nativa (texto embebido en PDF) ───
+        const { texto, canvas, fuente } = await extraerTextoNativoPDF(event.target.result)
 
+        if (fuente === 'nativo' && texto.length > 40) {
+          // ✅ PDF digital con texto real → parsear directamente (100% exacto)
+          textoParsear = texto
+          fuenteExtraccion = 'PDF nativo'
+        } else {
+          // ── ETAPA 2: PDF escaneado → OCR avanzado con Tesseract LSTM ───
+          fuenteExtraccion = 'OCR avanzado'
+
+          // Obtener canvas (ya renderizado en extraerTextoNativoPDF)
+          let canvasOCR = canvas
+          if (!canvasOCR) {
+            const { canvas: c } = await pdfACanvas(event.target.result)
+            canvasOCR = c
+          }
+
+          // Preprocesar imagen: escala de grises + contraste para mejor OCR
+          const canvasProcesado = preprocesarImagenOCR(canvasOCR)
+          const imagenOCR = canvasProcesado.toDataURL('image/png')
+
+          const Tesseract = await import('tesseract.js')
+          const { data: { text, confidence } } = await Tesseract.recognize(imagenOCR, 'spa', {
+            logger: () => {},
+            tessedit_pageseg_mode: '6',   // PSM 6: Bloque uniforme (formularios)
+            tessedit_ocr_engine_mode: '1', // OEM 1: LSTM neural (más preciso)
+            preserve_interword_spaces: '1'
+          })
+
+          textoParsear = text
+          console.info(`[OCR] Confianza: ${confidence?.toFixed(1)}% | Chars: ${text.length}`)
+        }
+      } else {
+        // ── Imagen (JPG/PNG) → OCR directo ───────────────────────────────
+        fuenteExtraccion = 'OCR imagen'
+        const img = document.createElement('img')
+        img.src = event.target.result
+        await new Promise(resolve => { img.onload = resolve })
+
+        // Crear canvas para preprocesar
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth * 2
+        canvas.height = img.naturalHeight * 2
+        const ctx = canvas.getContext('2d')
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.scale(2, 2)
+        ctx.drawImage(img, 0, 0)
+        const canvasProcesado = preprocesarImagenOCR(canvas)
+
+        const Tesseract = await import('tesseract.js')
+        const { data: { text } } = await Tesseract.recognize(
+          canvasProcesado.toDataURL('image/png'), 'spa', {
+            logger: () => {},
+            tessedit_pageseg_mode: '6',
+            tessedit_ocr_engine_mode: '1',
+            preserve_interword_spaces: '1'
+          }
+        )
+        textoParsear = text
+      }
+
+      // ── PARSEAR y aplicar campos ─────────────────────────────────────────
+      const campos = parsearTextoPermiso(textoParsear)
+      aplicarCampos(campos)
+
+      const numCampos = Object.keys(campos).length
+      if (numCampos > 0) {
+        lanzarAlertaBootstrap(
+          'success',
+          `✅ ${numCampos} campo(s) extraídos (${fuenteExtraccion})`,
+          `Revise los datos y corrija si algo no es exacto antes de guardar.`
+        )
+      } else {
+        lanzarAlertaBootstrap(
+          'warning',
+          '⚠️ No se reconocieron campos',
+          `El documento fue cargado. Complete los campos manualmente o suba una imagen más nítida.`
+        )
+      }
+    } catch (err) {
+      console.error('[OCR ERROR]', err)
       lanzarAlertaBootstrap(
         'info',
-        '📄 Documento Cargado — Complete el Formulario',
-        `El archivo "${file.name}" fue cargado. Por favor, lea el PDF y complete los datos del permiso en el formulario.`
+        '📄 Documento Cargado',
+        `El archivo "${file.name}" fue cargado. Complete los datos manualmente.`
       )
-    }, 700)
+    } finally {
+      isScanningOCR.value = false
+    }
   }
 
   reader.onerror = () => {
     isScanningOCR.value = false
     customFileUrl.value = URL.createObjectURL(file)
+    lanzarAlertaBootstrap('danger', 'Error al Leer Archivo', 'No se pudo leer el archivo. Intente de nuevo.')
   }
 
   reader.readAsDataURL(file)
