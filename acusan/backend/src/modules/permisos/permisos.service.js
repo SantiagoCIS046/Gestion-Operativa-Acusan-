@@ -88,131 +88,7 @@ export const PermisosService = {
    * Asegura que existan registros base en la BD MongoDB
    */
   async asegurarSemillaInicial() {
-    const conteo = await prisma.permiso.count()
-
-    const semillas = [
-      {
-        radicado: 'PERM-2026-0040',
-        cedula: '1098345672',
-        nombreFuncionario: 'Carlos Andrés Mendoza Ruiz',
-        cargo: 'Técnico Operario - Acueducto',
-        dependencia: 'Mantenimiento de Acueducto',
-        tipo: 'MEDICO',
-        fechaInicio: new Date(2026, 7, 17, 8, 15),
-        fechaFin: new Date(2026, 7, 17, 12, 0),
-        hora24: '08:15',
-        duracion: '08:00 a 12:00 (4 horas)',
-        justificacion: 'Cita médica especialista.',
-        soporte: 'Certificado_EPS_Sanitas.pdf',
-        estado: 'APROBADO'
-      },
-      {
-        radicado: 'PERM-2026-0041',
-        cedula: '63456789',
-        nombreFuncionario: 'Sandra Milena Villamizar',
-        cargo: 'Auxiliar Administrativa',
-        dependencia: 'Recursos Humanos',
-        tipo: 'PERSONAL',
-        fechaInicio: new Date(2026, 7, 18, 10, 0),
-        fechaFin: new Date(2026, 7, 18, 12, 0),
-        hora24: '10:00',
-        duracion: '10:00 a 12:00 (2 horas)',
-        justificacion: 'Diligencia bancaria.',
-        soporte: 'Permiso_Sandra_V.pdf',
-        estado: 'APROBADO'
-      },
-      {
-        radicado: 'PERM-2026-0042',
-        cedula: '1098345672',
-        nombreFuncionario: 'Carlos Andrés Mendoza Ruiz',
-        cargo: 'Técnico Operario - Acueducto',
-        dependencia: 'Mantenimiento de Acueducto',
-        tipo: 'MEDICO',
-        fechaInicio: new Date(2026, 7, 18, 9, 30),
-        fechaFin: new Date(2026, 7, 18, 12, 0),
-        hora24: '09:30',
-        duracion: '08:00 a 12:00 (4 horas)',
-        justificacion: 'Cita médica especialista - Urología.',
-        soporte: 'Certificado_EPS_Sanitas.pdf',
-        estado: 'APROBADO'
-      },
-      {
-        radicado: 'PERM-2026-0043',
-        cedula: '13888999',
-        nombreFuncionario: 'Jorge Eliécer Prada Santos',
-        cargo: 'Conductor Operativo Cuadrilla',
-        dependencia: 'Aseo y Rutas Urbanas',
-        tipo: 'COMPENSATORIO',
-        fechaInicio: new Date(2026, 7, 19, 11, 15),
-        fechaFin: new Date(2026, 7, 19, 15, 0),
-        hora24: '11:15',
-        duracion: '07:00 a 15:00 (8 horas)',
-        justificacion: 'Día compensatorio por labor dominical en jornada de recolección especial.',
-        soporte: 'Compensatorio_JPrada.pdf',
-        estado: 'APROBADO'
-      },
-      {
-        radicado: 'PERM-2026-0044',
-        cedula: '1098765432',
-        nombreFuncionario: 'María Fernanda Ruiz Ortiz',
-        cargo: 'Analista de Facturación y Cartera',
-        dependencia: 'Comercial y Facturación',
-        tipo: 'PERSONAL',
-        fechaInicio: new Date(2026, 7, 20, 14, 0),
-        fechaFin: new Date(2026, 7, 20, 16, 0),
-        hora24: '14:00',
-        duracion: '14:00 a 16:00 (2 horas)',
-        justificacion: 'Diligencia notarial y bancaria personal impostergable.',
-        soporte: 'Solicitud_Permiso_Laboral.pdf',
-        estado: 'APROBADO'
-      },
-      {
-        radicado: 'PERM-2026-0045',
-        cedula: '91234567',
-        nombreFuncionario: 'Héctor Fabio Ramírez',
-        cargo: 'Operario de Redes de Alcantarillado',
-        dependencia: 'Alcantarillado Principal',
-        tipo: 'CALAMIDAD',
-        fechaInicio: new Date(2026, 7, 21, 8, 45),
-        fechaFin: new Date(2026, 7, 21, 16, 0),
-        hora24: '08:45',
-        duracion: '08:00 a 16:00 (16 horas)',
-        justificacion: 'Emergencia por filtración e inundación en vivienda familiar.',
-        soporte: 'Acta_Calamidad_HF.pdf',
-        estado: 'APROBADO'
-      },
-      {
-        radicado: 'PERM-2026-0046',
-        cedula: '1098444555',
-        nombreFuncionario: 'Mauricio Gómez Santos',
-        cargo: 'Operador Planta de Tratamiento',
-        dependencia: 'Planta de Tratamiento de Agua',
-        tipo: 'ESTUDIO',
-        fechaInicio: new Date(2026, 7, 21, 16, 20),
-        fechaFin: new Date(2026, 7, 21, 18, 0),
-        hora24: '16:20',
-        duracion: '10:00 a 16:00 (6 horas)',
-        justificacion: 'Examen de certificación en sustancias químicas.',
-        soporte: 'Certificado_Examen_MG.pdf',
-        estado: 'APROBADO'
-      }
-    ]
-
-    if (conteo === 0) {
-      for (const item of semillas) {
-        await prisma.permiso.create({ data: item })
-      }
-    } else {
-      for (const item of semillas) {
-        const existente = await prisma.permiso.findUnique({ where: { radicado: item.radicado } })
-        if (existente) {
-          await prisma.permiso.update({
-            where: { radicado: item.radicado },
-            data: { fechaInicio: item.fechaInicio, fechaFin: item.fechaFin }
-          })
-        }
-      }
-    }
+    // La base de datos inicia limpia y solo contiene los registros ingresados al sistema
   },
 
   /**
@@ -220,8 +96,6 @@ export const PermisosService = {
    */
   async listarPermisos(filtros = {}) {
     try {
-      await this.asegurarSemillaInicial()
-
       const where = {}
       if (filtros.estado) where.estado = filtros.estado
       if (filtros.cedula) where.cedula = filtros.cedula
@@ -234,50 +108,9 @@ export const PermisosService = {
 
       return resultados.map(formatearParaFrontend)
     } catch (e) {
-      console.warn('DB no disponible para permisos, usando datos semilla en memoria:', e.message)
-      const semillasMemoria = [
-        {
-          id: 'PERM-2026-0040',
-          radicado: 'PERM-2026-0040',
-          cedula: '1098345672',
-          nombreFuncionario: 'Carlos Andrés Mendoza Ruiz',
-          cargo: 'Técnico Operario - Acueducto',
-          dependencia: 'Mantenimiento de Acueducto',
-          tipo: 'MEDICO',
-          fechaInicio: new Date(2026, 7, 17, 8, 15),
-          fechaFin: new Date(2026, 7, 17, 12, 0),
-          hora24: '08:15',
-          duracion: '08:00 a 12:00 (4 horas)',
-          justificacion: 'Cita médica especialista.',
-          soporte: 'Certificado_EPS_Sanitas.pdf',
-          estado: 'APROBADO'
-        },
-        {
-          id: 'PERM-2026-0041',
-          radicado: 'PERM-2026-0041',
-          cedula: '63456789',
-          nombreFuncionario: 'Sandra Milena Villamizar',
-          cargo: 'Auxiliar Administrativa',
-          dependencia: 'Recursos Humanos',
-          tipo: 'PERSONAL',
-          fechaInicio: new Date(2026, 7, 18, 10, 0),
-          fechaFin: new Date(2026, 7, 18, 12, 0),
-          hora24: '10:00',
-          duracion: '10:00 a 12:00 (2 horas)',
-          justificacion: 'Diligencia bancaria.',
-          soporte: 'Permiso_Sandra_V.pdf',
-          estado: 'APROBADO'
-        },
-        {
-          id: 'PERM-2026-0042',
-          radicado: 'PERM-2026-0042',
-          cedula: '1098345672',
-          nombreFuncionario: 'Carlos Andrés Mendoza Ruiz',
-          cargo: 'Técnico Operario - Acueducto',
-          dependencia: 'Mantenimiento de Acueducto',
-          tipo: 'MEDICO',
-          fechaInicio: new Date(2026, 7, 18, 9, 30),
-          fechaFin: new Date(2026, 7, 18, 12, 0),
+      return []
+    }
+  },
           hora24: '09:30',
           duracion: '08:00 a 12:00 (4 horas)',
           justificacion: 'Cita médica especialista - Urología.',

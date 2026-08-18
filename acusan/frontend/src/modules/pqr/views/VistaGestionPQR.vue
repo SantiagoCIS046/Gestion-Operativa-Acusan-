@@ -108,55 +108,15 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
 
 const STORAGE_KEY_PQR = 'acuasan_pqr_db'
 
-const PQRS_INICIALES = [
-  {
-    id: 1,
-    radicado: 'PQR-2026-0811',
-    usuario: 'Gonzalo Silva Moreno',
-    matricula: 'ACU-48201',
-    direccion: 'Carrera 11 # 14-32, Barrio San Antonio',
-    motivo: 'Baja presión de agua y turbidez intermitente',
-    descripcion: 'Desde el pasado lunes el suministro de agua llega con muy baja presión en el segundo piso del inmueble y presenta coloración amarillenta en horas de la mañana.',
-    fechaRadicado: '10/08/2026',
-    fechaVencimiento: '24/08/2026',
-    estado: 'ABIERTO'
-  },
-  {
-    id: 2,
-    radicado: 'PQR-2026-0795',
-    usuario: 'Almacén Central San Gil S.A.S',
-    matricula: 'ACU-10944',
-    direccion: 'Calle 12 # 9-45, Centro',
-    motivo: 'Inconformidad con cobro de consumo promedio',
-    descripcion: 'Solicitud de reliquidación de la factura del periodo de julio por cobro sobre estimado habiendo tenido el local cerrado durante reparaciones locativas.',
-    fechaRadicado: '05/08/2026',
-    fechaVencimiento: '19/08/2026',
-    estado: 'EN_TRAMITE'
-  },
-  {
-    id: 3,
-    radicado: 'PQR-2026-0770',
-    usuario: 'Clara Inés Barrera',
-    matricula: 'ACU-33120',
-    direccion: 'Carrera 7 # 21-10, La Gruta',
-    motivo: 'Revisión y cambio de medidor averiado',
-    descripcion: 'El medidor presenta fuga en la tuerca de unión y condensación interna que impide la toma de lectura correcta.',
-    fechaRadicado: '01/08/2026',
-    fechaVencimiento: '15/08/2026',
-    estado: 'RESUELTO'
-  }
-]
-
 const obtenerDbLocalPqr = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PQR)
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed)) return parsed
     }
   } catch (e) {}
-  localStorage.setItem(STORAGE_KEY_PQR, JSON.stringify(PQRS_INICIALES))
-  return [...PQRS_INICIALES]
+  return []
 }
 
 const guardarDbLocalPqr = (lista) => {
@@ -166,7 +126,7 @@ const guardarDbLocalPqr = (lista) => {
 }
 
 const pqrs = ref(obtenerDbLocalPqr())
-const selectedPqr = ref(pqrs.value[0] || null)
+const selectedPqr = ref(pqrs.value.length > 0 ? pqrs.value[0] : null)
 const busqueda = ref('')
 
 const filteredPqrs = computed(() => {

@@ -76,52 +76,15 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
 
 const STORAGE_KEY_HORAS = 'acuasan_horas_db'
 
-const HORAS_INICIALES = [
-  {
-    id: 101,
-    cedula: '91234567',
-    funcionario: 'Héctor Fabio Ramírez',
-    area: 'Cuadrilla Alcantarillado - Red Principal',
-    fecha: '10/08/2026',
-    tipo: 'NOCTURNA',
-    cantidadHoras: 4,
-    montoEstimado: 98000,
-    estado: 'PENDIENTE'
-  },
-  {
-    id: 102,
-    cedula: '1098444555',
-    funcionario: 'Mauricio Gómez Santos',
-    area: 'Mantenimiento Planta de Tratamiento',
-    fecha: '09/08/2026',
-    tipo: 'FESTIVA_DIURNA',
-    cantidadHoras: 8,
-    montoEstimado: 240000,
-    estado: 'PENDIENTE'
-  },
-  {
-    id: 103,
-    cedula: '13888999',
-    funcionario: 'Álvaro Uribe Pinzón',
-    area: 'Reparación de Fugas - Sector San Gil',
-    fecha: '08/08/2026',
-    tipo: 'DIURNA',
-    cantidadHoras: 3,
-    montoEstimado: 55000,
-    estado: 'APROBADO'
-  }
-]
-
 const obtenerDbLocalHoras = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_HORAS)
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed)) return parsed
     }
   } catch (e) {}
-  localStorage.setItem(STORAGE_KEY_HORAS, JSON.stringify(HORAS_INICIALES))
-  return [...HORAS_INICIALES]
+  return []
 }
 
 const guardarDbLocalHoras = (lista) => {
