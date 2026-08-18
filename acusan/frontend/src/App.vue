@@ -65,10 +65,22 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- RADICADOS: Exclusivo Eliana, Román y Admin -->
+          <!-- RADICADOS: Eliana y Román (Gestión y Registro) -->
           <router-link
-            v-if="tieneAcceso(['RADICADOS', 'ENCARGADO', 'ADMIN'])"
+            v-if="tieneAcceso(['RADICADOS', 'ENCARGADO'])"
             to="/radicados/gestion"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">📑</span>
+            <span class="nav-text">Radicados</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+          <!-- RADICADOS: Gerencia y Admin (Supervisión y Alertas de Subidas) -->
+          <router-link
+            v-if="tieneAcceso(['GERENCIA', 'ADMIN'])"
+            to="/radicados/gerencia"
             class="nav-btn"
             active-class="active"
           >

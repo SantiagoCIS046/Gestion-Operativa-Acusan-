@@ -47,6 +47,12 @@ const routes = [
     component: () => import('../modules/radicados/views/VistaRadicados.vue'),
     meta: { title: 'Gestión de Radicados | Acuasan', requiresAuth: true, roles: ['RADICADOS', 'ENCARGADO', 'ADMIN'] }
   },
+  {
+    path: '/radicados/gerencia',
+    name: 'GerenciaRadicados',
+    component: () => import('../modules/radicados/views/VistaGerenciaRadicados.vue'),
+    meta: { title: 'Supervisión de Radicados | Gerencia Acuasan', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
+  },
 
 
 
