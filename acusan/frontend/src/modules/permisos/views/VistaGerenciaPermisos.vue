@@ -672,7 +672,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
 import PageHeader from '../../../components/PageHeader.vue'
 

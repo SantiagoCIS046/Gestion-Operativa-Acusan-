@@ -30,8 +30,8 @@ const guardarDbLocal = (lista) => {
   }
 }
 
-// Variable para controlar si el backend está activo o en modo local
-let backendDisponible = true
+const isVercelHost = typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('now.sh'))
+let backendDisponible = !isVercelHost
 
 export const radicadosService = {
   /**

@@ -30,7 +30,8 @@ const guardarDbLocalPermisos = (lista) => {
   }
 }
 
-let backendPermisosDisponible = true
+const isVercelHost = typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('now.sh'))
+let backendPermisosDisponible = !isVercelHost
 
 export const permisosService = {
   /**
