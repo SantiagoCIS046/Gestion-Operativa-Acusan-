@@ -1477,47 +1477,124 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
   campos.horasCalculadas = ''
 
   // 6. TIPO DE PERMISO & CASILLAS [X]
-  const esCompensatorio = /compensatorio|jurado|votaci[oó]n|electoral|consulta\s*popular/i.test(texto) ||
-                         /compensatorio\s*[\(\[\{xX\u2713\u2714]/i.test(p1)
-  const esMedico = /m[eé]dic|cita\s*m[eé]dic|eps|nueva\s*eps|ips|cardiolog|urolog|remisi[oó]n|especialista/i.test(texto) && !esCompensatorio
-  const esCalamidad = /calamidad|inundaci[oó]n|fallecimiento/i.test(texto)
-  const esPersonal = /personal|asunto\s*propio/i.test(texto)
+  // 6. TIPO DE PERMISO — DETECCIÓN POR CASILLA MARCADA [X] EN EL FORMULARIO (PÁGINA 1)
+  // Estrategia: buscar cuál casilla tiene una X o marca junto a ella
+  // El formulario tiene: "Compensatorio [ ] Médico* [ ] Personal [ ] ..."
+  // La casilla marcada puede aparecer como: "Médico X", "Médico [X]", "Medico* X", etc.
 
-  if (esCompensatorio) campos.tipoPermiso = 'Compensatorio'
-  else if (esMedico) campos.tipoPermiso = 'Cita Médica'
-  else if (esCalamidad) campos.tipoPermiso = 'Calamidad Doméstica'
-  else if (esPersonal) campos.tipoPermiso = 'Personal'
-  else campos.tipoPermiso = 'Compensatorio'
+  let tipoDetectado = ''
 
-  // 7. MOTIVO / JUSTIFICACIÓN EXTRAÍDA (EXTRAÍDO EXACTO DEL FORMULARIO DE LA SOLICITUD)
+  // A. Detectar casilla MÉDICO marcada: "Médico X", "Médico* X", "Medico [X]", "Médico✓"
+  const rxMedicoMarcado = /M[eé]dic[ao]\*?\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*M[eé]dic[ao]\*?/
+  if (rxMedicoMarcado.test(p1)) {
+    tipoDetectado = 'Cita Médica'
+  }
+
+  // B. Detectar casilla COMPENSATORIO marcada
+  if (!tipoDetectado) {
+    const rxCompMarcado = /[Cc]ompensatori[ao]\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]ompensatori[ao]/
+    if (rxCompMarcado.test(p1)) {
+      tipoDetectado = 'Compensatorio'
+    }
+  }
+
+  // C. Detectar casilla PERSONAL marcada
+  if (!tipoDetectado) {
+    const rxPersonalMarcado = /[Pp]ersonal\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Pp]ersonal/
+    if (rxPersonalMarcado.test(p1)) {
+      tipoDetectado = 'Personal'
+    }
+  }
+
+  // D. Detectar casilla CALAMIDAD marcada
+  if (!tipoDetectado) {
+    const rxCalaMarcado = /[Cc]alamidad\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]alamidad/
+    if (rxCalaMarcado.test(p1)) {
+      tipoDetectado = 'Calamidad Doméstica'
+    }
+  }
+
+  // E. Detectar ESTUDIO / CAPACITACIÓN marcado
+  if (!tipoDetectado) {
+    const rxEstudioMarcado = /[Ee]studio|[Cc]apacitaci[oó]n\s*[\[\(]?[xX✓✗☑]/
+    if (rxEstudioMarcado.test(p1)) {
+      tipoDetectado = 'Estudio / Capacitación'
+    }
+  }
+
+  // F. Si no se detectó por casilla, inferir del contexto del texto completo
+  if (!tipoDetectado) {
+    const hayMedico = /m[eé]dic[ao]|cita\s*m[eé]dic|eps|cardiolog|urolog|ortoped|remisi[oó]n|especialista|orden\s*m[eé]dic|diagn[oó]stico/i.test(texto)
+    const hayJurado = /jurado|consulta\s*popular|votaci[oó]n|electoral|certificado\s*electoral/i.test(texto)
+    const hayCalamidad = /calamidad|fallecimiento|inundaci[oó]n|accidente\s*familiar/i.test(texto)
+    const hayEstudio = /universidad|capacitaci[oó]n|seminario|congreso|examen\s*acad[eé]mico/i.test(texto)
+
+    if (hayJurado) tipoDetectado = 'Compensatorio'
+    else if (hayMedico) tipoDetectado = 'Cita Médica'
+    else if (hayCalamidad) tipoDetectado = 'Calamidad Doméstica'
+    else if (hayEstudio) tipoDetectado = 'Estudio / Capacitación'
+    else tipoDetectado = 'Compensatorio'
+  }
+
+  campos.tipoPermiso = tipoDetectado
+
+  // 7. MOTIVO / JUSTIFICACIÓN — EXTRAÍDO DEL TEXTO MANUSCRITO REAL DEL FORMULARIO
   let motivoExtraido = ''
 
-  // A. Buscar texto manuscrito escrito en la sección de MOTIVO en la Página 1
-  const mMotivoP1 = p1.match(/(?:Personal|Médico\*?|Compensatorio|MOTIVO|JUSTIFICACI[OÓ]N)[\]\}\s\*\_\|\:]*([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\s\,\.\-\/\(\)]{4,80})/i)
-  if (mMotivoP1) {
-    const rawMot = mMotivoP1[1]
-      .replace(/En caso de cita.*/i, '')
-      .replace(/FIRMA.*/i, '')
-      .replace(/SOLICITANTE.*/i, '')
-      .replace(/[\_\|\~]+/g, ' ')
+  // A. Buscar el texto escrito a mano DESPUÉS de la línea MOTIVO del formulario de Acuasan
+  // El formato es: "MOTIVO: Compensatorio [] Médico* [X] Personal [] {texto_manuscrito}"
+  // También: "c/ta medica pa tomar medicamentos" aparece después de la selección
+  const rxMotivoLinea = /MOTIVO[\s\:\*]*(?:Compensatorio|M[eé]dic[ao]\*?|Personal|Calamidad)?[\s\[\]\(\)xXoO\*]*([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\/\s\,\.\-\(\)]{6,120})/i
+  const mMotivoLinea = p1.match(rxMotivoLinea)
+  if (mMotivoLinea) {
+    let rawMot = mMotivoLinea[1]
+      .replace(/en caso de cita.*/i, '')
+      .replace(/\*en caso.*/i, '')
+      .replace(/firma.*/i, '')
+      .replace(/solicitante.*/i, '')
+      .replace(/jefe.*/i, '')
+      .replace(/[_|~]{2,}/g, ' ')
+      .replace(/\s{2,}/g, ' ')
       .trim()
-    if (rawMot.length >= 4 && /[a-z]/i.test(rawMot)) {
+    if (rawMot.length >= 5 && /[a-záéíóúñ]/i.test(rawMot)) {
       motivoExtraido = rawMot
     }
   }
 
-  // B. Si contiene palabras clave de lo escrito en el permiso
+  // B. Buscar texto escrito cerca a las palabras "c/ta", "cita", "pa tomar", "reclamar"
   if (!motivoExtraido || motivoExtraido.length < 5) {
-    if (/jurado|consulta\s*popular|votaci[oó]n/i.test(p1) || /jurado|consulta\s*popular|votaci[oó]n/i.test(texto)) {
-      motivoExtraido = 'Jurado de votación consulta popular'
-    } else if (/reclamar\s*medicam/i.test(p1) || /reclamar\s*medicam/i.test(texto)) {
-      motivoExtraido = 'Cita médica reclamar medicamento'
-    } else if (/cita\s*m[eé]dic/i.test(p1)) {
-      motivoExtraido = 'Cita médica'
-    } else if (/calamidad/i.test(p1)) {
+    const rxCitaManuscrita = /c[\/\.]?ta\s+m[eé]dic[ao][a-z\s\/\,\.]{0,60}/i
+    const mCita = texto.match(rxCitaManuscrita)
+    if (mCita) {
+      motivoExtraido = mCita[0].replace(/\s+/g, ' ').trim()
+    }
+  }
+
+  // C. Construir motivo descriptivo según tipo y contexto del documento
+  if (!motivoExtraido || motivoExtraido.length < 5) {
+    if (tipoDetectado === 'Cita Médica') {
+      if (/cardiolog/i.test(texto)) {
+        motivoExtraido = 'Cita médica - Consulta especialista Cardiología'
+        if (/reclamar|medicam/i.test(texto)) motivoExtraido += ' / Reclamar medicamentos'
+      } else if (/urolog/i.test(texto)) {
+        motivoExtraido = 'Cita médica - Consulta especialista Urología'
+      } else if (/reclamar|medicam/i.test(texto)) {
+        motivoExtraido = 'Cita médica - Reclamar medicamentos (EPS)'
+      } else {
+        motivoExtraido = 'Cita médica programada con soporte EPS adjunto'
+      }
+    } else if (tipoDetectado === 'Compensatorio') {
+      if (/jurado|votaci[oó]n|electoral/i.test(texto)) {
+        motivoExtraido = 'Compensatorio - Jurado de votación (Certificado Electoral adjunto)'
+      } else {
+        motivoExtraido = 'Permiso compensatorio'
+      }
+    } else if (tipoDetectado === 'Calamidad Doméstica') {
       motivoExtraido = 'Calamidad doméstica'
-    } else if (/personal/i.test(p1)) {
-      motivoExtraido = 'Asuntos personales'
+    } else if (tipoDetectado === 'Personal') {
+      motivoExtraido = 'Asunto personal'
+    } else if (tipoDetectado === 'Estudio / Capacitación') {
+      motivoExtraido = 'Permiso por estudio o capacitación'
     }
   }
 
