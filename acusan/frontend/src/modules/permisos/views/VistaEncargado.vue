@@ -1785,17 +1785,10 @@ const handleScannedFileUpload = async (e) => {
   const preCampos = parsearTextoPermiso(file.name, file.name, file.name)
   aplicarCampos(preCampos)
 
-  // 2. Visor inmediato con URL Blob
-  try {
-    customFileUrl.value = URL.createObjectURL(file)
-  } catch (e) {}
-
   const reader = new FileReader()
   reader.onload = async (event) => {
-    // Si no se asignó blob, usar DataURL
-    if (!customFileUrl.value) {
-      customFileUrl.value = event.target.result
-    }
+    // Almacenar siempre en Base64 para que la base de datos pueda guardar el archivo real
+    customFileUrl.value = event.target.result
 
     try {
       const { textoCompleto, textoPagina1 } = await procesarDocumentoCompleto(event.target.result, file.name, isPdfFile.value)
