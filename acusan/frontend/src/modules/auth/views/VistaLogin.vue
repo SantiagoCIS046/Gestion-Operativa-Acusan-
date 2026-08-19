@@ -161,19 +161,19 @@
             <!-- Nombre -->
             <div class="field-group">
               <label class="field-label">Nombre Completo del Funcionario</label>
-              <input v-model="formRegistro.nombre" type="text" class="field-input" placeholder="ej. María Fernanda Gómez" required />
+              <input v-model="formRegistro.nombre" type="text" class="field-input" placeholder="Nombre y Apellidos del Funcionario" required />
             </div>
 
             <!-- Cédula -->
             <div class="field-group">
               <label class="field-label">Cédula de Ciudadanía</label>
-              <input v-model="formRegistro.cedula" type="text" class="field-input" placeholder="1098765000" required />
+              <input v-model="formRegistro.cedula" type="text" class="field-input" placeholder="Número de cédula" required />
             </div>
 
             <!-- Email -->
             <div class="field-group">
               <label class="field-label">Correo Electrónico Institucional</label>
-              <input v-model="formRegistro.email" type="email" class="field-input" placeholder="nuevo.funcionario@acuasan.com" required />
+              <input v-model="formRegistro.email" type="email" class="field-input" placeholder="usuario@acuasan.com" required />
             </div>
 
             <!-- Contraseña -->

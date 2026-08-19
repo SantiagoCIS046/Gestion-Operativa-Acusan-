@@ -18,7 +18,7 @@
             v-model="formData.cedula"
             type="text"
             class="form-control"
-            placeholder="Ej: 1098765432"
+            placeholder="Número de identificación"
             required
           />
         </div>
@@ -52,7 +52,7 @@
             v-model="formData.dependencia"
             type="text"
             class="form-control"
-            placeholder="Ej: Planta de Tratamiento, Acueducto, PQR"
+            placeholder="Dependencia u operativa"
           />
         </div>
 

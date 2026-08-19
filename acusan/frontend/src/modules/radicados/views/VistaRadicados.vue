@@ -155,46 +155,46 @@
           <div class="form-row">
             <div class="form-group">
               <label>N° Radicado PDF</label>
-              <input type="text" v-model="form.numeroRadicadoPdf" class="form-control form-control-sm" placeholder="Ej. 2640000645">
+              <input type="text" v-model="form.numeroRadicadoPdf" class="form-control form-control-sm" placeholder="Número extraído del documento">
             </div>
             <div class="form-group">
               <label>Fecha / Hora Sello</label>
-              <input type="text" v-model="form.fechaDocumento" class="form-control form-control-sm" placeholder="Ej. 22/jul/2026 5:31 PM">
+              <input type="text" v-model="form.fechaDocumento" class="form-control form-control-sm" placeholder="Fecha y hora del documento">
             </div>
           </div>
 
           <div class="form-group">
             <label>Lugar y Fecha de la Carta</label>
-            <input type="text" v-model="form.lugarFecha" class="form-control form-control-sm" placeholder="Ej. Pinchote, 22 Julio de 2026">
+            <input type="text" v-model="form.lugarFecha" class="form-control form-control-sm" placeholder="Lugar y fecha de emisión">
           </div>
 
           <!-- Sección 2: Partes -->
           <div class="form-section-label">👥 Partes del radicado</div>
           <div class="form-group">
             <label>Remitente / Peticionario <span class="req">*</span></label>
-            <input type="text" v-model="form.peticionario" class="form-control form-control-sm" placeholder="Ej. Laura Dulcey Nieves" required>
+            <input type="text" v-model="form.peticionario" class="form-control form-control-sm" placeholder="Nombre completo o entidad peticionaria" required>
           </div>
 
           <div class="form-group">
             <label>Empresa Destinataria <span class="req">*</span></label>
-            <input type="text" v-model="form.dependencia" class="form-control form-control-sm" placeholder="Ej. EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO..." required>
+            <input type="text" v-model="form.dependencia" class="form-control form-control-sm" placeholder="Empresa o entidad destinataria" required>
           </div>
 
           <div class="form-group">
             <label>Destinatario (Funcionario / Área)</label>
-            <input type="text" v-model="form.destinatario" class="form-control form-control-sm" placeholder="Ej. Ruiz Suarez Luz Marina - Gerencia">
+            <input type="text" v-model="form.destinatario" class="form-control form-control-sm" placeholder="Funcionario o dependencia destinataria">
           </div>
 
           <!-- Sección 3: Contenido -->
           <div class="form-section-label">📄 Contenido del documento</div>
           <div class="form-group">
             <label>Asunto</label>
-            <input type="text" v-model="form.asunto" class="form-control form-control-sm" placeholder="Ej. Solicitud de visita técnica y medidor">
+            <input type="text" v-model="form.asunto" class="form-control form-control-sm" placeholder="Asunto o tema principal de la solicitud">
           </div>
 
           <div class="form-group">
             <label>Referencia</label>
-            <input type="text" v-model="form.referencia" class="form-control form-control-sm" placeholder="Ej. Código de suscriptor No. 009699">
+            <input type="text" v-model="form.referencia" class="form-control form-control-sm" placeholder="Referencia, código o número de cuenta">
           </div>
 
           <div class="form-group">

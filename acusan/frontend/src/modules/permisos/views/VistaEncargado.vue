@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="encargado-view container-fluid p-0">
     <!-- ========================================== -->
     <!-- BOOTSTRAP TOAST / ALERT BANNER NOTIFICATIONS -->
@@ -335,7 +335,7 @@
                         v-model="formData.horasCalculadas"
                         type="text"
                         class="form-control fw-bold text-center text-primary"
-                        placeholder="Ej. 07:00 a 16:00 (8 horas)"
+                        placeholder="Horario y duración calculada"
                         :disabled="!documentLoaded"
                         required
                       />
