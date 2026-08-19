@@ -173,6 +173,67 @@ export const PermisosService = {
   },
 
   /**
+   * Actualizar permiso existente
+   */
+  async actualizarPermiso(id, datos) {
+    const tipoEnum = datos.tipo ? normalizarTipoEnum(datos.tipo) : undefined
+    const fechaInicioParsed = datos.fechaInicio ? parsearFecha(datos.fechaInicio) : undefined
+    const fechaFinParsed = datos.fechaFin ? parsearFecha(datos.fechaFin) : undefined
+
+    const actualizado = await prisma.permiso.update({
+      where: { id },
+      data: {
+        cedula: datos.cedula ? String(datos.cedula).trim() : undefined,
+        nombreFuncionario: datos.nombreFuncionario || datos.funcionario || undefined,
+        cargo: datos.cargo || undefined,
+        dependencia: datos.dependencia || undefined,
+        tipo: tipoEnum,
+        fechaInicio: fechaInicioParsed,
+        fechaFin: fechaFinParsed,
+        duracion: datos.duracion || datos.horasCalculadas || undefined,
+        hora24: datos.hora24 || undefined,
+        justificacion: datos.justificacion || datos.motivo || undefined,
+        motivoManuscrito: datos.motivoManuscrito || undefined,
+        soporte: datos.soporte || datos.documentFileName || undefined,
+        soporteUrl: datos.soporteUrl || undefined,
+        archivoUrl: datos.archivoUrl || datos.customFileUrl || undefined,
+        observaciones: datos.observaciones || undefined
+      }
+    })
+
+    return formatearParaFrontend(actualizado)
+  },
+
+  /**
+   * Eliminar un permiso
+   */
+  async eliminarPermiso(id) {
+    // Primero intentamos borrar por ID directo
+    try {
+      await prisma.permiso.delete({
+        where: { id }
+      })
+      return true
+    } catch (e) {
+      // Si falla, tal vez el ID es un radicado, así que lo buscamos primero
+      try {
+        const permiso = await prisma.permiso.findFirst({
+          where: { radicado: id }
+        })
+        if (permiso) {
+          await prisma.permiso.delete({
+            where: { id: permiso.id }
+          })
+          return true
+        }
+      } catch (err) {
+        return false
+      }
+      return false
+    }
+  },
+
+  /**
    * Dictamen de Gerencia: Aprobación o Rechazo
    */
   async dictaminarPermiso(id, { estado, aprobadoPor, observaciones }) {

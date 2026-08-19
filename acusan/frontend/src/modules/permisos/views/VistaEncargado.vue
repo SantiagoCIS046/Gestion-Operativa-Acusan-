@@ -180,13 +180,13 @@
                 <!-- If it's a native PDF uploaded by user or loaded from history -->
                 <object
                   v-if="isPdfFile && customFileUrl"
-                  :data="customFileUrl"
+                  :data="displayFileUrl"
                   type="application/pdf"
                   class="w-100 rounded bg-white border-0 flex-grow-1"
                   style="min-height: 680px;"
                 >
                   <iframe
-                    :src="customFileUrl"
+                    :src="displayFileUrl"
                     class="w-100 h-100 border-0"
                     style="min-height: 680px;"
                     title="Visor PDF Original"
@@ -196,7 +196,7 @@
                 <!-- If user uploaded a custom image from PC -->
                 <div v-else-if="customFileUrl && !isPdfFile" class="w-100 text-center p-2">
                   <img
-                    :src="customFileUrl"
+                    :src="displayFileUrl"
                     alt="Documento Original Escaneado"
                     class="img-fluid rounded shadow bg-white border"
                     style="max-width: 100%; max-height: 700px; object-fit: contain;"
@@ -828,6 +828,26 @@ const documentFileName = ref('')
 const customFileUrl = ref('')
 const isPdfFile = ref(false)
 
+// Convierte un Data URL (Base64) muy largo en un Blob URL para evitar crashes en el iframe de Chromium
+const displayFileUrl = computed(() => {
+  if (!customFileUrl.value || !customFileUrl.value.startsWith('data:')) return customFileUrl.value
+  try {
+    const arr = customFileUrl.value.split(',')
+    const mime = arr[0].match(/:(.*?);/)[1]
+    const bstr = atob(arr[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n)
+    }
+    const blob = new Blob([u8arr], { type: mime })
+    return URL.createObjectURL(blob)
+  } catch (e) {
+    console.error('Error convirtiendo base64 a blob url:', e)
+    return customFileUrl.value
+  }
+})
+
 const isScanningOCR = ref(false)
 const isSubmitting = ref(false)
 const ocrProgress = ref(0)
@@ -1219,6 +1239,9 @@ const limpiarFormularioYVisor = () => {
   formData.motivoManuscrito = ''
   formData.motivo = ''
   formData.observaciones = ''
+  formData.id = ''
+  formData.radicado = ''
+  formData.createdAt = ''
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1840,6 +1863,9 @@ const cargarEnFormulario = (item) => {
   formData.tipoPermiso = item.tipo || item.tipoPermiso || 'Compensatorio'
   formData.motivo = item.motivo || item.justificacion || ''
   formData.motivoManuscrito = item.motivoManuscrito || item.motivo || ''
+  formData.id = item.id || ''
+  formData.radicado = item.radicado || ''
+  formData.createdAt = item.createdAt || ''
   formData.fechaPermisoTexto = `${item.dia} de ${todosLosMeses.find(m => m.mesNum === item.mesNum)?.nombre || 'Mes'} ${item.anio}`
   formData.horaDetalle = item.hora24 || item.duracion || '08:00'
   formData.horasCalculadas = item.duracion || '07:00 a 15:00 (8 horas)'
@@ -1887,6 +1913,23 @@ const confirmarYEnviar = async () => {
     return
   }
 
+  // Validación: Evitar doble permiso el mismo día para el mismo funcionario
+  const isDuplicate = historialRemisiones.value.some(p => {
+    return p.cedula === formData.cedula && 
+           (p.fechaInicio === formData.fechaInicio || p.fechaEntrega === formData.fechaInicio) &&
+           p.id !== formData.id && 
+           p.radicado !== formData.radicado
+  })
+
+  if (isDuplicate) {
+    lanzarAlertaBootstrap(
+      'danger', 
+      'Permiso Duplicado', 
+      `El funcionario ${formData.nombreFuncionario} ya tiene un permiso registrado para el día ${formData.fechaInicio}. No se puede tener más de un permiso el mismo día.`
+    )
+    return
+  }
+
   isSubmitting.value = true
   try {
     const diaNum = parseInt((formData.fechaInicio || '').split('/')[0]) || diaActual
@@ -1914,7 +1957,10 @@ const confirmarYEnviar = async () => {
       observaciones: formData.observaciones,
       soporte: documentFileName.value || 'Permiso_Escaneado.pdf',
       archivoUrl: customFileUrl.value,
-      isPdf: isPdfFile.value
+      isPdf: isPdfFile.value,
+      id: formData.id || undefined,
+      radicado: formData.radicado || undefined,
+      createdAt: formData.createdAt || undefined
     }
 
     let nuevoRegistro = null

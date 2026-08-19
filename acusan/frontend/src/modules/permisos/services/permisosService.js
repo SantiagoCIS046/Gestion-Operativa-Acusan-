@@ -74,6 +74,7 @@ export const permisosService = {
 
   /**
    * Radica un nuevo permiso extraído vía OCR o diligenciado
+   * Si el permiso ya tiene ID (edición), lo actualiza en lugar de duplicarlo.
    */
   async crearPermiso(datos) {
     const ahora = new Date()
@@ -87,34 +88,53 @@ export const permisosService = {
 
     const nuevoPermiso = {
       ...datos,
-      id: datos.id || radicadoNum,
-      radicado: datos.radicado || radicadoNum,
+      id: datos.id || datos.radicado || radicadoNum,
+      radicado: datos.radicado || datos.id || radicadoNum,
       dia,
       mesNum,
       anio,
       funcionario,
       nombreFuncionario: funcionario,
       fechaEntrega,
-      fechaInicio: fechaEntrega,
+      fechaInicio: datos.fechaInicio || fechaEntrega,
       estado: datos.estado || 'APROBADO',
       estadoEnvio: datos.estadoEnvio || 'APROBADO',
       confianzaOCR: datos.confianzaOCR || 98,
-      createdAt: ahora.toISOString()
+      createdAt: datos.createdAt || ahora.toISOString()
     }
 
     const lista = obtenerDbLocalPermisos()
-    lista.unshift(nuevoPermiso)
+    const indexExistente = lista.findIndex(p => p.id === nuevoPermiso.id || p.radicado === nuevoPermiso.radicado)
+
+    const isEdit = indexExistente !== -1
+
+    if (isEdit) {
+      lista[indexExistente] = { ...lista[indexExistente], ...nuevoPermiso }
+    } else {
+      lista.unshift(nuevoPermiso)
+    }
+    
     guardarDbLocalPermisos(lista)
 
     try {
-      const res = await fetch(API_BASE_URL, {
-        method: 'POST',
+      const url = isEdit ? `${API_BASE_URL}/${nuevoPermiso.id}` : API_BASE_URL
+      const method = isEdit ? 'PUT' : 'POST'
+      
+      const res = await fetch(url, {
+        method,
         headers: getHeaders(),
-        body: JSON.stringify(datos)
+        body: JSON.stringify(nuevoPermiso)
       })
       if (res.ok) {
         const data = await res.json()
         if (data && data.success) return data.data
+      } else if (isEdit && res.status === 404) {
+        // Fallback: si el PUT falla porque no existe en backend (ej. se borró), intentar POST
+        await fetch(API_BASE_URL, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(nuevoPermiso)
+        })
       }
     } catch (e) {
       console.warn('Backend no disponible para guardar permiso, almacenado localmente:', e.message)

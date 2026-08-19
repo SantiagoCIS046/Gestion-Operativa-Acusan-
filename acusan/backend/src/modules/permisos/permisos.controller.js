@@ -135,6 +135,44 @@ export const PermisosController = {
   },
 
   /**
+   * Actualizar permiso existente
+   * PUT /api/permisos/:id
+   */
+  async actualizar(req, res) {
+    try {
+      const { id } = req.params
+      const actualizado = await PermisosService.actualizarPermiso(id, req.body)
+      res.json({
+        success: true,
+        message: 'Permiso actualizado correctamente',
+        data: actualizado
+      })
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Error al actualizar permiso', error: error.message })
+    }
+  },
+
+  /**
+   * Eliminar un permiso
+   * DELETE /api/permisos/:id
+   */
+  async eliminar(req, res) {
+    try {
+      const { id } = req.params
+      const eliminado = await PermisosService.eliminarPermiso(id)
+      if (!eliminado) {
+        return res.status(404).json({ success: false, message: 'No se encontró el permiso a eliminar' })
+      }
+      res.json({
+        success: true,
+        message: 'Permiso eliminado correctamente'
+      })
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Error al eliminar permiso', error: error.message })
+    }
+  },
+
+  /**
    * Aprobación / Rechazo por Gerencia
    * PUT /api/permisos/:id/dictamen
    */

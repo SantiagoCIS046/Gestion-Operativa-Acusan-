@@ -16,8 +16,10 @@ router.post('/validar-ocr', PermisosController.validarOCR)
 
 // Endpoints generales de consulta y dictamen
 router.get('/', PermisosController.listar)
-router.get('/:id', PermisosController.obtenerDetalle)
 router.post('/', PermisosController.registrar)
+router.get('/:id', PermisosController.obtenerDetalle)
+router.put('/:id', PermisosController.actualizar)
+router.delete('/:id', PermisosController.eliminar)
 router.put('/:id/dictamen', PermisosController.dictaminar)
 
 export default router
