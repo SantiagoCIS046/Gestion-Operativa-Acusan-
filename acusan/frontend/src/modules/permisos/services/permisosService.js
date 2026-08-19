@@ -30,21 +30,14 @@ const guardarDbLocalPermisos = (lista) => {
   }
 }
 
-const isVercelHost = typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('now.sh'))
-let backendPermisosDisponible = !isVercelHost
-
 export const permisosService = {
   /**
-   * Obtiene la lista completa de permisos con base de datos local persistente
+   * Obtiene la lista completa de permisos desde la base de datos central en la nube
    */
   async obtenerHistorialPermisos(filtros = {}) {
-    if (!backendPermisosDisponible) {
-      return obtenerDbLocalPermisos()
-    }
-
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 2000)
+      const timeoutId = setTimeout(() => controller.abort(), 4000)
 
       const params = new URLSearchParams()
       if (filtros.estado) params.append('estado', filtros.estado)
@@ -67,16 +60,14 @@ export const permisosService = {
 
       if (res.ok) {
         const data = await res.json()
-        if (data && Array.isArray(data.data) && data.data.length > 0) {
+        if (data && Array.isArray(data.data)) {
           guardarDbLocalPermisos(data.data)
           return data.data
         }
       }
 
-      backendPermisosDisponible = false
       return obtenerDbLocalPermisos()
     } catch (error) {
-      backendPermisosDisponible = false
       return obtenerDbLocalPermisos()
     }
   },
@@ -115,20 +106,18 @@ export const permisosService = {
     lista.unshift(nuevoPermiso)
     guardarDbLocalPermisos(lista)
 
-    if (backendPermisosDisponible) {
-      try {
-        const res = await fetch(API_BASE_URL, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify(datos)
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.success) return data.data
-        }
-      } catch (e) {
-        backendPermisosDisponible = false
+    try {
+      const res = await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(datos)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.success) return data.data
       }
+    } catch (e) {
+      console.warn('Backend no disponible para guardar permiso, almacenado localmente:', e.message)
     }
 
     return nuevoPermiso
@@ -142,15 +131,13 @@ export const permisosService = {
     const filtrada = lista.filter(p => String(p.id) !== String(idORadicado) && String(p.radicado) !== String(idORadicado))
     guardarDbLocalPermisos(filtrada)
 
-    if (backendPermisosDisponible) {
-      try {
-        await fetch(`${API_BASE_URL}/${idORadicado}`, {
-          method: 'DELETE',
-          headers: getHeaders()
-        })
-      } catch (e) {
-        backendPermisosDisponible = false
-      }
+    try {
+      await fetch(`${API_BASE_URL}/${idORadicado}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      })
+    } catch (e) {
+      console.warn('Backend no disponible para eliminar permiso:', e.message)
     }
 
     return true
@@ -177,16 +164,14 @@ export const permisosService = {
       guardarDbLocalPermisos(lista)
     }
 
-    if (backendPermisosDisponible) {
-      try {
-        await fetch(`${API_BASE_URL}/${id}/dictamen`, {
-          method: 'PUT',
-          headers: getHeaders(),
-          body: JSON.stringify({ estado, aprobadoPor, observaciones })
-        })
-      } catch (e) {
-        backendPermisosDisponible = false
-      }
+    try {
+      await fetch(`${API_BASE_URL}/${id}/dictamen`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ estado, aprobadoPor, observaciones })
+      })
+    } catch (e) {
+      console.warn('Backend no disponible para dictaminar permiso:', e.message)
     }
 
     return (idx !== -1) ? lista[idx] : { id, estado, aprobadoPor, observaciones }

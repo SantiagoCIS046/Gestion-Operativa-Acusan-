@@ -30,22 +30,14 @@ const guardarDbLocal = (lista) => {
   }
 }
 
-const isVercelHost = typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('now.sh'))
-let backendDisponible = !isVercelHost
-
 export const radicadosService = {
   /**
-   * Obtiene todos los radicados de forma reactiva y persistente
+   * Obtiene todos los radicados desde la base de datos central en la nube
    */
   async obtenerTodos() {
-    // Si ya detectamos que el backend está offline en este despliegue, leer directamente de localStorage sin generar 500
-    if (!backendDisponible) {
-      return obtenerDbLocal()
-    }
-
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 2000)
+      const timeoutId = setTimeout(() => controller.abort(), 4000)
 
       const res = await fetch(API_BASE, {
         headers: authService.getAuthHeader(),
@@ -55,16 +47,14 @@ export const radicadosService = {
 
       if (res.ok) {
         const data = await res.json()
-        if (data && data.success && Array.isArray(data.data) && data.data.length > 0) {
+        if (data && data.success && Array.isArray(data.data)) {
           guardarDbLocal(data.data)
           return data.data
         }
       }
 
-      backendDisponible = false
       return obtenerDbLocal()
     } catch (error) {
-      backendDisponible = false
       return obtenerDbLocal()
     }
   },
@@ -89,26 +79,23 @@ export const radicadosService = {
       registradoPor: datos.registradoPor || authService.getUsuarioActual()?.nombre || 'Eliana'
     }
 
-    // Guardar inmediatamente en base local
+    // Guardar en base local
     const listaActual = obtenerDbLocal()
     listaActual.unshift(nuevoItem)
     guardarDbLocal(listaActual)
 
-    // Intentar sincronizar con backend si está disponible
-    if (backendDisponible) {
-      try {
-        const res = await fetch(API_BASE, {
-          method: 'POST',
-          headers: getHeaders(),
-          body: JSON.stringify(datos)
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.success) return data.data
-        }
-      } catch (e) {
-        backendDisponible = false
+    try {
+      const res = await fetch(API_BASE, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(datos)
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.success) return data.data
       }
+    } catch (e) {
+      console.warn('Backend no disponible para guardar radicado, almacenado localmente:', e.message)
     }
 
     return nuevoItem
@@ -125,16 +112,14 @@ export const radicadosService = {
       guardarDbLocal(listaActual)
     }
 
-    if (backendDisponible) {
-      try {
-        await fetch(`${API_BASE}/${id}`, {
-          method: 'PUT',
-          headers: getHeaders(),
-          body: JSON.stringify({ estado })
-        })
-      } catch (e) {
-        backendDisponible = false
-      }
+    try {
+      await fetch(`${API_BASE}/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ estado })
+      })
+    } catch (e) {
+      console.warn('Backend no disponible para actualizar estado de radicado:', e.message)
     }
 
     return (idx !== -1) ? listaActual[idx] : { id, estado }
