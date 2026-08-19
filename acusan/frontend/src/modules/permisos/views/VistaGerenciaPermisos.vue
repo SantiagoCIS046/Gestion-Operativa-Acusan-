@@ -118,8 +118,21 @@
       </div>
 
       <div class="toolbar-right">
+        <!-- Botón de Sincronización Manual -->
+        <button 
+          class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2 fw-bold shadow-sm"
+          style="background-color: white; border-radius: 8px;"
+          @click="cargarPermisos"
+          :disabled="cargando"
+          title="Forzar descarga desde la nube"
+        >
+          <span v-if="cargando" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          <span v-else>🔄</span>
+          <span>Sincronizar Datos Nube</span>
+        </button>
+
         <!-- Live Search -->
-        <div class="search-box">
+        <div class="search-box ms-3">
           <span class="search-icon">🔍</span>
           <input
             v-model="busqueda"
