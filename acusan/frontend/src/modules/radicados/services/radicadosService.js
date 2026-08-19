@@ -1,7 +1,7 @@
 import authService from '../../auth/services/authService.js'
 
 const API_BASE = '/api/radicados'
-const STORAGE_KEY = 'acuasan_radicados_db'
+const STORAGE_KEY = 'acuasan_radicados_v2'
 
 const getHeaders = () => ({
   'Content-Type': 'application/json',

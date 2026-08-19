@@ -74,7 +74,7 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
   }, duracion)
 }
 
-const STORAGE_KEY_HORAS = 'acuasan_horas_db'
+const STORAGE_KEY_HORAS = 'acuasan_horas_v2'
 
 const obtenerDbLocalHoras = () => {
   try {

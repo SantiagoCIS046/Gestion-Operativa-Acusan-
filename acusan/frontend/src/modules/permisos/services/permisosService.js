@@ -1,7 +1,7 @@
 import authService from '../../auth/services/authService.js'
 
 const API_BASE_URL = '/api/permisos'
-const STORAGE_KEY = 'acuasan_permisos_db'
+const STORAGE_KEY = 'acuasan_permisos_v2'
 
 const getHeaders = () => ({
   'Content-Type': 'application/json',

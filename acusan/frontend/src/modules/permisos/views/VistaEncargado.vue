@@ -1502,7 +1502,7 @@ const cargarHistorialDesdeBackend = async () => {
 }
 
 const onStorageChange = (e) => {
-  if (e.key === 'acuasan_permisos_db' || !e.key) {
+  if (e.key === 'acuasan_permisos_v2' || !e.key) {
     cargarHistorialDesdeBackend()
   }
 }

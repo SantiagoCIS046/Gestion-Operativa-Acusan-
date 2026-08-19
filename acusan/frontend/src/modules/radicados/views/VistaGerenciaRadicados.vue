@@ -516,7 +516,7 @@ const cargarDatos = async (silencioso = false) => {
 }
 
 const onStorageChange = (e) => {
-  if (e.key === 'acuasan_radicados_db' || !e.key) {
+  if (e.key === 'acuasan_radicados_v2' || !e.key) {
     cargarDatos(true)
   }
 }

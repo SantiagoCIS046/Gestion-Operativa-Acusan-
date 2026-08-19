@@ -106,7 +106,7 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
   }, duracion)
 }
 
-const STORAGE_KEY_PQR = 'acuasan_pqr_db'
+const STORAGE_KEY_PQR = 'acuasan_pqr_v2'
 
 const obtenerDbLocalPqr = () => {
   try {
