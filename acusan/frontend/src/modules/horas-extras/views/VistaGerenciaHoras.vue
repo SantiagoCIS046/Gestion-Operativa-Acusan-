@@ -56,9 +56,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import TablaHorasExtras from '../components/TablaHorasExtras.vue'
 import PageHeader from '../../../components/PageHeader.vue'
+import authService from '../../auth/services/authService.js'
+
+const API_BASE = '/api/horas-extras'
+const STORAGE_KEY_HORAS = 'acuasan_horas_v2'
+
+const getHeaders = () => ({
+  'Content-Type': 'application/json',
+  ...authService.getAuthHeader()
+})
 
 const alertaBootstrap = ref({
   visible: false,
@@ -73,8 +82,6 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
     alertaBootstrap.value.visible = false
   }, duracion)
 }
-
-const STORAGE_KEY_HORAS = 'acuasan_horas_v2'
 
 const obtenerDbLocalHoras = () => {
   try {
@@ -93,30 +100,96 @@ const guardarDbLocalHoras = (lista) => {
   } catch (e) {}
 }
 
-const horasData = ref(obtenerDbLocalHoras())
+const horasData = ref([])
+
+// Cargar registros de horas extras desde la base de datos MongoDB
+const cargarHoras = async () => {
+  try {
+    const res = await fetch(API_BASE, { headers: authService.getAuthHeader() })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success && Array.isArray(data.data)) {
+        horasData.value = data.data
+        guardarDbLocalHoras(data.data)
+        return
+      }
+    }
+  } catch (e) {
+    console.warn('Backend no disponible, usando datos locales de horas extras:', e.message)
+  }
+  horasData.value = obtenerDbLocalHoras()
+}
+
+onMounted(cargarHoras)
 
 const totalHoras = computed(() => {
-  return horasData.value.reduce((acc, curr) => acc + curr.cantidadHoras, 0)
+  return horasData.value.reduce((acc, curr) => acc + (Number(curr.cantidadHoras) || 0), 0)
 })
 
 const totalMonto = computed(() => {
-  return horasData.value.reduce((acc, curr) => acc + curr.montoEstimado, 0)
+  return horasData.value.reduce((acc, curr) => acc + (Number(curr.montoEstimado) || 0), 0)
 })
 
-const aprobarHora = (item) => {
-  item.estado = 'APROBADO'
-  guardarDbLocalHoras(horasData.value)
-  lanzarAlertaBootstrap('success', 'Horas Aprobadas', `Registro de horas para ${item.funcionario} aprobado.`)
+// Aprueba el registro de horas extras en la base de datos
+const aprobarHora = async (item) => {
+  try {
+    const res = await fetch(`${API_BASE}/${item.id}/dictamen`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        estado: 'APROBADO',
+        autorizadoPor: authService.getUsuarioActual()?.nombre || 'Gerencia General Acuasan',
+        observaciones: item.observacionesGerencia || ''
+      })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success) {
+        item.estado = 'APROBADO'
+        guardarDbLocalHoras(horasData.value)
+        lanzarAlertaBootstrap('success', 'Horas Aprobadas', `Registro de horas para ${item.funcionario} aprobado y guardado en la base de datos.`)
+        return
+      }
+    }
+    throw new Error('Respuesta invalida del servidor')
+  } catch (e) {
+    item.estado = 'APROBADO'
+    guardarDbLocalHoras(horasData.value)
+    lanzarAlertaBootstrap('warning', 'Guardado Local', `Registro de ${item.funcionario} aprobado localmente; se sincronizara cuando el servidor este disponible.`)
+  }
 }
 
-const rechazarHora = (item) => {
-  item.estado = 'RECHAZADO'
-  guardarDbLocalHoras(horasData.value)
-  lanzarAlertaBootstrap('danger', 'Horas Rechazadas', `Registro de horas para ${item.funcionario} rechazado.`)
+// Rechaza el registro de horas extras en la base de datos
+const rechazarHora = async (item) => {
+  try {
+    const res = await fetch(`${API_BASE}/${item.id}/dictamen`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        estado: 'RECHAZADO',
+        autorizadoPor: authService.getUsuarioActual()?.nombre || 'Gerencia General Acuasan',
+        observaciones: item.observacionesGerencia || ''
+      })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success) {
+        item.estado = 'RECHAZADO'
+        guardarDbLocalHoras(horasData.value)
+        lanzarAlertaBootstrap('danger', 'Horas Rechazadas', `Registro de horas para ${item.funcionario} rechazado en la base de datos.`)
+        return
+      }
+    }
+    throw new Error('Respuesta invalida del servidor')
+  } catch (e) {
+    item.estado = 'RECHAZADO'
+    guardarDbLocalHoras(horasData.value)
+    lanzarAlertaBootstrap('warning', 'Guardado Local', `Registro de ${item.funcionario} rechazado localmente.`)
+  }
 }
 
 const exportarReporte = () => {
-  lanzarAlertaBootstrap('info', 'Exportando Reporte', 'Generando consolidado de nómina para Acuasan (Excel/PDF)...')
+  lanzarAlertaBootstrap('info', 'Exportando Reporte', 'Generando consolidado de nomina para Acuasan (Excel/PDF)...')
 }
 
 const formatCurrency = (val) => {

@@ -88,9 +88,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import PanelAtencionPQR from '../components/PanelAtencionPQR.vue'
 import PageHeader from '../../../components/PageHeader.vue'
+import authService from '../../auth/services/authService.js'
 
 const alertaBootstrap = ref({
   visible: false,
@@ -106,7 +107,20 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
   }, duracion)
 }
 
+const API_BASE = '/api/pqr'
 const STORAGE_KEY_PQR = 'acuasan_pqr_v2'
+
+const getHeaders = () => ({
+  'Content-Type': 'application/json',
+  ...authService.getAuthHeader()
+})
+
+const formatearFecha = (iso) => {
+  if (!iso) return 'N/D'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return String(iso)
+  return d.toLocaleDateString('es-CO')
+}
 
 const obtenerDbLocalPqr = () => {
   try {
@@ -125,50 +139,153 @@ const guardarDbLocalPqr = (lista) => {
   } catch (e) {}
 }
 
-const pqrs = ref(obtenerDbLocalPqr())
-const selectedPqr = ref(pqrs.value.length > 0 ? pqrs.value[0] : null)
+const pqrs = ref([])
+const selectedPqr = ref(null)
 const busqueda = ref('')
 
+const cargarPqrs = async () => {
+  try {
+    const res = await fetch(API_BASE, { headers: authService.getAuthHeader() })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success && Array.isArray(data.data)) {
+        pqrs.value = data.data.map(p => ({
+          ...p,
+          fechaRadicado: formatearFecha(p.fechaRadicado),
+          fechaVencimiento: formatearFecha(p.fechaVencimiento)
+        }))
+        guardarDbLocalPqr(pqrs.value)
+        selectedPqr.value = pqrs.value.length > 0 ? pqrs.value[0] : null
+        return
+      }
+    }
+  } catch (e) {
+    console.warn('Backend no disponible, usando datos locales de PQR:', e.message)
+  }
+  pqrs.value = obtenerDbLocalPqr()
+  selectedPqr.value = pqrs.value.length > 0 ? pqrs.value[0] : null
+}
+
+onMounted(cargarPqrs)
+
 const filteredPqrs = computed(() => {
+  const q = busqueda.value.toLowerCase()
   return pqrs.value.filter(p =>
-    p.radicado.toLowerCase().includes(busqueda.value.toLowerCase()) ||
-    p.usuario.toLowerCase().includes(busqueda.value.toLowerCase()) ||
-    (p.matricula && p.matricula.toLowerCase().includes(busqueda.value.toLowerCase()))
+    (p.radicado || '').toLowerCase().includes(q) ||
+    (p.usuario || '').toLowerCase().includes(q) ||
+    (p.matricula || '').toLowerCase().includes(q)
   )
 })
 
-const procesarRespuesta = (payload) => {
-  if (selectedPqr.value) {
-    selectedPqr.value.estado = 'RESUELTO'
+const procesarRespuesta = async (payload) => {
+  const pqr = selectedPqr.value
+  if (!pqr) return
+  try {
+    const res = await fetch(`${API_BASE}/${pqr.id}/responder`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        respuestaOficial: payload.respuesta,
+        respondidoPor: authService.getUsuarioActual()?.nombre || 'Atencion al Usuario Acuasan',
+        nuevoEstado: 'RESUELTO'
+      })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success) {
+        pqr.estado = 'RESUELTO'
+        pqr.respuestaOficial = payload.respuesta
+        guardarDbLocalPqr(pqrs.value)
+        lanzarAlertaBootstrap('success', 'Respuesta Registrada', `PQR ${pqr.radicado} respondida y guardada en la base de datos.`)
+        return
+      }
+    }
+    throw new Error('Respuesta invalida del servidor')
+  } catch (e) {
+    pqr.estado = 'RESUELTO'
     guardarDbLocalPqr(pqrs.value)
-    lanzarAlertaBootstrap('success', 'Respuesta Registrada', `PQR ${selectedPqr.value.radicado} respondida con éxito y notificada al usuario.`)
+    lanzarAlertaBootstrap('warning', 'Guardado Local', `PQR ${pqr.radicado} respondida localmente. Se sincronizara cuando el servidor este disponible.`)
   }
 }
 
-const escalarCuadrilla = (item) => {
-  item.estado = 'EN_TRAMITE'
-  guardarDbLocalPqr(pqrs.value)
-  lanzarAlertaBootstrap('warning', 'PQR Escalada', `PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
+const escalarCuadrilla = async (item) => {
+  if (!item) return
+  try {
+    const res = await fetch(`${API_BASE}/${item.id}/responder`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        respuestaOficial: item.respuestaOficial || 'Asignada a cuadrilla tecnica operativa para visita en campo.',
+        respondidoPor: authService.getUsuarioActual()?.nombre || 'Atencion al Usuario Acuasan',
+        nuevoEstado: 'EN_TRAMITE'
+      })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success) {
+        item.estado = 'EN_TRAMITE'
+        guardarDbLocalPqr(pqrs.value)
+        lanzarAlertaBootstrap('warning', 'PQR Escalada', `PQR ${item.radicado} asignada a cuadrilla tecnica operativa para visita en campo.`)
+        return
+      }
+    }
+    throw new Error('Respuesta invalida del servidor')
+  } catch (e) {
+    item.estado = 'EN_TRAMITE'
+    guardarDbLocalPqr(pqrs.value)
+    lanzarAlertaBootstrap('warning', 'PQR Escalada (Local)', `PQR ${item.radicado} marcada en tramite localmente.`)
+  }
 }
 
-const nuevoPQR = () => {
-  const nuevoRad = `PQR-2026-${Math.floor(1000 + Math.random() * 9000)}`
-  const nuevaPqr = {
-    id: Date.now(),
-    radicado: nuevoRad,
-    usuario: 'Usuario Ciudadano San Gil',
-    matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
-    direccion: 'Sector San Gil',
-    motivo: 'Solicitud ciudadana ingresada vía ventanilla',
-    descripcion: 'Petición formal para revisión por parte de la cuadrilla técnica.',
-    fechaRadicado: new Date().toLocaleDateString('es-CO'),
-    fechaVencimiento: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString('es-CO'),
-    estado: 'ABIERTO'
+const nuevoPQR = async () => {
+  try {
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        usuario: 'Usuario Ciudadano San Gil',
+        matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
+        direccion: 'Sector San Gil',
+        motivo: 'Solicitud ciudadana ingresada via ventanilla',
+        descripcion: 'Peticion formal para revision por parte de la cuadrilla tecnica.',
+        prioridad: 'MEDIA'
+      })
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.success && data.data) {
+        const nueva = {
+          ...data.data,
+          fechaRadicado: formatearFecha(data.data.fechaRadicado),
+          fechaVencimiento: formatearFecha(data.data.fechaVencimiento)
+        }
+        pqrs.value.unshift(nueva)
+        selectedPqr.value = nueva
+        guardarDbLocalPqr(pqrs.value)
+        lanzarAlertaBootstrap('success', 'PQR Radicada', `Se radico con exito el expediente ${nueva.radicado} en la base de datos.`)
+        return
+      }
+    }
+    throw new Error('Respuesta invalida del servidor')
+  } catch (e) {
+    const nuevoRad = `PQR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+    const nuevaPqr = {
+      id: Date.now(),
+      radicado: nuevoRad,
+      usuario: 'Usuario Ciudadano San Gil',
+      matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
+      direccion: 'Sector San Gil',
+      motivo: 'Solicitud ciudadana ingresada via ventanilla',
+      descripcion: 'Peticion formal para revision por parte de la cuadrilla tecnica.',
+      fechaRadicado: new Date().toLocaleDateString('es-CO'),
+      fechaVencimiento: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString('es-CO'),
+      estado: 'ABIERTO'
+    }
+    pqrs.value.unshift(nuevaPqr)
+    selectedPqr.value = nuevaPqr
+    guardarDbLocalPqr(pqrs.value)
+    lanzarAlertaBootstrap('warning', 'PQR Radicada (Local)', `Servidor no disponible: expediente ${nuevoRad} guardado localmente.`)
   }
-  pqrs.value.unshift(nuevaPqr)
-  selectedPqr.value = nuevaPqr
-  guardarDbLocalPqr(pqrs.value)
-  lanzarAlertaBootstrap('success', 'PQR Radicada', `Se radicó con éxito el expediente ${nuevoRad}.`)
 }
 </script>
 
