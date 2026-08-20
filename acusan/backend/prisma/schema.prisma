@@ -44,6 +44,7 @@ model Permiso {
   soporte           String?
   soporteUrl        String?
   archivoUrl        String?
+  archivoMimeType   String?
   ocrConfidence     Float?        @default(0)
   ocrRawPayload     Json?
   estado            EstadoPermiso @default(PENDIENTE)

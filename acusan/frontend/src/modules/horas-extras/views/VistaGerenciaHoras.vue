@@ -1,30 +1,5 @@
-<template>
+﻿<template>
   <div class="gerencia-horas-view">
-    <!-- Bootstrap Toast / Alert Notification Banner -->
-    <transition name="toast-slide">
-      <div
-        v-if="alertaBootstrap.visible"
-        :class="['alert', `alert-${alertaBootstrap.tipo}`, 'alert-dismissible', 'fade', 'show', 'd-flex', 'align-items-center', 'shadow-sm', 'mb-3', 'rounded-3']"
-        role="alert"
-      >
-        <div class="me-2 fs-5">
-          <span v-if="alertaBootstrap.tipo === 'success'">✔</span>
-          <span v-else-if="alertaBootstrap.tipo === 'danger'">⚠️</span>
-          <span v-else-if="alertaBootstrap.tipo === 'warning'">⚡</span>
-          <span v-else>ℹ️</span>
-        </div>
-        <div class="flex-grow-1">
-          <strong class="d-block">{{ alertaBootstrap.titulo }}</strong>
-          <span class="small">{{ alertaBootstrap.mensaje }}</span>
-        </div>
-        <button
-          type="button"
-          class="btn-close"
-          aria-label="Close"
-          @click="alertaBootstrap.visible = false"
-        ></button>
-      </div>
-    </transition>
 
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
@@ -60,6 +35,7 @@ import { ref, computed, onMounted } from 'vue'
 import TablaHorasExtras from '../components/TablaHorasExtras.vue'
 import PageHeader from '../../../components/PageHeader.vue'
 import authService from '../../auth/services/authService.js'
+import notificacionService from '../../../services/notificacionService.js'
 
 const API_BASE = '/api/horas-extras'
 const STORAGE_KEY_HORAS = 'acuasan_horas_v2'
@@ -69,19 +45,8 @@ const getHeaders = () => ({
   ...authService.getAuthHeader()
 })
 
-const alertaBootstrap = ref({
-  visible: false,
-  tipo: 'success',
-  titulo: '',
-  mensaje: ''
-})
-
-const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
-  alertaBootstrap.value = { visible: true, tipo, titulo, mensaje }
-  setTimeout(() => {
-    alertaBootstrap.value.visible = false
-  }, duracion)
-}
+// Notificaciones profesionales globales (sistema centralizado de toasts)
+const lanzarAlertaBootstrap = notificacionService.mostrar
 
 const obtenerDbLocalHoras = () => {
   try {

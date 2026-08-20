@@ -1,190 +1,312 @@
-import prisma from '../../config/prisma.js'
+// Servicio de Permisos Laborales — Acuasan E.S.P.
+import prisma from "../../config/prisma.js";
+
+// Tamaño máximo del archivo Base64 guardado en MongoDB (~15MB binarios => ~20MB base64)
+const MAX_BASE64_LENGTH = 20 * 1024 * 1024;
 
 // Diccionario bidireccional de mapeo de tipos de permisos
 const MAPA_TIPOS = {
-  COMPENSATORIO: 'Compensatorio',
-  MEDICO: 'Cita Médica',
-  PERSONAL: 'Personal',
-  CALAMIDAD: 'Calamidad Doméstica',
-  ESTUDIO: 'Estudio / Capacitación'
-}
+  COMPENSATORIO: "Compensatorio",
+  MEDICO: "Cita Médica",
+  PERSONAL: "Personal",
+  CALAMIDAD: "Calamidad Doméstica",
+  ESTUDIO: "Estudio / Capacitación",
+};
 
 const normalizarTipoEnum = (tipoStr) => {
-  if (!tipoStr) return 'COMPENSATORIO'
-  const t = tipoStr.toUpperCase().trim()
-  if (t.includes('MEDIC') || t.includes('CITA')) return 'MEDICO'
-  if (t.includes('COMPENS')) return 'COMPENSATORIO'
-  if (t.includes('CALAMID')) return 'CALAMIDAD'
-  if (t.includes('ESTUD') || t.includes('CAPACIT')) return 'ESTUDIO'
-  if (t.includes('PERSON')) return 'PERSONAL'
-  return ['CALAMIDAD', 'MEDICO', 'PERSONAL', 'COMPENSATORIO', 'ESTUDIO'].includes(t) ? t : 'COMPENSATORIO'
-}
+  if (!tipoStr) return "COMPENSATORIO";
+  const t = String(tipoStr).toUpperCase().trim();
+  if (t.includes("MEDIC") || t.includes("CITA")) return "MEDICO";
+  if (t.includes("COMPENS")) return "COMPENSATORIO";
+  if (t.includes("CALAMID")) return "CALAMIDAD";
+  if (t.includes("ESTUD") || t.includes("CAPACIT")) return "ESTUDIO";
+  if (t.includes("PERSON")) return "PERSONAL";
+  return [
+    "CALAMIDAD",
+    "MEDICO",
+    "PERSONAL",
+    "COMPENSATORIO",
+    "ESTUDIO",
+  ].includes(t)
+    ? t
+    : "COMPENSATORIO";
+};
 
 const parsearFecha = (val) => {
-  if (!val) return new Date()
-  if (val instanceof Date) return val
-  if (typeof val === 'string') {
-    if (val.includes('/')) {
-      const partes = val.split('/')
+  if (!val) return new Date();
+  if (val instanceof Date) return val;
+  if (typeof val === "string") {
+    if (val.includes("/")) {
+      const partes = val.split("/");
       if (partes.length === 3) {
-        const d = parseInt(partes[0], 10)
-        const m = parseInt(partes[1], 10) - 1
-        const y = parseInt(partes[2], 10)
-        return new Date(y, m, d)
+        const d = parseInt(partes[0], 10);
+        const m = parseInt(partes[1], 10) - 1;
+        const y = parseInt(partes[2], 10);
+        return new Date(y, m, d);
       }
     }
-    const parsed = new Date(val)
-    if (!isNaN(parsed.getTime())) return parsed
+    const parsed = new Date(val);
+    if (!isNaN(parsed.getTime())) return parsed;
   }
-  return new Date()
-}
+  return new Date();
+};
 
-const formatearParaFrontend = (p) => {
-  const fInicio = new Date(p.fechaInicio)
-  const dia = fInicio.getDate()
-  const mesNum = fInicio.getMonth() + 1
-  const anio = fInicio.getFullYear()
-  const fechaEntrega = `${String(dia).padStart(2, '0')}/${String(mesNum).padStart(2, '0')}/${anio}`
-  
-  const tipoAmigable = MAPA_TIPOS[p.tipo] || p.tipo
+const formatearFecha = (val) => {
+  if (!val) return "";
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return "";
+  return `${String(d.getDate()).padStart(2, "0")}/${String(
+    d.getMonth() + 1
+  ).padStart(2, "0")}/${d.getFullYear()}`;
+};
 
-  return {
+// Sanitizar archivo Base64: si excede el límite, no se guarda (se conserva el nombre y mime)
+const sanitizarArchivo = (dataUrl) => {
+  if (!dataUrl || typeof dataUrl !== "string") return "";
+  if (!dataUrl.startsWith("data:")) return "";
+  if (dataUrl.length > MAX_BASE64_LENGTH) return "";
+  return dataUrl;
+};
+
+const formatearParaFrontend = (p, incluirArchivo = false) => {
+  const fechaInicio = p.fechaInicio ? new Date(p.fechaInicio) : new Date();
+  const fechaEntrega = formatearFecha(fechaInicio);
+  const anio = fechaInicio.getFullYear();
+  const mesNum = fechaInicio.getMonth() + 1;
+  const dia = fechaInicio.getDate();
+
+  const tipoAmigable = MAPA_TIPOS[p.tipo] || p.tipo;
+  const mime = p.archivoMimeType || "";
+
+  const resultado = {
     id: p.id,
     radicado: p.radicado,
     cedula: p.cedula,
     funcionario: p.nombreFuncionario,
     nombreFuncionario: p.nombreFuncionario,
-    cargo: p.cargo || 'Funcionario Acuasan',
-    dependencia: p.dependencia || 'Operativa',
+    cargo: p.cargo || "Funcionario Acuasan",
+    dependencia: p.dependencia || "Operativa",
     tipo: tipoAmigable,
     tipoEnum: p.tipo,
     fechaInicio: fechaEntrega,
-    fechaFin: p.fechaFin ? `${String(new Date(p.fechaFin).getDate()).padStart(2, '0')}/${String(new Date(p.fechaFin).getMonth() + 1).padStart(2, '0')}/${new Date(p.fechaFin).getFullYear()}` : fechaEntrega,
+    fechaFin: formatearFecha(p.fechaFin) || fechaEntrega,
     fechaEntrega,
-    hora24: p.hora24 || '08:00',
-    duracion: p.duracion || '07:00 a 15:00 (8 horas)',
-    motivo: p.justificacion || p.motivoManuscrito || '',
-    motivoManuscrito: p.motivoManuscrito || '',
-    observaciones: p.observaciones || '',
-    soporte: p.soporte || 'Permiso_Escaneado.pdf',
-    soporteUrl: p.soporteUrl || '',
-    archivoUrl: p.archivoUrl || '',
-    isPdf: p.soporte ? p.soporte.toLowerCase().endsWith('.pdf') : false,
+    hora24: p.hora24 || "08:00",
+    duracion: p.duracion || "07:00 a 15:00 (8 horas)",
+    motivo: p.justificacion || p.motivoManuscrito || "",
+    motivoManuscrito: p.motivoManuscrito || "",
+    observaciones: p.observaciones || "",
+    soporte: p.soporte || "Permiso_Escaneado.pdf",
+    soporteUrl: p.soporteUrl || "",
+    // El Base64 del archivo solo viaja en el detalle (peso); el listado envía metadatos
+    archivoUrl: incluirArchivo ? p.archivoUrl || "" : "",
+    archivoMimeType: mime,
+    // Indicadores de tipo de archivo para el visor de Gerencia/Encargado
+    isPdf: mime
+      ? mime === "application/pdf"
+      : p.soporte
+      ? p.soporte.toLowerCase().endsWith(".pdf")
+      : false,
+    isImage: mime
+      ? mime.startsWith("image/")
+      : /\.(png|jpe?g|webp|gif|bmp)$/i.test(p.soporte || ""),
+    isWord: mime
+      ? mime.includes("wordprocessingml") || mime.includes("msword")
+      : /\.(docx?|odt)$/i.test(p.soporte || ""),
+    isText: mime
+      ? mime.startsWith("text/") ||
+        mime.includes("json") ||
+        mime.includes("xml")
+      : /\.(txt|csv|md)$/i.test(p.soporte || ""),
+    hasArchivo: Boolean(
+      p.archivoUrl && String(p.archivoUrl).startsWith("data:")
+    ),
     estado: p.estado,
-    estadoEnvio: p.estado === 'PENDIENTE' ? 'APROBADO' : p.estado,
-    aprobadoPor: p.aprobadoPor || 'Registro Directo',
+    estadoEnvio: p.estado === "PENDIENTE" ? "APROBADO" : p.estado,
+    aprobadoPor: p.aprobadoPor || "Registro Directo",
     fechaAprobacion: p.fechaAprobacion,
     ocrConfidence: p.ocrConfidence,
     anio,
     mesNum,
     dia,
     createdAt: p.createdAt,
-    updatedAt: p.updatedAt
+    updatedAt: p.updatedAt,
+  };
+
+  // Solo se incluye el archivo binario cuando se pide explícitamente (detalle)
+  if (incluirArchivo) {
+    resultado.archivoBinario = p.archivoUrl || "";
   }
-}
+
+  return resultado;
+};
 
 export const PermisosService = {
   /**
-   * Asegura que existan registros base en la BD MongoDB
-   */
-  async asegurarSemillaInicial() {
-    // La base de datos inicia limpia y solo contiene los registros ingresados al sistema
-  },
-
-  /**
-   * Obtener lista de permisos con filtros
+   * Obtener lista de permisos con filtros.
+   * El listado NO incluye el Base64 del archivo (peso), solo metadatos e indicadores.
    */
   async listarPermisos(filtros = {}) {
     try {
-      const where = {}
-      if (filtros.estado) where.estado = filtros.estado
-      if (filtros.cedula) where.cedula = filtros.cedula
-      if (filtros.tipo) where.tipo = normalizarTipoEnum(filtros.tipo)
+      const where = {};
+      if (filtros.estado) where.estado = filtros.estado;
+      if (filtros.cedula) where.cedula = filtros.cedula;
+      if (filtros.tipo) where.tipo = normalizarTipoEnum(filtros.tipo);
 
       const resultados = await prisma.permiso.findMany({
         where,
-        orderBy: { createdAt: 'desc' }
-      })
+        orderBy: { createdAt: "desc" },
+      });
 
-      return resultados.map(formatearParaFrontend)
+      return resultados.map((p) => formatearParaFrontend(p, false));
     } catch (e) {
-      return []
+      console.error("[PermisosService.listarPermisos]", e.message);
+      return [];
     }
   },
 
   /**
-   * Obtener permiso por ID
+   * Obtener permiso por ID (incluye el archivo Base64 para el visor)
    */
   async obtenerPorId(id) {
     try {
-      const item = await prisma.permiso.findUnique({
-        where: { id }
-      })
-      return item ? formatearParaFrontend(item) : null
+      const item = await prisma.permiso.findUnique({ where: { id } });
+      return item ? formatearParaFrontend(item, true) : null;
     } catch (e) {
-      return null
+      // Puede ser un radicado en lugar de ObjectId
+      try {
+        const item = await prisma.permiso.findFirst({
+          where: { radicado: id },
+        });
+        return item ? formatearParaFrontend(item, true) : null;
+      } catch (err) {
+        return null;
+      }
     }
   },
 
   /**
-   * Crear nueva solicitud de permiso
+   * Genera el siguiente radicado secuencial real de la BD: PERM-<anio>-00XX
+   * (sin colisiones, contando solo registros del año en curso)
+   */
+  async generarRadicadoUnico() {
+    const anio = new Date().getFullYear();
+    const prefijo = `PERM-${anio}-`;
+
+    // Buscar el mayor consecutivo existente con ese prefijo
+    const existentes = await prisma.permiso.findMany({
+      where: { radicado: { startsWith: prefijo } },
+      select: { radicado: true },
+    });
+
+    let maxSeq = 0;
+    for (const r of existentes) {
+      const m = r.radicado.match(new RegExp(`^${prefijo}(\\d+)$`));
+      if (m) {
+        const seq = parseInt(m[1], 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    }
+
+    // Reintentos ante posibles colisiones por concurrencia
+    for (let intento = 1; intento <= 5; intento++) {
+      const candidato = `${prefijo}${String(maxSeq + intento).padStart(
+        4,
+        "0"
+      )}`;
+      const yaExiste = await prisma.permiso.findFirst({
+        where: { radicado: candidato },
+      });
+      if (!yaExiste) return candidato;
+    }
+
+    // Último recurso: timestamp
+    return `${prefijo}${Date.now()}`;
+  },
+
+  /**
+   * Crear nueva solicitud de permiso.
+   * El radicado SIEMPRE lo genera el backend (secuencial real) para evitar duplicados.
    */
   async crearPermiso(datos) {
-    const conteo = await prisma.permiso.count()
-    const anio = new Date().getFullYear()
-    
-    // Generar radicado único PERM-2026-00XX
-    const numeroSecuencial = conteo + 40
-    const radicado = datos.radicado || `PERM-${anio}-${String(numeroSecuencial).padStart(4, '0')}`
+    const radicado = await this.generarRadicadoUnico();
 
-    const tipoEnum = normalizarTipoEnum(datos.tipo || datos.tipoPermiso)
-    const fechaInicioParsed = parsearFecha(datos.fechaInicio)
-    const fechaFinParsed = parsearFecha(datos.fechaFin || datos.fechaInicio)
+    const tipoEnum = normalizarTipoEnum(datos.tipo || datos.tipoPermiso);
+    const fechaInicioParsed = parsearFecha(datos.fechaInicio);
+    const fechaFinParsed = parsearFecha(datos.fechaFin || datos.fechaInicio);
 
-    const ahora = new Date()
-    const hora24Actual = datos.hora24 || ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const ahora = new Date();
+    const hora24Actual =
+      datos.hora24 ||
+      ahora.toLocaleTimeString("es-CO", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+
+    const archivoUrl = sanitizarArchivo(
+      datos.archivoUrl || datos.customFileUrl
+    );
 
     const creado = await prisma.permiso.create({
       data: {
         radicado,
-        cedula: String(datos.cedula || '').trim(),
-        nombreFuncionario: datos.nombreFuncionario || datos.funcionario || '',
-        cargo: datos.cargo || 'Funcionario Acuasan',
-        dependencia: datos.dependencia || 'Operativa',
+        cedula: String(datos.cedula || "").trim(),
+        nombreFuncionario: datos.nombreFuncionario || datos.funcionario || "",
+        cargo: datos.cargo || "Funcionario Acuasan",
+        dependencia: datos.dependencia || "Operativa",
         tipo: tipoEnum,
         fechaInicio: fechaInicioParsed,
         fechaFin: fechaFinParsed,
-        duracion: datos.duracion || datos.horasCalculadas || '07:00 a 15:00 (8 horas)',
+        duracion:
+          datos.duracion || datos.horasCalculadas || "07:00 a 15:00 (8 horas)",
         hora24: hora24Actual,
-        justificacion: datos.justificacion || datos.motivo || '',
-        motivoManuscrito: datos.motivoManuscrito || '',
-        soporte: datos.soporte || datos.documentFileName || 'Permiso_Escaneado.pdf',
-        soporteUrl: datos.soporteUrl || '',
-        archivoUrl: datos.archivoUrl || datos.customFileUrl || '',
-        ocrConfidence: datos.ocrConfidence || 0.98,
+        justificacion: datos.justificacion || datos.motivo || "",
+        motivoManuscrito: datos.motivoManuscrito || "",
+        soporte:
+          datos.soporte || datos.documentFileName || "Permiso_Escaneado.pdf",
+        soporteUrl: datos.soporteUrl || "",
+        archivoUrl,
+        archivoMimeType: datos.archivoMimeType || "",
+        ocrConfidence:
+          datos.ocrConfidence || datos.confianzaOCR
+            ? Number(datos.ocrConfidence || datos.confianzaOCR)
+            : 0.98,
         ocrRawPayload: datos.ocrRawPayload || {},
-        observaciones: datos.observaciones || '',
-        estado: 'APROBADO',
-        aprobadoPor: datos.aprobadoPor || 'Registro Directo'
-      }
-    })
+        observaciones: datos.observaciones || "",
+        estado: "APROBADO",
+        aprobadoPor: datos.aprobadoPor || "Registro Directo",
+      },
+    });
 
-    return formatearParaFrontend(creado)
+    return formatearParaFrontend(creado, false);
   },
 
   /**
    * Actualizar permiso existente
    */
   async actualizarPermiso(id, datos) {
-    const tipoEnum = datos.tipo ? normalizarTipoEnum(datos.tipo) : undefined
-    const fechaInicioParsed = datos.fechaInicio ? parsearFecha(datos.fechaInicio) : undefined
-    const fechaFinParsed = datos.fechaFin ? parsearFecha(datos.fechaFin) : undefined
+    const tipoEnum =
+      datos.tipo || datos.tipoPermiso
+        ? normalizarTipoEnum(datos.tipo || datos.tipoPermiso)
+        : undefined;
+    const fechaInicioParsed = datos.fechaInicio
+      ? parsearFecha(datos.fechaInicio)
+      : undefined;
+    const fechaFinParsed = datos.fechaFin
+      ? parsearFecha(datos.fechaFin)
+      : undefined;
+
+    const archivoUrl = sanitizarArchivo(
+      datos.archivoUrl || datos.customFileUrl
+    );
 
     const actualizado = await prisma.permiso.update({
       where: { id },
       data: {
         cedula: datos.cedula ? String(datos.cedula).trim() : undefined,
-        nombreFuncionario: datos.nombreFuncionario || datos.funcionario || undefined,
+        nombreFuncionario:
+          datos.nombreFuncionario || datos.funcionario || undefined,
         cargo: datos.cargo || undefined,
         dependencia: datos.dependencia || undefined,
         tipo: tipoEnum,
@@ -196,40 +318,35 @@ export const PermisosService = {
         motivoManuscrito: datos.motivoManuscrito || undefined,
         soporte: datos.soporte || datos.documentFileName || undefined,
         soporteUrl: datos.soporteUrl || undefined,
-        archivoUrl: datos.archivoUrl || datos.customFileUrl || undefined,
-        observaciones: datos.observaciones || undefined
-      }
-    })
+        archivoUrl: archivoUrl || undefined,
+        archivoMimeType: datos.archivoMimeType || undefined,
+        observaciones: datos.observaciones || undefined,
+      },
+    });
 
-    return formatearParaFrontend(actualizado)
+    return formatearParaFrontend(actualizado, false);
   },
 
   /**
-   * Eliminar un permiso
+   * Eliminar un permiso (por ID o radicado)
    */
   async eliminarPermiso(id) {
-    // Primero intentamos borrar por ID directo
     try {
-      await prisma.permiso.delete({
-        where: { id }
-      })
-      return true
+      await prisma.permiso.delete({ where: { id } });
+      return true;
     } catch (e) {
-      // Si falla, tal vez el ID es un radicado, así que lo buscamos primero
       try {
         const permiso = await prisma.permiso.findFirst({
-          where: { radicado: id }
-        })
+          where: { radicado: id },
+        });
         if (permiso) {
-          await prisma.permiso.delete({
-            where: { id: permiso.id }
-          })
-          return true
+          await prisma.permiso.delete({ where: { id: permiso.id } });
+          return true;
         }
       } catch (err) {
-        return false
+        return false;
       }
-      return false
+      return false;
     }
   },
 
@@ -241,12 +358,12 @@ export const PermisosService = {
       where: { id },
       data: {
         estado,
-        aprobadoPor: aprobadoPor || 'Gerencia General Acuasan',
+        aprobadoPor: aprobadoPor || "Gerencia General Acuasan",
         observaciones: observaciones || undefined,
-        fechaAprobacion: new Date()
-      }
-    })
+        fechaAprobacion: new Date(),
+      },
+    });
 
-    return formatearParaFrontend(actualizado)
-  }
-}
+    return formatearParaFrontend(actualizado, false);
+  },
+};

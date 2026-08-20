@@ -620,7 +620,7 @@
                     class="btn btn-sm btn-outline-primary fw-semibold d-inline-flex align-items-center gap-1"
                     title="Abrir PDF en pestaña nueva del navegador"
                   >
-                    <span>↗️ Abrir PDF</span>
+                    <span>↗️ Abrir Archivo</span>
                   </a>
                 </div>
               </div>
@@ -648,6 +648,51 @@
                     </div>
                   </iframe>
                 </object>
+
+                <!-- IF UPLOADED IMAGE FILE (JPG/PNG/WEBP) -->
+                <div
+                  v-else-if="tieneArchivoAdjunto(permisoSeleccionado) && esImageDocumento(permisoSeleccionado)"
+                  class="w-100 text-center"
+                >
+                  <div class="badge bg-info text-dark mb-2 shadow-sm px-3 py-1 fw-bold">
+                    IMAGEN ADJUNTA ORIGINAL
+                  </div>
+                  <img
+                    :src="getUrlDocumento(permisoSeleccionado)"
+                    :alt="permisoSeleccionado?.soporte || 'Imagen del permiso'"
+                    class="img-fluid rounded shadow bg-white border w-100"
+                    style="max-width: 760px; object-fit: contain;"
+                  />
+                </div>
+
+                <!-- IF UPLOADED TXT / CSV FILE -->
+                <iframe
+                  v-else-if="tieneArchivoAdjunto(permisoSeleccionado) && esTextDocumento(permisoSeleccionado)"
+                  :src="getUrlDocumento(permisoSeleccionado)"
+                  class="w-100 rounded-3 border-0 bg-white"
+                  style="min-height: 520px;"
+                  title="Visor de Texto del Permiso"
+                ></iframe>
+
+                <!-- IF UPLOADED WORD FILE (no renderizable en navegador) -->
+                <div
+                  v-else-if="tieneArchivoAdjunto(permisoSeleccionado) && esWordDocumento(permisoSeleccionado)"
+                  class="w-100 d-flex flex-column align-items-center justify-content-center gap-3 p-5 text-center"
+                  style="min-height: 480px;"
+                >
+                  <div class="fs-1">ðŸ“„</div>
+                  <h6 class="text-white fw-bold mb-0">{{ permisoSeleccionado?.soporte || 'Documento de Word' }}</h6>
+                  <p class="text-white-50 mb-2 small">
+                    Los documentos de Word no se previsualizan dentro del navegador.
+                  </p>
+                  <a
+                    :href="getUrlDocumento(permisoSeleccionado)"
+                    target="_blank"
+                    class="btn btn-primary fw-semibold"
+                  >
+                    â¬‡ï¸ Abrir / Descargar Documento de Word
+                  </a>
+                </div>
 
                 <!-- IF IMAGES / SCANS OF SOLICITUD AND EVIDENCIA/EXCUSA -->
                 <div v-else class="w-100 d-flex flex-column align-items-center gap-3">
@@ -780,13 +825,25 @@ const onStorageChange = (e) => {
   }
 }
 
+const onVisibilityChange = () => {
+  if (document.visibilityState === 'visible') cargarPermisos()
+}
+
+// Listado automatico: refresco al montar, al volver la pestaÃ±a visible y por polling cada 15s
+let intervaloRefresco = null
+
 onMounted(() => {
   cargarPermisos()
   window.addEventListener('storage', onStorageChange)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  intervaloRefresco = setInterval(cargarPermisos, 15000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('storage', onStorageChange)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (intervaloRefresco) clearInterval(intervaloRefresco)
+  revocarUrlDocumento()
 })
 
 // Helper para parsear la duración a horas numéricas
@@ -950,10 +1007,30 @@ const diasDelMesGrid = computed(() => {
 // Modal y Acciones
 const empleadoPermisosSeleccionados = ref([])
 
-const abrirDetallePermisoModal = (item, listaCompleta = []) => {
+// URL de objeto (blob) del archivo original descargado desde el backend
+const urlDocumentoDescargado = ref('')
+
+const revocarUrlDocumento = () => {
+  if (urlDocumentoDescargado.value) {
+    URL.revokeObjectURL(urlDocumentoDescargado.value)
+    urlDocumentoDescargado.value = ''
+  }
+}
+
+const abrirDetallePermisoModal = async (item, listaCompleta = []) => {
   permisoSeleccionado.value = item
   empleadoPermisosSeleccionados.value = listaCompleta.length > 0 ? listaCompleta : [item]
   modalDetalleVisible.value = true
+
+  // Descargar el archivo original (PDF/Word/TXT/Imagen) guardado en la base de datos
+  revocarUrlDocumento()
+  if (item && item.id && item.hasArchivo) {
+    try {
+      urlDocumentoDescargado.value = await permisosService.obtenerArchivoPermiso(item.id)
+    } catch (e) {
+      console.warn('[Gerencia] No se pudo descargar el archivo del permiso:', e)
+    }
+  }
 }
 
 const verDetallesEmpleado = (emp) => {
@@ -964,18 +1041,39 @@ const verDetallesEmpleado = (emp) => {
 
 const getUrlDocumento = (p) => {
   if (!p) return '/scans/solicitud_permiso_scan.png'
-  if (p.archivoUrl && p.archivoUrl.trim()) return p.archivoUrl
+  if (urlDocumentoDescargado.value) return urlDocumentoDescargado.value
+  if (p.archivoUrl && String(p.archivoUrl).startsWith('data:')) return p.archivoUrl
   if (p.customFileUrl && p.customFileUrl.trim()) return p.customFileUrl
   if (p.soporteUrl && p.soporteUrl.trim()) return p.soporteUrl
   return '/scans/solicitud_permiso_scan.png'
 }
 
 const esPdfDocumento = (p) => {
-  const url = getUrlDocumento(p)
+  if (p?.archivoMimeType === 'application/pdf') return true
   if (p?.isPdf) return true
   if (p?.soporte && p.soporte.toLowerCase().endsWith('.pdf')) return true
-  return url.toLowerCase().includes('.pdf') || url.startsWith('blob:')
+  return false
 }
+
+const esWordDocumento = (p) => {
+  const m = p?.archivoMimeType || ''
+  if (/word|wordprocessingml/i.test(m)) return true
+  return /\.(docx?|odt)$/i.test(p?.soporte || '')
+}
+
+const esTextDocumento = (p) => {
+  const m = p?.archivoMimeType || ''
+  if (m.startsWith('text/')) return true
+  return /\.(txt|csv|md)$/i.test(p?.soporte || '')
+}
+
+const esImageDocumento = (p) => {
+  const m = p?.archivoMimeType || ''
+  if (m.startsWith('image/')) return true
+  return /\.(png|jpe?g|webp|gif|bmp)$/i.test(p?.soporte || '')
+}
+
+const tieneArchivoAdjunto = (p) => Boolean(p && (p.hasArchivo || p.archivoBinario))
 
 const getIniciales = (nombre) => {
   if (!nombre) return 'U'

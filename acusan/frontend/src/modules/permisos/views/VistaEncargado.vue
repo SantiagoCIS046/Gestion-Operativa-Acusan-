@@ -83,17 +83,17 @@
           <label
             class="btn btn-primary fw-bold d-inline-flex align-items-center gap-2 shadow-sm rounded-3 mb-0"
             style="background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
-            title="Seleccionar archivo PDF escaneado del computador"
+            title="Seleccionar archivo PDF, Word, TXT o imagen del computador"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <span>Insertar Permiso Escaneado (PDF/PC)</span>
+            <span>Insertar Permiso Escaneado (PDF/Word/TXT/Imagen)</span>
             <input
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
               @change="handleScannedFileUpload"
               hidden
             />
@@ -137,10 +137,10 @@
 
               <div v-if="documentLoaded">
                 <label class="btn btn-sm btn-outline-secondary fw-semibold mb-0" style="cursor: pointer;" title="Cambiar archivo">
-                  <span>🔄 Cambiar PDF</span>
+                  <span>🔄 Cambiar Archivo</span>
                   <input
                     type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
                     @change="handleScannedFileUpload"
                     hidden
                   />
@@ -157,7 +157,7 @@
                 </div>
                 <h5 class="fw-bold mb-2 text-primary" style="color: #004884 !important;">Bandeja de Permisos Lista</h5>
                 <p class="text-muted small mb-3">
-                  Inserte el archivo PDF escaneado desde su computador para visualizar el documento original y extraer su información automáticamente.
+                  Inserte el archivo PDF, Word, TXT o imagen desde su computador para visualizar el documento original y extraer su información automáticamente.
                 </p>
                 <label class="btn btn-primary fw-bold mx-auto mb-0" style="background: #004884; cursor: pointer;">
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="me-1">
@@ -165,10 +165,10 @@
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
-                  <span>Seleccionar Permiso Escaneado (PDF/PC)</span>
+                  <span>Seleccionar Permiso Escaneado (PDF/Word/TXT/Imagen)</span>
                   <input
                     type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
                     @change="handleScannedFileUpload"
                     hidden
                   />
@@ -192,6 +192,30 @@
                     title="Visor PDF Original"
                   ></iframe>
                 </object>
+
+                <!-- If it's a Word document: panel with the extracted document text -->
+                <div v-else-if="isWordFile && customFileUrl" class="w-100 h-100 bg-white overflow-auto p-3">
+                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-2 border-bottom">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge bg-primary text-white">DOCX / Word</span>
+                      <span class="text-muted small text-truncate">{{ documentFileName }}</span>
+                    </div>
+                    <a :href="displayFileUrl" :download="documentFileName" class="btn btn-sm btn-outline-primary fw-semibold">Descargar</a>
+                  </div>
+                  <pre class="mb-0 small text-dark" style="white-space: pre-wrap; word-break: break-word; font-family: inherit;">{{ textoDocumentoExtraido || 'No se pudo extraer el texto del documento Word. Verifique que sea un archivo .docx valido.' }}</pre>
+                </div>
+
+                <!-- If it's a plain text file -->
+                <div v-else-if="isTextFile && customFileUrl" class="w-100 h-100 bg-white overflow-auto p-3">
+                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-2 border-bottom">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge bg-secondary text-white">TXT / Texto</span>
+                      <span class="text-muted small text-truncate">{{ documentFileName }}</span>
+                    </div>
+                    <a :href="displayFileUrl" :download="documentFileName" class="btn btn-sm btn-outline-primary fw-semibold">Descargar</a>
+                  </div>
+                  <pre class="mb-0 small text-dark" style="white-space: pre-wrap; word-break: break-word; font-family: inherit;">{{ textoDocumentoExtraido }}</pre>
+                </div>
 
                 <!-- If user uploaded a custom image from PC -->
                 <div v-else-if="customFileUrl && !isPdfFile" class="w-100 text-center p-2">
@@ -828,6 +852,14 @@ const documentFileName = ref('')
 const customFileUrl = ref('')
 const isPdfFile = ref(false)
 
+// Indicadores del tipo de archivo cargado (Word / TXT / Imagen) y su texto extraido
+const isWordFile = ref(false)
+const isTextFile = ref(false)
+const isImageFile = ref(false)
+const textoDocumentoExtraido = ref('')
+// MIME type real del archivo cargado (se guarda en la base de datos)
+const archivoMimeType = ref('')
+
 // Convierte un Data URL (Base64) muy largo en un Blob URL para evitar crashes en el iframe de Chromium
 const displayFileUrl = computed(() => {
   if (!customFileUrl.value || !customFileUrl.value.startsWith('data:')) return customFileUrl.value
@@ -847,6 +879,46 @@ const displayFileUrl = computed(() => {
     return customFileUrl.value
   }
 })
+
+// Detecta el tipo de archivo por MIME y extension
+const detectarTipoArchivo = (file) => {
+  const nombre = ((file && file.name) || '').toLowerCase()
+  const mime = ((file && file.type) || '').toLowerCase()
+  return {
+    esPdf: mime === 'application/pdf' || nombre.endsWith('.pdf'),
+    esWord: /\/(msword|wordprocessingml)/.test(mime) || /\.(docx?|odt)$/.test(nombre),
+    esTexto: mime.startsWith('text/') || /\.(txt|csv|md)$/.test(nombre),
+    esImagen: mime.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/.test(nombre),
+    esDocAntiguo: /\.doc$/.test(nombre)
+  }
+}
+
+// Aplica el tipo detectado a los indicadores del visor
+const aplicarTipoArchivoAlVisor = (tipo, mime = '') => {
+  isPdfFile.value = Boolean(tipo.esPdf)
+  isWordFile.value = Boolean(tipo.esWord) && !tipo.esPdf
+  isTextFile.value = Boolean(tipo.esTexto) && !tipo.esPdf && !tipo.esWord
+  isImageFile.value = Boolean(tipo.esImagen)
+  archivoMimeType.value = mime || ''
+}
+
+// Extrae el MIME de un Data URL (Base64)
+const mimeDesdeDataUrl = (dataUrl) => {
+  const m = /^data:([^;,]+)[;,]/.exec(dataUrl || '')
+  return m ? m[1] : ''
+}
+
+// Clasifica un archivo por MIME y nombre para el visor
+const clasificarPorMime = (mime, nombreArchivo = '') => {
+  const m = (mime || '').toLowerCase()
+  const n = (nombreArchivo || '').toLowerCase()
+  return {
+    esPdf: m === 'application/pdf' || n.endsWith('.pdf'),
+    esWord: /\/(msword|wordprocessingml)/.test(m) || /\.(docx?|odt)$/.test(n),
+    esTexto: m.startsWith('text/plain') || /\.(txt|csv|md)$/.test(n),
+    esImagen: m.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/.test(n)
+  }
+}
 
 const isScanningOCR = ref(false)
 const isSubmitting = ref(false)
@@ -1221,11 +1293,8 @@ const totalPendientesEnvioPeriodo = computed(() => {
   return historialFiltrado.value.filter(item => item.estadoEnvio === 'PENDIENTE_ENVIO').length
 })
 
-const limpiarFormularioYVisor = () => {
-  documentLoaded.value = false
-  documentFileName.value = ''
-  customFileUrl.value = ''
-  isPdfFile.value = false
+// Reinicia unicamente los campos del formulario (sin tocar el visor)
+const resetFormData = () => {
   formData.nombreFuncionario = ''
   formData.cedula = ''
   formData.cargo = ''
@@ -1242,6 +1311,24 @@ const limpiarFormularioYVisor = () => {
   formData.id = ''
   formData.radicado = ''
   formData.createdAt = ''
+}
+
+// Limpia el formulario y el visor por completo para procesar una nueva solicitud
+const limpiarFormularioYVisor = () => {
+  documentLoaded.value = false
+  documentFileName.value = ''
+  customFileUrl.value = ''
+  isPdfFile.value = false
+  isWordFile.value = false
+  isTextFile.value = false
+  isImageFile.value = false
+  textoDocumentoExtraido.value = ''
+  archivoMimeType.value = ''
+  resetFormData()
+  // Reiniciar los inputs de archivo para permitir subir el mismo archivo de nuevo
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('input[type=file]').forEach((input) => { input.value = '' })
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1694,7 +1781,34 @@ const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
   let textoPagina1 = ''
   let textoCompleto = ''
 
-  if (isPdf) {
+  // --- WORD / ODT: extraccion de texto con mammoth ---
+  if (isWordFile.value) {
+    try {
+      ocrStepMessage.value = 'Leyendo documento de Word...'
+      ocrProgress.value = 40
+      const mammoth = await import('mammoth')
+      const arr = base64ToUint8(dataUrl)
+      const arrayBuffer = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength)
+      const resultado = await mammoth.extractRawText({ arrayBuffer })
+      textoCompleto = (resultado && resultado.value) ? resultado.value : ''
+      textoPagina1 = textoCompleto.split(/\n\s*\n/)[0] || textoCompleto
+      textoDocumentoExtraido.value = textoCompleto
+    } catch (wordErr) {
+      console.warn('[Word Extract Warning]', wordErr)
+      textoDocumentoExtraido.value = ''
+    }
+  } else if (isTextFile.value) {
+    // --- TXT / texto plano: decodificacion directa UTF-8 ---
+    try {
+      ocrStepMessage.value = 'Leyendo archivo de texto...'
+      ocrProgress.value = 40
+      textoCompleto = new TextDecoder('utf-8').decode(base64ToUint8(dataUrl))
+      textoPagina1 = textoCompleto
+      textoDocumentoExtraido.value = textoCompleto
+    } catch (txtErr) {
+      console.warn('[TXT Extract Warning]', txtErr)
+    }
+  } else if (isPdf) {
     try {
       await initPdfWorker()
       const { getDocument } = await import('pdfjs-dist')
@@ -1772,10 +1886,23 @@ const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
 // 🎯 MANEJADOR PRINCIPAL RESILIENTE CON RESPUESTA INMEDIATA
 const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
+  // Reiniciar el input de archivo para permitir subir el mismo archivo nuevamente
+  if (e && e.target) e.target.value = ''
   if (!file) return
 
+  // Limpiar los campos de la carga anterior para no mezclar informacion
+  resetFormData()
+
+  // Detectar el tipo real de archivo cargado (PDF / Word / TXT / Imagen)
+  const tipoArchivo = detectarTipoArchivo(file)
+  aplicarTipoArchivoAlVisor(tipoArchivo, file.type || '')
+  textoDocumentoExtraido.value = ''
+
+  if (tipoArchivo.esDocAntiguo) {
+    lanzarAlertaBootstrap('warning', 'Formato Word Antiguo', 'El archivo .doc (Word 97-2003) puede no leerse completo. Se recomienda guardarlo como .docx o PDF.')
+  }
+
   documentFileName.value = file.name
-  isPdfFile.value = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
   documentLoaded.value = true
   isScanningOCR.value = true
   ocrProgress.value = 10
@@ -1833,21 +1960,9 @@ const handleScannedFileUpload = async (e) => {
 
 
 // 🎯 CARGAR PERMISO ORIGINAL DESDE EL HISTORIAL (MUESTRA EL DOCUMENTO ESPECÍFICO DEL PERMISO SELECCIONADO)
-const cargarEnFormulario = (item) => {
+const cargarEnFormulario = async (item) => {
   documentLoaded.value = true
-  documentFileName.value = item.soporte || `Permiso_${(item.funcionario || 'Funcionario').replace(/\s+/g, '_')}_${item.anio || anioActual}.pdf`
-  
-  const docUrl = item.archivoUrl || item.customFileUrl || item.soporteUrl || ''
-  if (docUrl) {
-    customFileUrl.value = docUrl
-    isPdfFile.value = docUrl.startsWith('data:application/pdf') || 
-                      docUrl.toLowerCase().includes('.pdf') || 
-                      Boolean(item.isPdf) || 
-                      Boolean(item.soporte && item.soporte.toLowerCase().endsWith('.pdf'))
-  } else {
-    customFileUrl.value = ''
-    isPdfFile.value = false
-  }
+  documentFileName.value = item.soporte || `Permiso_${(item.funcionario || 'Funcionario').replace(/\s+/g, '_')} _${item.anio || anioActual}.pdf`
 
   formData.nombreFuncionario = item.funcionario || item.nombreFuncionario || ''
   formData.cedula = item.cedula || ''
@@ -1856,6 +1971,7 @@ const cargarEnFormulario = (item) => {
   formData.tipoPermiso = item.tipo || item.tipoPermiso || 'Compensatorio'
   formData.motivo = item.motivo || item.justificacion || ''
   formData.motivoManuscrito = item.motivoManuscrito || item.motivo || ''
+  formData.observaciones = item.observaciones || formData.observaciones
   formData.id = item.id || ''
   formData.radicado = item.radicado || ''
   formData.createdAt = item.createdAt || ''
@@ -1864,9 +1980,68 @@ const cargarEnFormulario = (item) => {
   formData.horasCalculadas = item.duracion || '07:00 a 15:00 (8 horas)'
   formData.fechaInicio = item.fechaInicio || item.fechaEntrega || `${String(item.dia).padStart(2, '0')}/${String(item.mesNum).padStart(2, '0')}/${item.anio}`
   formData.fechaFin = item.fechaFin || item.fechaInicio || item.fechaEntrega || `${String(item.dia).padStart(2, '0')}/${String(item.mesNum).padStart(2, '0')}/${item.anio}`
-  
+
+  // Configura el visor a partir de un Data URL (Base64)
+  const mostrarDocumentoDesdeDataUrl = async (dataUrl) => {
+    const mime = mimeDesdeDataUrl(dataUrl)
+    aplicarTipoArchivoAlVisor(clasificarPorMime(mime, documentFileName.value), mime)
+    customFileUrl.value = dataUrl
+    if (isWordFile.value || isTextFile.value) {
+      try {
+        if (isTextFile.value) {
+          textoDocumentoExtraido.value = new TextDecoder('utf-8').decode(base64ToUint8(dataUrl))
+        } else {
+          const mammoth = await import('mammoth')
+          const arr = base64ToUint8(dataUrl)
+          const arrayBuffer = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength)
+          const resultado = await mammoth.extractRawText({ arrayBuffer })
+          textoDocumentoExtraido.value = (resultado && resultado.value) ? resultado.value : ''
+        }
+      } catch (e) {
+        console.warn('[Preview Extract Warning]', e)
+        textoDocumentoExtraido.value = ''
+      }
+    } else {
+      textoDocumentoExtraido.value = ''
+    }
+  }
+
+  const limpiarVisor = () => {
+    customFileUrl.value = ''
+    aplicarTipoArchivoAlVisor({ esPdf: false, esWord: false, esTexto: false, esImagen: false })
+    textoDocumentoExtraido.value = ''
+  }
+
+  const docUrl = item.archivoUrl || item.customFileUrl || item.soporteUrl || ''
+  if (docUrl.startsWith('data:')) {
+    await mostrarDocumentoDesdeDataUrl(docUrl)
+  } else if (item.id) {
+    // El listado ya no viaja con el Base64: se solicita el archivo original al backend
+    try {
+      const blobUrl = await permisosService.obtenerArchivoPermiso(item.id)
+      const blob = await (await fetch(blobUrl)).blob()
+      const dataUrl = await new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => resolve('')
+        reader.readAsDataURL(blob)
+      })
+      URL.revokeObjectURL(blobUrl)
+      if (dataUrl) {
+        await mostrarDocumentoDesdeDataUrl(dataUrl)
+      } else {
+        limpiarVisor()
+      }
+    } catch (err) {
+      console.warn('[cargarEnFormulario] No se pudo recuperar el archivo original:', err)
+      limpiarVisor()
+    }
+  } else {
+    limpiarVisor()
+  }
+
   vistaActiva.value = 'formulario'
-  lanzarAlertaBootstrap('info', 'Documento del Permiso Cargado', `Se visualiza el PDF/soporte correspondiente a la solicitud #${item.radicado} (${item.funcionario}).`)
+  lanzarAlertaBootstrap('info', 'Documento del Permiso Cargado', `Se visualiza el documento correspondiente a la solicitud #${item.radicado} (${item.funcionario}).`)
 }
 
 // Cargar historial real desde el Backend / MongoDB Atlas
@@ -1951,6 +2126,7 @@ const confirmarYEnviar = async () => {
       soporte: documentFileName.value || 'Permiso_Escaneado.pdf',
       archivoUrl: customFileUrl.value,
       isPdf: isPdfFile.value,
+      archivoMimeType: archivoMimeType.value || mimeDesdeDataUrl(customFileUrl.value),
       id: formData.id || undefined,
       radicado: formData.radicado || undefined,
       createdAt: formData.createdAt || undefined
@@ -1983,7 +2159,8 @@ const confirmarYEnviar = async () => {
         motivo: formData.motivo,
         soporte: documentFileName.value || 'Permiso_Escaneado.pdf',
         archivoUrl: customFileUrl.value,
-        isPdf: isPdfFile.value
+        isPdf: isPdfFile.value,
+        archivoMimeType: archivoMimeType.value || ''
       }
     }
 

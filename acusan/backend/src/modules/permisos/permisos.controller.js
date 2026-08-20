@@ -135,6 +135,37 @@ export const PermisosController = {
   },
 
   /**
+   * Servir el archivo original (PDF/Word/Imagen) adjunto al permiso
+   * GET /api/permisos/:id/archivo
+   * Devuelve el binario real con su Content-Type para visor/descarga
+   */
+  async servirArchivo(req, res) {
+    try {
+      const { id } = req.params
+      const permiso = await PermisosService.obtenerPorId(id)
+      if (!permiso || !permiso.archivoBinario) {
+        return res.status(404).json({ success: false, message: 'El permiso no tiene archivo adjunto' })
+      }
+
+      const dataUrl = permiso.archivoBinario
+      const matches = dataUrl.match(/^data:([^;]+);base64,(.*)$/s)
+      if (!matches) {
+        return res.status(422).json({ success: false, message: 'Formato de archivo almacenado no soportado' })
+      }
+
+      const mime = permiso.archivoMimeType || matches[1] || 'application/octet-stream'
+      const buffer = Buffer.from(matches[2], 'base64')
+      const nombreSeguro = (permiso.soporte || 'Permiso_Escaneado').replace(/["\r\n]/g, '')
+
+      res.setHeader('Content-Type', mime)
+      res.setHeader('Content-Disposition', `inline; filename="${nombreSeguro}"`)
+      res.setHeader('Cache-Control', 'private, max-age=300')
+      return res.send(buffer)
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Error al servir el archivo del permiso', error: error.message })
+    }
+  },
+  /**
    * Actualizar permiso existente
    * PUT /api/permisos/:id
    */

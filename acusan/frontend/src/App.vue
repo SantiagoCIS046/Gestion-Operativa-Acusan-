@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-shell">
     <!-- ===== LAYOUT CON SIDEBAR: Solo visible cuando hay sesión activa ===== -->
     <template v-if="estaAutenticado">
@@ -136,6 +136,11 @@
     </template>
 
     <!-- ========================================== -->
+    <!-- SISTEMA GLOBAL DE NOTIFICACIONES PROFESIONALES (TOASTS) -->
+    <!-- ========================================== -->
+    <NotificacionesToast />
+
+    <!-- ========================================== -->
     <!-- MODAL BOOTSTRAP COMPACTO Y PROFESIONAL: CIERRE DE SESIÓN -->
     <!-- ========================================== -->
     <transition name="fade">
@@ -180,6 +185,7 @@
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import authService from './modules/auth/services/authService.js'
+import NotificacionesToast from './components/NotificacionesToast.vue'
 
 const router = useRouter()
 const route = useRoute()
