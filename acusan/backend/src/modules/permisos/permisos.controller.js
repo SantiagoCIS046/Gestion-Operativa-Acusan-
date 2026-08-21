@@ -1,4 +1,5 @@
 import { PermisosService } from './permisos.service.js'
+import logger from '../../config/logger.js'
 
 export const PermisosController = {
   /**
@@ -13,6 +14,7 @@ export const PermisosController = {
         data: permisos
       })
     } catch (error) {
+      logger.error('PERMISOS', 'LISTAR ERR', error.message)
       res.status(500).json({
         success: false,
         message: 'Error al listar permisos',
@@ -34,6 +36,7 @@ export const PermisosController = {
         data: permisos
       })
     } catch (error) {
+      logger.error('PERMISOS', 'ENCARGADO ERR', error.message)
       res.status(500).json({
         success: false,
         message: 'Error al obtener permisos para el encargado',
@@ -55,6 +58,7 @@ export const PermisosController = {
         data: permisos
       })
     } catch (error) {
+      logger.error('PERMISOS', 'GERENCIA ERR', error.message)
       res.status(500).json({
         success: false,
         message: 'Error al obtener permisos para consulta gerencial',
@@ -75,6 +79,7 @@ export const PermisosController = {
       }
       res.json({ success: true, data: permiso })
     } catch (error) {
+      logger.error('PERMISOS', 'DETALLE ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al obtener permiso', error: error.message })
     }
   },
@@ -97,12 +102,20 @@ export const PermisosController = {
 
       const nuevoPermiso = await PermisosService.crearPermiso(req.body)
 
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.create(
+        'PERMISOS',
+        'OCR VALIDAR',
+        `Por: ${usuario} | Funcionario: ${nombre} | Cédula: ${cedula}`
+      )
+
       res.status(201).json({
         success: true,
         message: 'Validación de OCR guardada y radicada exitosamente',
         data: nuevoPermiso
       })
     } catch (error) {
+      logger.error('PERMISOS', 'OCR ERROR', error.message)
       res.status(500).json({ success: false, message: 'Error al registrar validación OCR', error: error.message })
     }
   },
@@ -113,7 +126,7 @@ export const PermisosController = {
    */
   async registrar(req, res) {
     try {
-      const { cedula, nombreFuncionario, funcionario } = req.body
+      const { cedula, nombreFuncionario, funcionario, tipoPermiso, tipo } = req.body
       const nombre = nombreFuncionario || funcionario
 
       if (!cedula || !nombre) {
@@ -124,12 +137,21 @@ export const PermisosController = {
       }
 
       const nuevoPermiso = await PermisosService.crearPermiso(req.body)
+
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.create(
+        'PERMISOS',
+        'CREAR',
+        `Por: ${usuario} | Funcionario: ${nombre} | Cédula: ${cedula} | Tipo: ${tipoPermiso || tipo || '?'}`
+      )
+
       res.status(201).json({
         success: true,
         message: 'Solicitud de permiso registrada correctamente',
         data: nuevoPermiso
       })
     } catch (error) {
+      logger.error('PERMISOS', 'CREAR ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al registrar permiso', error: error.message })
     }
   },
@@ -137,7 +159,6 @@ export const PermisosController = {
   /**
    * Servir el archivo original (PDF/Word/Imagen) adjunto al permiso
    * GET /api/permisos/:id/archivo
-   * Devuelve el binario real con su Content-Type para visor/descarga
    */
   async servirArchivo(req, res) {
     try {
@@ -162,9 +183,11 @@ export const PermisosController = {
       res.setHeader('Cache-Control', 'private, max-age=300')
       return res.send(buffer)
     } catch (error) {
+      logger.error('PERMISOS', 'ARCHIVO ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al servir el archivo del permiso', error: error.message })
     }
   },
+
   /**
    * Actualizar permiso existente
    * PUT /api/permisos/:id
@@ -173,12 +196,17 @@ export const PermisosController = {
     try {
       const { id } = req.params
       const actualizado = await PermisosService.actualizarPermiso(id, req.body)
+
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.update('PERMISOS', 'ACTUALIZAR', `Por: ${usuario} | ID: ${id}`)
+
       res.json({
         success: true,
         message: 'Permiso actualizado correctamente',
         data: actualizado
       })
     } catch (error) {
+      logger.error('PERMISOS', 'ACTUALIZ ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al actualizar permiso', error: error.message })
     }
   },
@@ -194,11 +222,16 @@ export const PermisosController = {
       if (!eliminado) {
         return res.status(404).json({ success: false, message: 'No se encontró el permiso a eliminar' })
       }
+
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.delete('PERMISOS', 'ELIMINAR', `Por: ${usuario} | ID: ${id}`)
+
       res.json({
         success: true,
         message: 'Permiso eliminado correctamente'
       })
     } catch (error) {
+      logger.error('PERMISOS', 'ELIMINAR ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al eliminar permiso', error: error.message })
     }
   },
@@ -225,12 +258,21 @@ export const PermisosController = {
         observaciones
       })
 
+      const usuario = req.usuario?.email || 'anónimo'
+      const nivel = estado === 'APROBADO' ? 'success' : 'warn'
+      logger[nivel](
+        'PERMISOS',
+        'DICTAMINAR',
+        `Por: ${usuario} | ID: ${id} | Estado: ${estado} | Aprobó: ${aprobadoPor || 'Gerencia'}`
+      )
+
       res.json({
         success: true,
         message: `Permiso ${estado.toLowerCase()} correctamente`,
         data: permisoActualizado
       })
     } catch (error) {
+      logger.error('PERMISOS', 'DICTAM ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al actualizar dictamen de permiso', error: error.message })
     }
   }

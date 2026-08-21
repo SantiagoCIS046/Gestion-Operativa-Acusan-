@@ -1,4 +1,5 @@
 import prisma from '../../config/prisma.js'
+import logger from '../../config/logger.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 
@@ -69,23 +70,19 @@ export const AuthService = {
               activo: true
             }
           })
-          console.log(`✔ Usuario oficial ${u.email} (${u.rol}) asegurado en BD.`)
+          logger.success('AUTH', 'SEED CREAR', `${u.email} (${u.rol}) — creado en BD`)
         } else {
-          // Actualizar nombre y rol de Román o Eliana si ya existen
+          // Actualizar nombre y cargo si ya existen
           await prisma.usuario.update({
             where: { id: existe.id },
-            data: {
-              nombre: u.nombre,
-              cargo: u.cargo
-            }
+            data: { nombre: u.nombre, cargo: u.cargo }
           })
         }
       }
     } catch (err) {
-      console.warn('Error al verificar usuarios iniciales:', err.message)
+      logger.warn('AUTH', 'SEED ERROR', err.message)
     }
   },
-
 
   /**
    * Login: verifica credenciales, registra el acceso y retorna token JWT + datos de usuario
@@ -100,15 +97,18 @@ export const AuthService = {
     })
 
     if (!usuario) {
+      logger.warn('AUTH', 'LOGIN FAIL', `Email no registrado: ${email} | IP: ${meta.ip || '?'}`)
       throw { status: 401, message: 'Credenciales inválidas. Verifique su correo o contraseña.' }
     }
 
     if (!usuario.activo) {
+      logger.warn('AUTH', 'LOGIN BLOCK', `Cuenta desactivada: ${email} | IP: ${meta.ip || '?'}`)
       throw { status: 403, message: 'Su cuenta está desactivada. Contacte al administrador.' }
     }
 
     const passwordValido = await bcrypt.compare(password, usuario.password)
     if (!passwordValido) {
+      logger.warn('AUTH', 'LOGIN FAIL', `Contraseña incorrecta: ${email} | IP: ${meta.ip || '?'}`)
       throw { status: 401, message: 'Credenciales inválidas. Verifique su correo o contraseña.' }
     }
 
@@ -135,8 +135,14 @@ export const AuthService = {
         }
       })
     } catch (auditError) {
-      console.warn('No se pudo registrar el acceso (no crítico):', auditError.message)
+      logger.warn('AUTH', 'AUDIT WARN', `No se pudo registrar acceso: ${auditError.message}`)
     }
+
+    logger.success(
+      'AUTH',
+      'LOGIN OK',
+      `${usuario.email} (${usuario.rol}) — "${usuario.cargo}" | IP: ${meta.ip || '?'}`
+    )
 
     const payload = {
       id: usuario.id,
@@ -176,16 +182,15 @@ export const AuthService = {
 
     const emailFormateado = email.toLowerCase().trim()
 
-    // Verificar que el correo no exista
     const existente = await prisma.usuario.findUnique({
       where: { email: emailFormateado }
     })
 
     if (existente) {
+      logger.warn('AUTH', 'REG. DUPLIC', `Intento de registro con email ya existente: ${emailFormateado}`)
       throw { status: 400, message: 'El correo electrónico ya se encuentra registrado en el sistema.' }
     }
 
-    // Normalizar rol
     const rolesValidos = ['ENCARGADO', 'GERENCIA', 'OPERATIVO', 'ADMIN', 'RADICADOS']
     const rolNormalizado = rol.toUpperCase().trim()
 
@@ -207,7 +212,12 @@ export const AuthService = {
       }
     })
 
-    // Retornar token e información sin la contraseña
+    logger.success(
+      'AUTH',
+      'REGISTRO',
+      `Nuevo usuario: ${nuevoUsuario.email} | Rol: ${rolNormalizado} | Cargo: ${nuevoUsuario.cargo}`
+    )
+
     const payload = {
       id: nuevoUsuario.id,
       nombre: nuevoUsuario.nombre,
@@ -250,8 +260,9 @@ export const AuthService = {
       throw { status: 404, message: 'No existe ningún usuario registrado con ese correo electrónico.' }
     }
 
-    // Generar código de 6 dígitos simulando envío por correo institucional
     const codigoVerificacion = Math.floor(100000 + Math.random() * 900000).toString()
+
+    logger.info('AUTH', 'RECUP. PWD', `Código de recuperación generado para: ${emailFormateado}`)
 
     return {
       email: usuario.email,
@@ -288,6 +299,8 @@ export const AuthService = {
       data: { password: hashNuevaPassword }
     })
 
+    logger.success('AUTH', 'RESET PWD', `Contraseña actualizada para: ${emailFormateado}`)
+
     return {
       email: usuario.email,
       message: 'Contraseña actualizada correctamente en la base de datos de Acuasan. Ya puede ingresar con su nueva clave.'
@@ -305,4 +318,3 @@ export const AuthService = {
     }
   }
 }
-

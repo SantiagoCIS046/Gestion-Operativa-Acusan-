@@ -388,44 +388,81 @@
         </div>
       </div>
 
-      <!-- Tabla Corporativa Oficial -->
-      <div class="corporate-table-wrapper">
-        <table class="corporate-table">
-          <thead>
-            <tr>
-              <th style="width: 140px;">N° RADICADO</th>
-              <th style="width: 110px;">FECHA REG.</th>
-              <th style="width: 230px;">REMITENTE / ENTIDAD</th>
-              <th>ASUNTO / DESTINATARIO</th>
-              <th style="width: 140px;">RESPONSABLE</th>
-              <th style="width: 115px; text-align: center;">ESTADO</th>
-              <th style="width: 140px;">VENCIMIENTO / SLA</th>
-              <th style="width: 100px; text-align: center;">ACCIONES</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="cargandoTabla && !listaRadicados.length">
-              <td colspan="8" class="text-center py-5 text-muted">
-                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                <span>Cargando registros oficiales de Acuasan...</span>
-              </td>
-            </tr>
-            <tr v-else-if="!radicadosFiltrados.length">
-              <td colspan="8" class="text-center py-5">
-                <div class="empty-state-box">
-                  <span class="fs-1 d-block mb-2">📂</span>
-                  <strong class="d-block text-dark mb-1">No se encontraron radicados</strong>
-                  <p class="text-muted mb-0" style="font-size: 0.8rem;">No hay registros que coincidan con los filtros aplicados.</p>
-                </div>
-              </td>
-            </tr>
-            <tr 
-              v-else 
-              v-for="rad in radicadosFiltrados" 
-              :key="rad.id"
-              :class="['corporate-row', rad.estado === 'Resuelto' ? 'row-resuelto' : 'row-activo']"
-            >
-              <!-- N° Radicado -->
+      <!-- ═══════════════ CUADRILLA OFICIAL ESTILO EXCEL ═══════════════ -->
+      <div class="excel-grid-container shadow-sm">
+        <!-- Excel Top Title Bar -->
+        <div class="excel-header-stripe">
+          <div class="excel-stripe-left">
+            <span class="excel-icon-logo">📑</span>
+            <span class="excel-tag">Acuasan_Libro_Radicados_Oficial_2026.xlsx</span>
+            <span class="excel-sheet-badge">Hoja 1: Ventanilla_Correspondencia</span>
+          </div>
+          <span class="excel-meta">Total Registros en Hoja: {{ radicadosFiltrados.length }}</span>
+        </div>
+
+        <!-- Excel Formula Bar (fx) -->
+        <div class="excel-formula-bar">
+          <div class="cell-name-box">A1</div>
+          <div class="fx-icon">fx</div>
+          <div class="formula-input">
+            <span class="formula-text">
+              =RESUMEN_RADICADOS() &rarr; Total Radicados: <strong>{{ listaRadicados.length }}</strong> | Resueltos: <strong>{{ statsResueltos }}</strong> | Pendientes en Término: <strong>{{ statsPendientes }}</strong> | Vencidos / Críticos: <strong>{{ proximosAVencer.length }}</strong>
+            </span>
+          </div>
+        </div>
+
+        <div class="table-responsive-wrapper">
+          <table class="corporate-table excel-table">
+            <thead>
+              <!-- Excel Letters Row -->
+              <tr class="excel-col-letters-row">
+                <th class="col-excel-index"></th>
+                <th class="col-letter">A</th>
+                <th class="col-letter">B</th>
+                <th class="col-letter">C</th>
+                <th class="col-letter">D</th>
+                <th class="col-letter">E</th>
+                <th class="col-letter text-center">F</th>
+                <th class="col-letter text-center">G</th>
+                <th class="col-letter text-center">H</th>
+              </tr>
+              <tr class="excel-main-header-row">
+                <th class="col-excel-index">#</th>
+                <th style="width: 140px;">N° RADICADO</th>
+                <th style="width: 110px;">FECHA REG.</th>
+                <th style="width: 230px;">REMITENTE / ENTIDAD</th>
+                <th>ASUNTO / DESTINATARIO</th>
+                <th style="width: 140px;">RESPONSABLE</th>
+                <th style="width: 115px; text-align: center;">ESTADO</th>
+                <th style="width: 140px;">VENCIMIENTO / SLA</th>
+                <th style="width: 100px; text-align: center;">ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="cargandoTabla && !listaRadicados.length">
+                <td colspan="9" class="text-center py-5 text-muted">
+                  <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                  <span>Cargando registros oficiales de Acuasan...</span>
+                </td>
+              </tr>
+              <tr v-else-if="!radicadosFiltrados.length">
+                <td colspan="9" class="text-center py-5">
+                  <div class="empty-state-box font-mono">
+                    <span class="fs-1 d-block mb-2">📂</span>
+                    <strong class="d-block text-dark mb-1">[Hoja vacía] No se encontraron radicados</strong>
+                    <p class="text-muted mb-0" style="font-size: 0.8rem;">No hay registros que coincidan con los filtros aplicados.</p>
+                  </div>
+                </td>
+              </tr>
+              <tr 
+                v-else 
+                v-for="(rad, index) in radicadosFiltrados" 
+                :key="rad.id"
+                :class="['corporate-row', rad.estado === 'Resuelto' ? 'row-resuelto' : 'row-activo', { 'row-even': index % 2 === 1 }]"
+              >
+                <!-- Excel Row Number Index -->
+                <td class="col-excel-index">{{ index + 1 }}</td>
+                <!-- N° Radicado -->
               <td>
                 <div class="radicado-code-box">
                   <span class="radicado-badge">{{ rad.numeroRadicado }}</span>
@@ -521,6 +558,7 @@
         </table>
       </div>
     </div>
+  </div>
 
     <!-- ═══════════════ MODAL VISTA DIGITAL STAMP (ULTRA-COMPACT BOOTSTRAP MODAL) ═══════════════ -->
     <div v-if="modalRadicado" class="modal-overlay" @click.self="modalRadicado = null">
@@ -1783,5 +1821,131 @@ const getBadgeBootstrap = (rad) => {
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ==================== ESTILOS EXCEL UNIFICADOS ==================== */
+.excel-grid-container {
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.excel-header-stripe {
+  background: #107c41; /* Verde oficial Microsoft Excel */
+  color: #ffffff;
+  padding: 5px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.excel-stripe-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.excel-icon-logo { font-size: 0.9rem; }
+.excel-tag { font-family: monospace; font-weight: 700; letter-spacing: 0.3px; }
+.excel-sheet-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.excel-meta { font-size: 0.7rem; opacity: 0.9; }
+
+/* Barra de Fórmulas de Excel (fx) */
+.excel-formula-bar {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  gap: 6px;
+  font-size: 0.74rem;
+}
+
+.cell-name-box {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 1px 10px;
+  font-family: monospace;
+  font-weight: 700;
+  color: #0f172a;
+  min-width: 44px;
+  text-align: center;
+}
+
+.fx-icon {
+  font-family: serif;
+  font-style: italic;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0 4px;
+  font-size: 0.85rem;
+}
+
+.formula-input {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-family: monospace;
+  color: #334155;
+  font-size: 0.72rem;
+}
+
+/* Fila de letras de columna Excel (A, B, C...) */
+.excel-col-letters-row th {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 0.65rem !important;
+  text-align: center !important;
+  padding: 2px 4px !important;
+  border: 1px solid #cbd5e1 !important;
+  user-select: none;
+}
+
+/* Fila principal de encabezados */
+.excel-main-header-row th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 800;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.68rem;
+  letter-spacing: 0.3px;
+}
+
+.col-excel-index {
+  width: 34px;
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  font-family: monospace !important;
+  border-right: 2px solid #cbd5e1 !important;
+  user-select: none;
+}
+
+.excel-table td {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.excel-table tr:hover td {
+  background: #f0f9ff !important;
+}
+
+.row-even td { background: #f8fafc; }
 </style>
 

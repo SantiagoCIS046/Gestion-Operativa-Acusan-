@@ -1,4 +1,5 @@
 import { HorasExtrasService } from './horas-extras.service.js'
+import logger from '../../config/logger.js'
 
 export const HorasExtrasController = {
   /**
@@ -13,6 +14,7 @@ export const HorasExtrasController = {
         data: horas
       })
     } catch (error) {
+      logger.error('H-EXTRAS', 'LISTAR ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al listar horas extras', error: error.message })
     }
   },
@@ -42,12 +44,20 @@ export const HorasExtrasController = {
         justificacion
       })
 
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.create(
+        'H-EXTRAS',
+        'REGISTRAR',
+        `Por: ${usuario} | Funcionario: ${funcionario} | Cuadrilla: ${cuadrillaArea} | Horas: ${cantidadHoras}h | Tipo: ${tipoRecargo}`
+      )
+
       res.status(201).json({
         success: true,
         message: 'Horas extras registradas correctamente',
         data: nuevaHora
       })
     } catch (error) {
+      logger.error('H-EXTRAS', 'REGISTRAR ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al registrar horas extras', error: error.message })
     }
   },
@@ -72,12 +82,21 @@ export const HorasExtrasController = {
         autorizadoPor: autorizadoPor || 'Gerencia Acuasan'
       })
 
+      const usuario = req.usuario?.email || 'anónimo'
+      const nivel = estado === 'APROBADO' ? 'success' : 'warn'
+      logger[nivel](
+        'H-EXTRAS',
+        'DICTAMINAR',
+        `Por: ${usuario} | ID: ${id} | Estado: ${estado} | Autorizó: ${autorizadoPor || 'Gerencia'}`
+      )
+
       res.json({
         success: true,
         message: `Horas extras marcadas como ${estado}`,
         data: horaActualizada
       })
     } catch (error) {
+      logger.error('H-EXTRAS', 'DICTAM ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al actualizar horas extras', error: error.message })
     }
   }

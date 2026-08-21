@@ -235,7 +235,7 @@ export const authService = {
       ENCARGADO: '/permisos/encargado',       // Permisos OCR & Horas Extras Operativas (Román)
       OPERATIVO: '/pqr/gestion',              // Atención al Ciudadano PQR
       RADICADOS: '/radicados/gestion',        // Módulo exclusivo para Eliana
-      ADMIN: '/permisos/encargado',           // Administración de TI
+      ADMIN: '/admin/usuarios',               // Panel de Administración del Sistema
       TALENTO_HUMANO: '/permisos/encargado',
       CUADRILLAS_OBRA: '/horas-extras/gerencia',
       ATENCION_CIUDADANA: '/pqr/gestion'

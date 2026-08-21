@@ -1,10 +1,10 @@
-﻿<template>
+<template>
   <div class="gerencia-horas-view">
 
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
-      titulo="Control y Aprobación de Horas Extras"
-      subtitulo="Consolidado operativo, recargos y autorizaciones presupuestales de cuadrillas"
+      titulo="Historial de Horas Extras"
+      subtitulo="Plantilla Excel de consolidado operativo, recargos y autorizaciones presupuestales de cuadrillas"
       icono="⏱️"
     />
 

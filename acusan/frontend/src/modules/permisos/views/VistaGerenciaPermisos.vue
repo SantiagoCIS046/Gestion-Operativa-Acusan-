@@ -30,7 +30,7 @@
 
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
-      titulo="Consulta y Control de Permisos Laborales — Gerencia"
+      titulo="Historial de Permisos"
       subtitulo="Consulta gerencial, calendario mensual, plantilla Excel y acumulados por funcionario"
       icono="📊"
     />

@@ -14,13 +14,13 @@
         </div>
         <div>
           <div class="d-flex align-items-center gap-2">
-            <h2 class="header-title m-0">Supervisión Gerencial de Radicados</h2>
+            <h2 class="header-title m-0">Historial de Radicados</h2>
             <span class="badge bg-primary text-white px-2 py-1" style="font-size: 0.72rem;">
               Auditoría Oficial
             </span>
           </div>
           <p class="header-subtitle m-0">
-            Control de correspondencia ingresada por la encargada <strong>Eliana</strong> y el ayudante <strong>Román</strong> — Acuasan E.S.P.
+            Plantilla Excel y auditoría de correspondencia ingresada por la encargada <strong>Eliana</strong> y el ayudante <strong>Román</strong> — Acuasan E.S.P.
           </p>
         </div>
       </div>
@@ -131,8 +131,29 @@
       </div>
     </div>
 
-    <!-- ═══════════════ PANEL DE HISTORIAL GERENCIAL ═══════════════ -->
-    <div class="gerencia-table-card">
+    <!-- ═══════════════ PANEL DE HISTORIAL GERENCIAL ESTILO EXCEL ═══════════════ -->
+    <div class="excel-grid-container shadow-sm">
+      <!-- Excel Top Title Bar -->
+      <div class="excel-header-stripe">
+        <div class="excel-stripe-left">
+          <span class="excel-icon-logo">📑</span>
+          <span class="excel-tag">Acuasan_Libro_Radicados_Gerencia_2026.xlsx</span>
+          <span class="excel-sheet-badge">Hoja 1: Auditoria_Ventanilla</span>
+        </div>
+        <span class="excel-meta">Total Registros en Hoja: {{ radicadosFiltrados.length }}</span>
+      </div>
+
+      <!-- Excel Formula Bar (fx) -->
+      <div class="excel-formula-bar">
+        <div class="cell-name-box">A1</div>
+        <div class="fx-icon">fx</div>
+        <div class="formula-input">
+          <span class="formula-text">
+            =AUDITORIA_RADICADOS() &rarr; Total Radicados: <strong>{{ listaRadicados.length }}</strong> | Subidos por Eliana: <strong>{{ statsEliana }}</strong> | Subidos por Román: <strong>{{ statsRoman }}</strong> | Pendientes en Término: <strong>{{ statsPendientes }}</strong>
+          </span>
+        </div>
+      </div>
+
       <!-- Toolbar y Filtros -->
       <div class="table-toolbar">
         <div class="toolbar-left d-flex align-items-center gap-2 flex-wrap">
@@ -195,9 +216,22 @@
 
       <!-- TABLA GERENCIAL DE TRAZABILIDAD -->
       <div class="table-responsive-wrapper">
-        <table class="gerencia-table">
+        <table class="gerencia-table excel-table">
           <thead>
-            <tr>
+            <!-- Excel Letters Row -->
+            <tr class="excel-col-letters-row">
+              <th class="col-excel-index"></th>
+              <th class="col-letter">A</th>
+              <th class="col-letter">B</th>
+              <th class="col-letter">C</th>
+              <th class="col-letter">D</th>
+              <th class="col-letter">E</th>
+              <th class="col-letter text-center">F</th>
+              <th class="col-letter text-center">G</th>
+              <th class="col-letter text-center">H</th>
+            </tr>
+            <tr class="excel-main-header-row">
+              <th class="col-excel-index">#</th>
               <th style="width: 140px;">N° RADICADO</th>
               <th style="width: 130px;">FECHA Y HORA REG.</th>
               <th style="width: 150px;">RADICADO POR</th>
@@ -210,27 +244,28 @@
           </thead>
           <tbody>
             <tr v-if="cargando && !listaRadicados.length">
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="9" class="text-center py-5 text-muted">
                 <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                 <span>Cargando auditoría de radicados de Acuasan...</span>
               </td>
             </tr>
             <tr v-else-if="!radicadosFiltrados.length">
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="9" class="text-center py-5 text-muted font-mono">
                 <div class="empty-state">
                   <span class="fs-2 d-block mb-1">🔍</span>
-                  <strong>No se encontraron registros de radicación</strong>
+                  <strong>[Hoja vacía] No se encontraron registros de radicación</strong>
                   <p class="small text-muted mb-0">Modifique los filtros de búsqueda para consultar otros periodos.</p>
                 </div>
               </td>
             </tr>
             <tr 
               v-else 
-              v-for="rad in radicadosFiltrados" 
+              v-for="(rad, index) in radicadosFiltrados" 
               :key="rad.id"
-              class="gerencia-row"
+              :class="['gerencia-row', { 'row-even': index % 2 === 1 }]"
             >
-              <!-- N° Radicado -->
+              <!-- Excel Row Number Index -->
+              <td class="col-excel-index">{{ index + 1 }}</td>
               <td>
                 <div class="d-flex flex-column gap-1">
                   <span class="radicado-id">{{ rad.numeroRadicado }}</span>
@@ -1545,4 +1580,131 @@ const abrirDocumento = (rad) => {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* ==================== ESTILOS EXCEL UNIFICADOS ==================== */
+.excel-grid-container {
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #94a3b8;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.excel-header-stripe {
+  background: #107c41; /* Verde oficial Microsoft Excel */
+  color: #ffffff;
+  padding: 5px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.excel-stripe-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.excel-icon-logo { font-size: 0.9rem; }
+.excel-tag { font-family: monospace; font-weight: 700; letter-spacing: 0.3px; }
+.excel-sheet-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.excel-meta { font-size: 0.7rem; opacity: 0.9; }
+
+/* Barra de Fórmulas de Excel (fx) */
+.excel-formula-bar {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  gap: 6px;
+  font-size: 0.74rem;
+}
+
+.cell-name-box {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 1px 10px;
+  font-family: monospace;
+  font-weight: 700;
+  color: #0f172a;
+  min-width: 44px;
+  text-align: center;
+}
+
+.fx-icon {
+  font-family: serif;
+  font-style: italic;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0 4px;
+  font-size: 0.85rem;
+}
+
+.formula-input {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-family: monospace;
+  color: #334155;
+  font-size: 0.72rem;
+}
+
+/* Fila de letras de columna Excel (A, B, C...) */
+.excel-col-letters-row th {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  font-size: 0.65rem !important;
+  text-align: center !important;
+  padding: 2px 4px !important;
+  border: 1px solid #cbd5e1 !important;
+  user-select: none;
+}
+
+/* Fila principal de encabezados */
+.excel-main-header-row th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 800;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.68rem;
+  letter-spacing: 0.3px;
+}
+
+.col-excel-index {
+  width: 34px;
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  font-family: monospace !important;
+  border-right: 2px solid #cbd5e1 !important;
+  user-select: none;
+}
+
+.excel-table td {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.excel-table tr:hover td {
+  background: #f0f9ff !important;
+}
+
+.row-even td { background: #f8fafc; }
 </style>

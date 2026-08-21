@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="app-shell">
     <!-- ===== LAYOUT CON SIDEBAR: Solo visible cuando hay sesión activa ===== -->
     <template v-if="estaAutenticado">
@@ -17,51 +17,163 @@
 
         <!-- Navigation Links (según el rol del usuario) -->
         <nav class="sidebar-nav">
+
+          <!-- ════════════════════════════════════════ -->
+          <!-- ADMIN: Menú con acordeón expandible     -->
+          <!-- ════════════════════════════════════════ -->
+          <template v-if="tieneAcceso(['ADMIN'])">
+
+            <!-- PERMISOS -->
+            <div class="nav-group">
+              <button
+                class="nav-group-header"
+                :class="{ 'group-active': menuExpandido.permisos }"
+                @click="toggleMenu('permisos')"
+              >
+                <span class="nav-icon">📄</span>
+                <span class="nav-text">Permisos</span>
+                <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.permisos }">›</span>
+              </button>
+              <transition name="slide-down">
+                <div v-if="menuExpandido.permisos" class="nav-group-children">
+                  <router-link to="/permisos/encargado" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🖥️</span> Panel de Permisos
+                  </router-link>
+                  <router-link to="/permisos/gerencia" class="nav-child" active-class="child-active">
+                    <span class="child-icon">📊</span> Historial Gerencial
+                  </router-link>
+                </div>
+              </transition>
+            </div>
+
+            <!-- HORAS EXTRAS -->
+            <div class="nav-group">
+              <button
+                class="nav-group-header"
+                :class="{ 'group-active': menuExpandido.horasExtras }"
+                @click="toggleMenu('horasExtras')"
+              >
+                <span class="nav-icon">⏱️</span>
+                <span class="nav-text">Horas Extras</span>
+                <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.horasExtras }">›</span>
+              </button>
+              <transition name="slide-down">
+                <div v-if="menuExpandido.horasExtras" class="nav-group-children">
+                  <router-link to="/horas-extras/gerencia" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🖥️</span> Panel de Horas Extras
+                  </router-link>
+                </div>
+              </transition>
+            </div>
+
+            <!-- PQR -->
+            <div class="nav-group">
+              <button
+                class="nav-group-header"
+                :class="{ 'group-active': menuExpandido.pqr }"
+                @click="toggleMenu('pqr')"
+              >
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">PQR</span>
+                <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.pqr }">›</span>
+              </button>
+              <transition name="slide-down">
+                <div v-if="menuExpandido.pqr" class="nav-group-children">
+                  <router-link to="/pqr/gestion" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🖥️</span> Panel PQR
+                  </router-link>
+                </div>
+              </transition>
+            </div>
+
+            <!-- RADICADOS -->
+            <div class="nav-group">
+              <button
+                class="nav-group-header"
+                :class="{ 'group-active': menuExpandido.radicados }"
+                @click="toggleMenu('radicados')"
+              >
+                <span class="nav-icon">📁</span>
+                <span class="nav-text">Radicados</span>
+                <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.radicados }">›</span>
+              </button>
+              <transition name="slide-down">
+                <div v-if="menuExpandido.radicados" class="nav-group-children">
+                  <router-link to="/radicados/gestion" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🖥️</span> Panel de Radicados
+                  </router-link>
+                  <router-link to="/radicados/gerencia" class="nav-child" active-class="child-active">
+                    <span class="child-icon">📊</span> Historial Gerencial
+                  </router-link>
+                </div>
+              </transition>
+            </div>
+
+            <!-- Divisor -->
+            <div class="nav-divider"></div>
+
+            <!-- GESTIÓN DE USUARIOS — Botón destacado ADMIN -->
+            <router-link
+              to="/admin/usuarios"
+              class="nav-btn nav-btn-admin"
+              active-class="active"
+            >
+              <span class="nav-icon">👥</span>
+              <span class="nav-text">Gestión de Usuarios</span>
+              <span class="active-indicator-dot"></span>
+            </router-link>
+
+          </template>
+
+          <!-- ════════════════════════════════════════ -->
+          <!-- RESTO DE ROLES: Navegación plana actual -->
+          <!-- ════════════════════════════════════════ -->
+
           <!-- ENCARGADO: Permisos -->
           <router-link
-            v-if="tieneAcceso(['ENCARGADO', 'ADMIN'])"
+            v-if="tieneAcceso(['ENCARGADO'])"
             to="/permisos/encargado"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">📄</span>
-            <span class="nav-text">Permisos</span>
+            <span class="nav-text">Historial de Permisos</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
           <!-- ENCARGADO y GERENCIA: Horas Extras -->
           <router-link
-            v-if="tieneAcceso(['ENCARGADO', 'GERENCIA', 'ADMIN'])"
+            v-if="tieneAcceso(['ENCARGADO', 'GERENCIA'])"
             to="/horas-extras/gerencia"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">⏱️</span>
-            <span class="nav-text">Horas Extras</span>
+            <span class="nav-text">Historial de Horas Extras</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
           <!-- GERENCIA: Consulta de Permisos -->
           <router-link
-            v-if="tieneAcceso(['GERENCIA', 'ADMIN'])"
+            v-if="tieneAcceso(['GERENCIA'])"
             to="/permisos/gerencia"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">📊</span>
-            <span class="nav-text">Consulta Permisos</span>
+            <span class="nav-text">Historial de Permisos</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
           <!-- GERENCIA y OPERATIVO: PQR -->
           <router-link
-            v-if="tieneAcceso(['OPERATIVO', 'GERENCIA', 'ADMIN'])"
+            v-if="tieneAcceso(['OPERATIVO', 'GERENCIA'])"
             to="/pqr/gestion"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">📋</span>
-            <span class="nav-text">Gestión PQR</span>
+            <span class="nav-text">Historial de PQR</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
@@ -73,22 +185,21 @@
             active-class="active"
           >
             <span class="nav-icon">📑</span>
-            <span class="nav-text">Radicados</span>
+            <span class="nav-text">Historial de Radicados</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
           <!-- RADICADOS: Gerencia y Admin (Supervisión y Alertas de Subidas) -->
           <router-link
-            v-if="tieneAcceso(['GERENCIA', 'ADMIN'])"
+            v-if="tieneAcceso(['GERENCIA'])"
             to="/radicados/gerencia"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">📑</span>
-            <span class="nav-text">Radicados</span>
+            <span class="nav-text">Historial de Radicados</span>
             <span class="active-indicator-dot"></span>
           </router-link>
-
 
         </nav>
 
@@ -158,7 +269,7 @@
               </div>
               <button type="button" class="btn-close btn-close-sm ms-auto" style="font-size: 0.75rem;" @click="modalCerrarSesionVisible = false"></button>
             </div>
-            
+
             <div class="modal-body p-3">
               <p class="text-dark fw-semibold mb-1" style="font-size: 0.88rem;">¿Desea cerrar la sesión activa?</p>
               <p class="text-muted mb-0" style="font-size: 0.78rem; line-height: 1.35;">
@@ -181,16 +292,35 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import authService from './modules/auth/services/authService.js'
 import NotificacionesToast from './components/NotificacionesToast.vue'
 
 const router = useRouter()
-const route = useRoute()
 
 const modalCerrarSesionVisible = ref(false)
+
+// Estado del acordeón del sidebar (admin)
+const menuExpandido = ref({
+  permisos: false,
+  horasExtras: false,
+  pqr: false,
+  radicados: false
+})
+
+function toggleMenu(key) {
+  // Si ya está abierto, cerrar; si no, abrir solo ese y cerrar los demás
+  const estaAbierto = menuExpandido.value[key]
+  Object.keys(menuExpandido.value).forEach(k => {
+    menuExpandido.value[k] = false
+  })
+  if (!estaAbierto) {
+    menuExpandido.value[key] = true
+  }
+}
 
 const estaAutenticado = computed(() => authService.estaAutenticado())
 const usuario = computed(() => authService.getUsuarioActual())
@@ -254,8 +384,8 @@ const confirmarCerrarSesion = () => {
 
 /* === SIDEBAR === */
 .sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: 235px;
+  min-width: 235px;
   background: #02203d;
   background: linear-gradient(180deg, #021f3a 0%, #011427 100%);
   display: flex;
@@ -315,20 +445,22 @@ const confirmarCerrarSesion = () => {
 
 .sidebar-nav {
   flex: 1;
-  padding: 18px 10px;
+  padding: 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  overflow-y: auto;
 }
 
+/* ─── Nav plano (otros roles) ───────────────────────────────────── */
 .nav-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 10px;
+  padding: 10px 12px;
   color: #cbd5e1;
   text-decoration: none;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   font-weight: 500;
   border-radius: 8px;
   transition: all 0.2s ease;
@@ -352,6 +484,26 @@ const confirmarCerrarSesion = () => {
   border-left: 4px solid #73be28;
 }
 
+/* Botón de Gestión de Usuarios — destacado para ADMIN */
+.nav-btn-admin {
+  background: linear-gradient(135deg, rgba(115, 190, 40, 0.12), rgba(0, 102, 204, 0.15));
+  border: 1px solid rgba(115, 190, 40, 0.4) !important;
+  color: #a8e06c !important;
+  font-weight: 700 !important;
+  margin-top: 4px;
+}
+.nav-btn-admin:hover {
+  background: rgba(115, 190, 40, 0.25) !important;
+  border-color: #73be28 !important;
+  color: #fff !important;
+}
+.nav-btn-admin.active {
+  background: #73be28 !important;
+  color: #011427 !important;
+  border: none !important;
+  border-left: 4px solid #fff !important;
+}
+
 .active-indicator-dot {
   margin-left: auto;
   width: 7px;
@@ -363,6 +515,117 @@ const confirmarCerrarSesion = () => {
 
 .nav-btn.active .active-indicator-dot { display: block; }
 .nav-icon { font-size: 1rem; }
+
+/* ─── Divisor ────────────────────────────────────────────────────── */
+.nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 6px 4px;
+}
+
+/* ─── Acordeón ADMIN ─────────────────────────────────────────────── */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.nav-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.nav-group-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(115, 190, 40, 0.4);
+  color: #ffffff;
+}
+
+.nav-group-header.group-active {
+  background: rgba(0, 72, 132, 0.5);
+  border-color: rgba(0, 95, 168, 0.6);
+  color: #ffffff;
+  border-left: 3px solid #73be28;
+}
+
+.group-chevron {
+  margin-left: auto;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #64748b;
+  display: inline-block;
+  transition: transform 0.25s ease;
+  line-height: 1;
+}
+
+.chevron-open {
+  transform: rotate(90deg);
+  color: #73be28;
+}
+
+/* Hijos del acordeón */
+.nav-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 4px 12px;
+  overflow: hidden;
+}
+
+.nav-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #8fa7be;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.18s ease;
+  background: transparent;
+}
+
+.nav-child:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  border-left-color: rgba(115, 190, 40, 0.5);
+}
+
+.nav-child.child-active {
+  background: rgba(0, 72, 132, 0.45);
+  color: #ffffff;
+  font-weight: 700;
+  border-left: 2px solid #73be28;
+}
+
+.child-icon { font-size: 0.85rem; }
+
+/* Animación acordeón */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: max-height 0.28s ease, opacity 0.22s ease;
+  max-height: 200px;
+  overflow: hidden;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
 
 /* Sidebar Footer & Logout */
 .sidebar-footer {

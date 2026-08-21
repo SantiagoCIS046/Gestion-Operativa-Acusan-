@@ -54,7 +54,13 @@ const routes = [
     meta: { title: 'Supervisión de Radicados | Gerencia Acuasan', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
   },
 
-
+  // --- MÓDULO ADMIN (exclusivo ADMIN) ---
+  {
+    path: '/admin/usuarios',
+    name: 'AdminUsuarios',
+    component: () => import('../modules/admin/views/VistaAdminUsuarios.vue'),
+    meta: { title: 'Gestión de Usuarios | Admin', requiresAuth: true, roles: ['ADMIN'] }
+  },
 
   // --- REDIRECCIÓN POR DEFECTO ---
   {
@@ -69,7 +75,13 @@ const routes = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/login'
+    redirect: () => {
+      if (authService.estaAutenticado()) {
+        const rol = authService.getRol()
+        return authService.getRutaInicioPorRol(rol)
+      }
+      return '/login'
+    }
   }
 ]
 
@@ -104,12 +116,22 @@ router.beforeEach((to, from, next) => {
 
   // Verificar que el rol del usuario tenga acceso a esta ruta
   if (to.meta?.roles && !to.meta.roles.includes(rolActual)) {
-    // Redirigir al módulo que le corresponde según su rol
     const rutaCorrecta = authService.getRutaInicioPorRol(rolActual)
     return next(rutaCorrecta)
   }
 
   next()
+})
+
+// Capturar errores de carga de componentes lazy (chunk load errors)
+router.onError((error, to) => {
+  console.error('[Router] Error cargando ruta:', to?.path, error)
+  if (authService.estaAutenticado()) {
+    // Intentar recargar la página si falla el chunk
+    window.location.href = to?.fullPath || '/'
+  } else {
+    router.replace('/login')
+  }
 })
 
 export default router

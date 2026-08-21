@@ -1,4 +1,5 @@
 import { PqrService } from './pqr.service.js'
+import logger from '../../config/logger.js'
 
 export const PqrController = {
   /**
@@ -13,6 +14,7 @@ export const PqrController = {
         data: pqrs
       })
     } catch (error) {
+      logger.error('PQR', 'LISTAR ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al listar PQRs', error: error.message })
     }
   },
@@ -29,6 +31,7 @@ export const PqrController = {
       }
       res.json({ success: true, data: pqr })
     } catch (error) {
+      logger.error('PQR', 'DETALLE ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al obtener PQR', error: error.message })
     }
   },
@@ -59,12 +62,20 @@ export const PqrController = {
         prioridad
       })
 
+      const operador = req.usuario?.email || 'anónimo'
+      logger.create(
+        'PQR',
+        'RADICAR',
+        `Por: ${operador} | Ciudadano: ${usuario} | Motivo: ${motivo} | Prioridad: ${prioridad || 'NORMAL'}`
+      )
+
       res.status(201).json({
         success: true,
         message: 'PQR radicada exitosamente con fecha de término legal',
         data: nuevaPqr
       })
     } catch (error) {
+      logger.error('PQR', 'RADICAR ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al radicar PQR', error: error.message })
     }
   },
@@ -90,12 +101,20 @@ export const PqrController = {
         nuevoEstado
       })
 
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.update(
+        'PQR',
+        'RESPONDER',
+        `Por: ${usuario} | ID: ${id} | Respondió: ${respondidoPor || '?'} | Nuevo estado: ${nuevoEstado || '?'}`
+      )
+
       res.json({
         success: true,
         message: 'Respuesta registrada y PQR actualizada satisfactoriamente',
         data: pqrActualizada
       })
     } catch (error) {
+      logger.error('PQR', 'RESPONDER ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al responder PQR', error: error.message })
     }
   }
