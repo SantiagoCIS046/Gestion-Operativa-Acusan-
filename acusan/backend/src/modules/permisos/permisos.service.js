@@ -1,4 +1,5 @@
 // Servicio de Permisos Laborales — Acuasan E.S.P.
+import { randomUUID } from "crypto";
 import prisma from "../../config/prisma.js";
 
 // Tamaño máximo del archivo Base64 guardado en MongoDB (~15MB binarios => ~20MB base64)
@@ -81,6 +82,7 @@ const formatearParaFrontend = (p, incluirArchivo = false) => {
   const resultado = {
     id: p.id,
     radicado: p.radicado,
+    idLocal: p.idLocal || "",
     cedula: p.cedula,
     funcionario: p.nombreFuncionario,
     nombreFuncionario: p.nombreFuncionario,
@@ -227,9 +229,21 @@ export const PermisosService = {
   /**
    * Crear nueva solicitud de permiso.
    * El radicado SIEMPRE lo genera el backend (secuencial real) para evitar duplicados.
+   * idLocal habilita idempotencia: un reintento de sincronización (respuesta perdida)
+   * devuelve el registro ya creado en lugar de duplicarlo.
    */
   async crearPermiso(datos) {
-    const radicado = await this.generarRadicadoUnico();
+    if (datos.idLocal) {
+      const existente = await prisma.permiso.findFirst({
+        where: { idLocal: String(datos.idLocal) },
+      });
+      if (existente) {
+        console.warn(
+          `[PermisosService] POST idempotente: idLocal=${datos.idLocal} ya existe como ${existente.radicado}`
+        );
+        return formatearParaFrontend(existente, false);
+      }
+    }
 
     const tipoEnum = normalizarTipoEnum(datos.tipo || datos.tipoPermiso);
     const fechaInicioParsed = parsearFecha(datos.fechaInicio);
@@ -248,42 +262,69 @@ export const PermisosService = {
       datos.archivoUrl || datos.customFileUrl
     );
 
-    const creado = await prisma.permiso.create({
-      data: {
-        radicado,
-        cedula: String(datos.cedula || "").trim(),
-        nombreFuncionario: datos.nombreFuncionario || datos.funcionario || "",
-        cargo: datos.cargo || "Funcionario Acuasan",
-        dependencia: datos.dependencia || "Operativa",
-        tipo: tipoEnum,
-        fechaInicio: fechaInicioParsed,
-        fechaFin: fechaFinParsed,
-        duracion:
-          datos.duracion || datos.horasCalculadas || "07:00 a 15:00 (8 horas)",
-        hora24: hora24Actual,
-        justificacion: datos.justificacion || datos.motivo || "",
-        motivoManuscrito: datos.motivoManuscrito || "",
-        soporte:
-          datos.soporte || datos.documentFileName || "Permiso_Escaneado.pdf",
-        soporteUrl: datos.soporteUrl || "",
-        archivoUrl,
-        archivoMimeType: datos.archivoMimeType || "",
-        ocrConfidence:
-          datos.ocrConfidence || datos.confianzaOCR
-            ? Number(datos.ocrConfidence || datos.confianzaOCR)
-            : 0.98,
-        ocrRawPayload: datos.ocrRawPayload || {},
-        observaciones: datos.observaciones || "",
-        estado: "APROBADO",
-        aprobadoPor: datos.aprobadoPor || "Registro Directo",
-      },
-    });
+    const estadoInicial = ["PENDIENTE", "APROBADO", "RECHAZADO", "EN_REVISION"].includes(
+      String(datos.estado || datos.estadoEnvio || "").toUpperCase()
+    )
+      ? String(datos.estado || datos.estadoEnvio).toUpperCase()
+      : "APROBADO";
 
-    return formatearParaFrontend(creado, false);
+    const dataCrear = {
+      cedula: String(datos.cedula || "").trim(),
+      nombreFuncionario: datos.nombreFuncionario || datos.funcionario || "",
+      cargo: datos.cargo || "Funcionario Acuasan",
+      dependencia: datos.dependencia || "Operativa",
+      tipo: tipoEnum,
+      fechaInicio: fechaInicioParsed,
+      fechaFin: fechaFinParsed,
+      duracion:
+        datos.duracion || datos.horasCalculadas || "07:00 a 15:00 (8 horas)",
+      hora24: hora24Actual,
+      justificacion: datos.justificacion || datos.motivo || "",
+      motivoManuscrito: datos.motivoManuscrito || "",
+      soporte:
+        datos.soporte || datos.documentFileName || "Permiso_Escaneado.pdf",
+      soporteUrl: datos.soporteUrl || "",
+      archivoUrl,
+      archivoMimeType: datos.archivoMimeType || "",
+      ocrConfidence:
+        datos.ocrConfidence || datos.confianzaOCR
+          ? Number(datos.ocrConfidence || datos.confianzaOCR)
+          : 0.98,
+      ocrRawPayload: datos.ocrRawPayload || {},
+      observaciones: datos.observaciones || "",
+      estado: estadoInicial,
+      aprobadoPor: datos.aprobadoPor || "Registro Directo",
+      // NUNCA null: el índice único de MongoDB indexaría null como valor y solo
+      // cabría un documento sin idLocal en toda la colección (P2002 masivo).
+      idLocal: String(datos.idLocal || randomUUID()),
+    };
+
+    // Reintento real ante colisión concurrente del consecutivo (P2002)
+    let ultimoError = null;
+    for (let intento = 1; intento <= 4; intento++) {
+      const radicado = await this.generarRadicadoUnico();
+      try {
+        const creado = await prisma.permiso.create({
+          data: { ...dataCrear, radicado },
+        });
+        return formatearParaFrontend(creado, false);
+      } catch (e) {
+        ultimoError = e;
+        if (e.code !== "P2002") break;
+        console.warn(
+          `[PermisosService] Colisión de radicado (intento ${intento}/4), regenerando: ${e.message}`
+        );
+      }
+    }
+
+    throw new Error(
+      `No se pudo persistir el permiso: ${ultimoError?.message || "error desconocido"}`
+    );
   },
 
   /**
-   * Actualizar permiso existente
+   * Actualizar permiso existente.
+   * Retorna null si el registro no existe (P2025) para responder 404 honesto.
    */
   async actualizarPermiso(id, datos) {
     const tipoEnum =
@@ -301,30 +342,35 @@ export const PermisosService = {
       datos.archivoUrl || datos.customFileUrl
     );
 
-    const actualizado = await prisma.permiso.update({
-      where: { id },
-      data: {
-        cedula: datos.cedula ? String(datos.cedula).trim() : undefined,
-        nombreFuncionario:
-          datos.nombreFuncionario || datos.funcionario || undefined,
-        cargo: datos.cargo || undefined,
-        dependencia: datos.dependencia || undefined,
-        tipo: tipoEnum,
-        fechaInicio: fechaInicioParsed,
-        fechaFin: fechaFinParsed,
-        duracion: datos.duracion || datos.horasCalculadas || undefined,
-        hora24: datos.hora24 || undefined,
-        justificacion: datos.justificacion || datos.motivo || undefined,
-        motivoManuscrito: datos.motivoManuscrito || undefined,
-        soporte: datos.soporte || datos.documentFileName || undefined,
-        soporteUrl: datos.soporteUrl || undefined,
-        archivoUrl: archivoUrl || undefined,
-        archivoMimeType: datos.archivoMimeType || undefined,
-        observaciones: datos.observaciones || undefined,
-      },
-    });
+    try {
+      const actualizado = await prisma.permiso.update({
+        where: { id },
+        data: {
+          cedula: datos.cedula ? String(datos.cedula).trim() : undefined,
+          nombreFuncionario:
+            datos.nombreFuncionario || datos.funcionario || undefined,
+          cargo: datos.cargo || undefined,
+          dependencia: datos.dependencia || undefined,
+          tipo: tipoEnum,
+          fechaInicio: fechaInicioParsed,
+          fechaFin: fechaFinParsed,
+          duracion: datos.duracion || datos.horasCalculadas || undefined,
+          hora24: datos.hora24 || undefined,
+          justificacion: datos.justificacion || datos.motivo || undefined,
+          motivoManuscrito: datos.motivoManuscrito || undefined,
+          soporte: datos.soporte || datos.documentFileName || undefined,
+          soporteUrl: datos.soporteUrl || undefined,
+          archivoUrl: archivoUrl || undefined,
+          archivoMimeType: datos.archivoMimeType || undefined,
+          observaciones: datos.observaciones || undefined,
+        },
+      });
 
-    return formatearParaFrontend(actualizado, false);
+      return formatearParaFrontend(actualizado, false);
+    } catch (e) {
+      if (e.code === "P2025") return null; // No existe → 404 en el controller
+      throw e;
+    }
   },
 
   /**

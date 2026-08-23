@@ -30,6 +30,8 @@ enum TipoPermiso {
 model Permiso {
   id                String        @id @default(auto()) @map("_id") @db.ObjectId
   radicado          String        @unique
+  // Identificador del cliente para idempotencia de la sincronización offline
+  idLocal           String?       @unique
   cedula            String
   nombreFuncionario String
   cargo             String?
@@ -187,6 +189,8 @@ model RegistroAcceso {
 model Radicado {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   numeroRadicado    String   @unique
+  // Identificador del cliente para idempotencia de la sincronización offline
+  idLocal           String?  @unique
   fechaRadicacion   DateTime @default(now())
 
   // Campos del documento PDF / OCR

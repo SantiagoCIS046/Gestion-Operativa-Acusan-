@@ -197,6 +197,14 @@ export const PermisosController = {
       const { id } = req.params
       const actualizado = await PermisosService.actualizarPermiso(id, req.body)
 
+      // null = el registro no existe en la BD (ej. es un provisional local sin sincronizar)
+      if (!actualizado) {
+        return res.status(404).json({
+          success: false,
+          message: 'El permiso no existe en la base de datos. Refresque el historial e inténtelo de nuevo.'
+        })
+      }
+
       const usuario = req.usuario?.email || 'anónimo'
       logger.update('PERMISOS', 'ACTUALIZAR', `Por: ${usuario} | ID: ${id}`)
 
@@ -207,7 +215,7 @@ export const PermisosController = {
       })
     } catch (error) {
       logger.error('PERMISOS', 'ACTUALIZ ERR', `ID: ${req.params.id} — ${error.message}`)
-      res.status(500).json({ success: false, message: 'Error al actualizar permiso', error: error.message })
+      res.status(503).json({ success: false, message: 'Error al actualizar permiso', error: error.message })
     }
   },
 

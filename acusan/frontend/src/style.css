@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
 
 :root {
   /* Paleta Oficial ACUASAN */
@@ -12,7 +12,7 @@
   --acuasan-cyan-light: #e0f7ff;
   --acuasan-yellow: #f59e0b;
   --acuasan-yellow-light: #fef9c3;
-  
+
   --bg-main: #f0f4f8;
   --text-main: #0f172a;
   --text-muted: #64748b;
@@ -26,9 +26,11 @@
   padding: 0;
 }
 
-html, body {
+html,
+body {
   height: 100%;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
   font-size: 14px;
@@ -38,18 +40,42 @@ html, body {
 }
 
 /* Utilities */
-.font-bold { font-weight: 700; }
-.font-semibold { font-weight: 600; }
-.text-center { text-align: center; }
-.text-right { text-align: right; }
-.text-xs { font-size: 0.75rem; }
-.text-sm { font-size: 0.875rem; }
-.text-slate-400 { color: #94a3b8; }
-.text-slate-500 { color: #64748b; }
-.text-slate-800 { color: #1e293b; }
-.text-emerald-600 { color: #059669; }
-.text-amber-600 { color: #d97706; }
-.text-amber-700 { color: #b45309; }
+.font-bold {
+  font-weight: 700;
+}
+.font-semibold {
+  font-weight: 600;
+}
+.text-center {
+  text-align: center;
+}
+.text-right {
+  text-align: right;
+}
+.text-xs {
+  font-size: 0.75rem;
+}
+.text-sm {
+  font-size: 0.875rem;
+}
+.text-slate-400 {
+  color: #94a3b8;
+}
+.text-slate-500 {
+  color: #64748b;
+}
+.text-slate-800 {
+  color: #1e293b;
+}
+.text-emerald-600 {
+  color: #059669;
+}
+.text-amber-600 {
+  color: #d97706;
+}
+.text-amber-700 {
+  color: #b45309;
+}
 
 /* Global Scrollbars */
 ::-webkit-scrollbar {

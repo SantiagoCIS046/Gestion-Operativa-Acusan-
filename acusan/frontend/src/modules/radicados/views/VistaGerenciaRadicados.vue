@@ -736,7 +736,18 @@ const abrirDetalleDesdeAlerta = (rad) => {
   radicadoSeleccionado.value = rad
 }
 
-const abrirDocumento = (rad) => {
+const abrirDocumento = async (rad) => {
+  // 1. Documento oficial almacenado en la base de datos (se sirve bajo demanda)
+  if (rad && rad.id) {
+    try {
+      const url = await radicadosService.obtenerArchivoRadicado(rad.id)
+      window.open(url, '_blank')
+      return
+    } catch (e) {
+      // Sin documento en la nube → continuar con los respaldos locales
+    }
+  }
+
   if (rad && rad.archivoBase64) {
     const win = window.open('', '_blank')
     if (win) {
@@ -754,7 +765,7 @@ const abrirDocumento = (rad) => {
   } else if (rad && rad.urlDocumento) {
     window.open(rad.urlDocumento, '_blank')
   } else {
-    alert('Visualizando documento digital registrado en el sistema.')
+    alert('Este radicado no tiene documento digital adjunto en la base de datos.')
   }
 }
 </script>

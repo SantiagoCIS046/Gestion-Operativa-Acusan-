@@ -1,11 +1,12 @@
-import { PrismaClient } from "@prisma/client";
 import moment from "moment";
-import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createRequire } from "module";
+import { randomUUID } from "crypto";
 import Tesseract from "tesseract.js";
 import { createObjectCsvWriter } from "csv-writer";
+import prisma from "../../config/prisma.js";
 
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
@@ -13,23 +14,9 @@ const pdfParse =
   typeof pdfParseModule === "function"
     ? pdfParseModule
     : pdfParseModule.default || pdfParseModule;
-const pdfPoppler = require("pdf-poppler");
-
-const prisma = new PrismaClient();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Carpeta local de respaldo y temporales OCR
-const DRIVE_LOCAL_DIR = path.join(__dirname, "../../../drive_local_backup");
-if (!fs.existsSync(DRIVE_LOCAL_DIR)) {
-  fs.mkdirSync(DRIVE_LOCAL_DIR, { recursive: true });
-}
-
-const TEMP_OCR_DIR = path.join(__dirname, "../../../temp_ocr");
-if (!fs.existsSync(TEMP_OCR_DIR)) {
-  fs.mkdirSync(TEMP_OCR_DIR, { recursive: true });
-}
 
 // Auxiliares OCR & Limpieza
 const limpiar = (str) =>
@@ -46,56 +33,12 @@ const isBodySentence = (str) => {
   );
 };
 
-async function extraerTextoConOCR(buffer, mimeType) {
-  let imagenBuffer = null;
-  let tempPdfPath = null;
-  let tempImgPath = null;
-
+// OCR de imágenes directamente con Tesseract.js (sin dependencias nativas ni disco).
+// Los PDF escaneados se procesan en el navegador (pdfjs-dist + tesseract.js)
+// y el texto extraído se envía al endpoint /extraer-campos para su parsing.
+async function extraerTextoImagenConOCR(buffer) {
   try {
-    if (mimeType === "application/pdf" || !mimeType) {
-      const id = Date.now();
-      tempPdfPath = path.join(TEMP_OCR_DIR, `doc_${id}.pdf`);
-      fs.writeFileSync(tempPdfPath, buffer);
-
-      const opts = {
-        format: "png",
-        out_dir: TEMP_OCR_DIR,
-        out_prefix: `page_${id}`,
-        page: 1,
-        scale: 1024,
-      };
-
-      await pdfPoppler.convert(tempPdfPath, opts);
-
-      const files = fs
-        .readdirSync(TEMP_OCR_DIR)
-        .filter((f) => f.startsWith(opts.out_prefix) && f.endsWith(".png"));
-      if (files.length > 0) {
-        tempImgPath = path.join(TEMP_OCR_DIR, files[0]);
-        imagenBuffer = fs.readFileSync(tempImgPath);
-      }
-    } else if (mimeType && mimeType.startsWith("image/")) {
-      imagenBuffer = buffer;
-    }
-  } catch (errConv) {
-    console.error("⚠️ [OCR] Error convirtiendo PDF a imagen:", errConv.message);
-  } finally {
-    if (tempPdfPath && fs.existsSync(tempPdfPath)) {
-      try {
-        fs.unlinkSync(tempPdfPath);
-      } catch (e) {}
-    }
-    if (tempImgPath && fs.existsSync(tempImgPath)) {
-      try {
-        fs.unlinkSync(tempImgPath);
-      } catch (e) {}
-    }
-  }
-
-  if (!imagenBuffer) return "";
-
-  try {
-    const res = await Tesseract.recognize(imagenBuffer, "spa");
+    const res = await Tesseract.recognize(buffer, "spa");
     return res?.data?.text || "";
   } catch (errWorker) {
     console.warn("⚠️ Error Tesseract OCR:", errWorker.message);
@@ -282,8 +225,7 @@ const extraerCamposPdf = (texto) => {
     contextoTexto = sub;
   }
 
-  resultado.contexto =
-    contextoTexto || "Registro documental procesado mediante OCR.";
+  resultado.contexto = contextoTexto || "";
 
   // 9. DÍAS PARA VENCER
   let diasSugeridos = 10;
@@ -322,24 +264,97 @@ const extraerCamposPdf = (texto) => {
   return resultado;
 };
 
-// Memoria en caliente para entornos sin base de datos activa (Vercel/Offline) - Solo datos reales ingresados
-let RADICADOS_IN_MEMORY = [];
+// Respuesta vacía y honesta cuando no hay texto legible (sin datos inventados)
+const respuestaSinTexto = (metodo, originalname) => ({
+  mensaje:
+    "El documento no contiene texto legible. Complete los campos manualmente.",
+  metodo,
+  peticionario: "",
+  dependencia: "",
+  registradoPor: "Encargada",
+  contexto: "",
+  numeroRadicadoPdf: "",
+  fechaDocumento: "",
+  lugarFecha: "",
+  destinatario: "",
+  asunto: "",
+  referencia: "",
+  diasParaVencer: null,
+  nombreArchivo: originalname || "documento.pdf",
+});
+
+// Estados válidos de un radicado (el alta offline puede sincronizar un estado distinto de Pendiente)
+const ESTADOS_RADICADO_VALIDOS = ["Pendiente", "En Proceso", "Resuelto", "Contestado", "Anulado"];
 
 export const RadicadosService = {
+  /**
+   * Lista todos los radicados SIN el archivo Base64 (peso).
+   * El documento original se sirve bajo demanda desde /:id/archivo.
+   */
   async obtenerTodos() {
     try {
       const dbRadicados = await prisma.radicado.findMany({
         orderBy: { fechaRadicacion: "desc" },
       });
-      if (dbRadicados && dbRadicados.length > 0) return dbRadicados;
-      return RADICADOS_IN_MEMORY;
+      return dbRadicados.map(({ archivoBase64, ...resto }) => ({
+        ...resto,
+        hasArchivo: Boolean(archivoBase64),
+      }));
     } catch (e) {
-      console.warn(
-        "DB no disponible para radicados, respondiendo con datos en memoria:",
-        e.message
-      );
-      return RADICADOS_IN_MEMORY;
+      // Error real de BD: se propaga (el cliente usa su caché local, nunca datos inventados)
+      throw new Error(`Base de datos no disponible: ${e.message}`);
     }
+  },
+
+  /**
+   * Obtiene un radicado completo (incluye archivoBase64) por ID o numeroRadicado
+   */
+  async obtenerPorId(id) {
+    try {
+      return await prisma.radicado.findUnique({ where: { id: String(id) } });
+    } catch (e) {
+      try {
+        return await prisma.radicado.findFirst({
+          where: { numeroRadicado: String(id) },
+        });
+      } catch (err) {
+        return null;
+      }
+    }
+  },
+
+  /**
+   * Genera el siguiente radicado secuencial real de la BD: RAD-<anio>-000X
+   * (máximo consecutivo + reintentos, sin colisiones por registros borrados)
+   */
+  async generarRadicadoUnico() {
+    const anio = new Date().getFullYear();
+    const prefijo = `RAD-${anio}-`;
+
+    const existentes = await prisma.radicado.findMany({
+      where: { numeroRadicado: { startsWith: prefijo } },
+      select: { numeroRadicado: true },
+    });
+
+    let maxSeq = 0;
+    for (const r of existentes) {
+      const m = r.numeroRadicado.match(new RegExp(`^${prefijo}(\\d+)$`));
+      if (m) {
+        const seq = parseInt(m[1], 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    }
+
+    for (let intento = 1; intento <= 5; intento++) {
+      const candidato = `${prefijo}${String(maxSeq + intento).padStart(4, "0")}`;
+      const yaExiste = await prisma.radicado.findFirst({
+        where: { numeroRadicado: candidato },
+      });
+      if (!yaExiste) return candidato;
+    }
+
+    // Último recurso: timestamp
+    return `${prefijo}${Date.now()}`;
   },
 
   async crear(payload) {
@@ -359,28 +374,31 @@ export const RadicadosService = {
       numeroRadicadoPdf,
       archivoBase64,
       archivoUrl,
+      idLocal,
     } = payload;
 
-    // Radicado secuencial RAD-AAAA-0001 (o aleatorio si la BD no está accesible)
-    let numeroRadicado;
-    try {
-      const conteo = await prisma.radicado.count();
-      const anio = new Date().getFullYear();
-      numeroRadicado = `RAD-${anio}-${String(conteo + 1).padStart(4, "0")}`;
-    } catch (eCount) {
-      numeroRadicado = `RAD-${new Date().getFullYear()}-${Math.floor(
-        1000 + Math.random() * 9000
-      )}`;
+    // IDEMPOTENCIA: si la sincronización offline ya creó este registro (la respuesta
+    // se perdió y el cliente reintentó), se devuelve el registro existente sin duplicar.
+    if (idLocal) {
+      const existente = await prisma.radicado.findFirst({ where: { idLocal: String(idLocal) } });
+      if (existente) {
+        console.warn(`Radicado idempotente: idLocal=${idLocal} ya existe como ${existente.numeroRadicado}`);
+        return existente;
+      }
     }
 
     const fechaVencimiento = moment()
       .add(parseInt(diasParaVencer) || 10, "days")
       .toDate();
 
+    // El estado puede venir de un alta offline que ya cambió de estado (ej. Resuelto)
+    const estadoInicial = ESTADOS_RADICADO_VALIDOS.includes(payload.estado)
+      ? payload.estado
+      : "Pendiente";
+
     // ⚠️ No enviar `id`: el schema define id como ObjectId autogenerado por MongoDB.
     // Enviarlo causa error de validación y el radicado NUNCA se persistía en la BD.
     const itemData = {
-      numeroRadicado,
       peticionario,
       dependencia,
       correoDrive: correoDrive || "encargada@acuasan.gov.co",
@@ -394,25 +412,44 @@ export const RadicadosService = {
       numeroRadicadoPdf: numeroRadicadoPdf || null,
       fechaRadicacion: new Date(),
       fechaVencimiento,
-      estado: "Pendiente",
+      estado: estadoInicial,
       archivoNombre: archivoNombre || null,
       archivoUrl: archivoUrl || null,
       archivoBase64: archivoBase64 || null,
+      // NUNCA null: el índice único de MongoDB indexaría null como valor y solo
+      // cabría un documento sin idLocal en toda la colección (P2002 masivo).
+      idLocal: String(idLocal || randomUUID()),
     };
 
-    try {
-      const nuevo = await prisma.radicado.create({
-        data: itemData,
-      });
-      return nuevo;
-    } catch (e) {
-      console.warn(
-        "DB no disponible, guardando radicado en memoria:",
-        e.message
-      );
-      RADICADOS_IN_MEMORY.unshift(itemData);
-      return itemData;
+    // Radicado secuencial RAD-AAAA-0001 generado por el backend (fuente de verdad).
+    // Reintento real ante colisión concurrente (P2002 en numeroRadicado): se
+    // regenera el consecutivo; NUNCA se responde con un registro solo en memoria.
+    let ultimoError = null;
+    for (let intento = 1; intento <= 4; intento++) {
+      let numeroRadicado;
+      try {
+        numeroRadicado = await this.generarRadicadoUnico();
+      } catch (eCount) {
+        throw new Error(`No se pudo generar la numeración del radicado: ${eCount.message}`);
+      }
+
+      try {
+        return await prisma.radicado.create({
+          data: { ...itemData, numeroRadicado },
+        });
+      } catch (e) {
+        ultimoError = e;
+        const esColision = e.code === "P2002";
+        if (!esColision) break;
+        console.warn(
+          `Colisión de numeración (intento ${intento}/4), regenerando consecutivo: ${e.message}`
+        );
+      }
     }
+
+    throw new Error(
+      `No se pudo persistir el radicado en la base de datos: ${ultimoError?.message || "error desconocido"}`
+    );
   },
 
   async actualizarEstado(id, estado) {
@@ -424,7 +461,7 @@ export const RadicadosService = {
     } catch (e) {
       // Si falla (ej. id no es un ObjectId válido), intentar localizar por numeroRadicado
       try {
-        const porNumero = await prisma.radicado.findUnique({
+        const porNumero = await prisma.radicado.findFirst({
           where: { numeroRadicado: String(id) },
         });
         if (porNumero) {
@@ -433,28 +470,48 @@ export const RadicadosService = {
             data: { estado },
           });
         }
+        // No existe en la BD (posible provisional local aún sin sincronizar)
+        return null;
       } catch (e2) {
-        console.warn(
-          "DB no disponible, actualizando estado en memoria:",
-          e2.message
-        );
+        throw new Error(`Base de datos no disponible: ${e2.message}`);
       }
-      const idx = RADICADOS_IN_MEMORY.findIndex(
-        (r) => r.id === id || r.numeroRadicado === id
-      );
-      if (idx !== -1) {
-        RADICADOS_IN_MEMORY[idx].estado = estado;
-        return RADICADOS_IN_MEMORY[idx];
-      }
-      return { id, estado };
     }
   },
 
+  /**
+   * Parsing de campos institucionales a partir del texto REAL extraído por
+   * el OCR del navegador (pdfjs-dist + tesseract.js del lado cliente).
+   */
+  async parsearTexto(texto, originalname) {
+    const campos = extraerCamposPdf(texto);
+    return {
+      mensaje: "Texto del documento analizado exitosamente",
+      metodo: "OCR navegador + parser servidor",
+      peticionario: campos.peticionario || "",
+      dependencia: campos.dependencia || "",
+      registradoPor: "Encargada",
+      contexto: campos.contexto || "",
+      numeroRadicadoPdf: campos.numeroRadicadoPdf || "",
+      fechaDocumento: campos.fechaDocumento || "",
+      lugarFecha: campos.lugarFecha || "",
+      destinatario: campos.destinatario || "",
+      asunto: campos.asunto || "",
+      referencia: campos.referencia || "",
+      diasParaVencer: campos.diasParaVencer || 10,
+      nombreArchivo: originalname || "documento.pdf",
+    };
+  },
+
+  /**
+   * Extracción desde el buffer del archivo (endpoint legado /extraer-pdf).
+   * PDFs vectoriales vía pdf-parse; imágenes vía Tesseract.js.
+   * Los PDFs escaneados (sin capa de texto) devuelven respuesta vacía honesta:
+   * el OCR de esos documentos lo realiza el navegador.
+   */
   async extraerPdf(dataBuffer, mimeType, originalname) {
     let texto = "";
     let metodo = "";
 
-    // 1. Intentar pdf-parse (PDFs vectoriales con texto embebido)
     if (mimeType === "application/pdf" || !mimeType) {
       try {
         const data = await pdfParse(dataBuffer);
@@ -465,29 +522,29 @@ export const RadicadosService = {
           texto = "";
         }
       } catch (errPdf) {
-        console.warn("pdf-parse no extrajo texto suficiente — usando OCR");
+        console.warn(
+          "pdf-parse no extrajo texto suficiente — el documento escaneado debe procesarse desde el navegador"
+        );
         texto = "";
       }
-    }
-
-    // 2. Si no hay texto (escaneados/imágenes), usar OCR con pdf-poppler + Tesseract.js
-    if (!texto) {
+    } else if (mimeType && mimeType.startsWith("image/")) {
       try {
-        texto = await extraerTextoConOCR(dataBuffer, mimeType);
+        texto = await extraerTextoImagenConOCR(dataBuffer);
         metodo = "OCR (Tesseract.js)";
       } catch (errOCR) {
         console.error("Error en OCR:", errOCR.message);
         texto = "";
-        metodo = "manual";
       }
     }
 
-    if (!metodo) metodo = "lectura básica";
+    if (!texto) {
+      return respuestaSinTexto("documento-escaneado-sin-texto", originalname);
+    }
 
     const campos = extraerCamposPdf(texto);
 
     return {
-      mensaje: `PDF procesado exitosamente (método: ${metodo})`,
+      mensaje: `Documento procesado exitosamente (método: ${metodo})`,
       metodo,
       peticionario: campos.peticionario || "",
       dependencia: campos.dependencia || "",
@@ -505,20 +562,12 @@ export const RadicadosService = {
   },
 
   async generarExcel() {
-    let radicados = [];
-    try {
-      radicados = await prisma.radicado.findMany({
-        orderBy: { fechaRadicacion: "desc" },
-      });
-    } catch (e) {
-      console.warn(
-        "DB no disponible, generando reporte desde memoria:",
-        e.message
-      );
-      radicados = RADICADOS_IN_MEMORY;
-    }
+    const radicados = await prisma.radicado.findMany({
+      orderBy: { fechaRadicacion: "desc" },
+    });
     const fileName = `Historial_Radicados_${moment().format("YYYY-MM-DD")}.csv`;
-    const filePath = path.join(__dirname, `../../../${fileName}`);
+    // Escribir en /tmp (único directorio escribible en entornos serverless)
+    const filePath = path.join(os.tmpdir(), fileName);
 
     const csvWriter = createObjectCsvWriter({
       path: filePath,

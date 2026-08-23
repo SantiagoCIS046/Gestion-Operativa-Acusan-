@@ -959,7 +959,14 @@ const ejecutarEliminacion = async () => {
   const radicado = permisoAEliminar.value.radicado || permisoAEliminar.value.id
   const nombre = permisoAEliminar.value.funcionario || permisoAEliminar.value.nombreFuncionario || 'Funcionario'
 
-  await permisosService.eliminarPermiso(radicado)
+  try {
+    await permisosService.eliminarPermiso(radicado)
+  } catch (err) {
+    modalEliminarVisible.value = false
+    lanzarAlertaBootstrap('danger', 'No se pudo eliminar', err.message || 'Sin conexión con el servidor. El permiso no se eliminó de la base de datos.')
+    return
+  }
+
   historialRemisiones.value = historialRemisiones.value.filter(
     r => String(r.id) !== String(radicado) && String(r.radicado) !== String(radicado)
   )
@@ -1567,20 +1574,16 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // E. Fallback seguro inteligente de la solicitud
-  if (!dd || !mm || !aa) {
-    if (p1.includes('18') || nombreArchivo.includes('18') || p1.includes('Angelica') || p1.includes('ANGELICA')) {
-      dd = '18'; mm = '08'; aa = '2026'
-    } else if (p1.includes('03') || p1.includes('3') || p1.includes('Ramon') || p1.includes('RAMON')) {
-      dd = '03'; mm = '08'; aa = '2026'
-    } else {
-      dd = '18'; mm = '08'; aa = '2026'
-    }
+  // E. Sin fecha reconocida: se deja vacía para diligenciamiento manual (sin fechas inventadas)
+  if (dd && mm && aa) {
+    campos.fechaInicio = `${dd}/${mm}/${aa}`
+    campos.fechaFin = `${dd}/${mm}/${aa}`
+    campos.fechaPermisoTexto = `${parseInt(dd)} de ${nombresMes[parseInt(mm)] || ''} de ${aa}`
+  } else {
+    campos.fechaInicio = ''
+    campos.fechaFin = ''
+    campos.fechaPermisoTexto = ''
   }
-
-  campos.fechaInicio = `${dd}/${mm}/${aa}`
-  campos.fechaFin = `${dd}/${mm}/${aa}`
-  campos.fechaPermisoTexto = `${parseInt(dd)} de ${nombresMes[parseInt(mm)] || 'Agosto'} de ${aa}`
 
   // 5. HORARIO: Se deja en blanco para que el usuario pueda ingresarlo manualmente
   campos.horaDetalle = ''
@@ -2065,7 +2068,11 @@ const onStorageChange = (e) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Reintentar publicar permisos guardados sin conexión (pendientes de sincronización)
+  try {
+    await permisosService.sincronizarPendientes()
+  } catch (e) { /* sin conexión */ }
   cargarHistorialDesdeBackend()
   window.addEventListener('storage', onStorageChange)
 })
@@ -2100,10 +2107,6 @@ const confirmarYEnviar = async () => {
 
   isSubmitting.value = true
   try {
-    const diaNum = parseInt((formData.fechaInicio || '').split('/')[0]) || diaActual
-    const mesNum = parseInt((formData.fechaInicio || '').split('/')[1]) || mesActual
-    const anioNum = parseInt((formData.fechaInicio || '').split('/')[2]) || anioActual
-
     // Hora en formato exacto de 24 horas (HH:mm)
     const ahora = new Date()
     const hora24Actual = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -2132,37 +2135,9 @@ const confirmarYEnviar = async () => {
       createdAt: formData.createdAt || undefined
     }
 
-    let nuevoRegistro = null
-
-    try {
-      nuevoRegistro = await permisosService.crearPermiso(payload)
-    } catch (apiErr) {
-      console.warn('API error al guardar en backend, usando fallback local:', apiErr)
-      const nuevoRadicado = `PERM-2026-${String(historialRemisiones.value.length + 47).padStart(4, '0')}`
-      nuevoRegistro = {
-        id: Date.now(),
-        anio: anioNum,
-        mesNum: mesNum,
-        dia: diaNum,
-        radicado: nuevoRadicado,
-        fechaEntrega: `${String(diaActual).padStart(2, '0')}/${String(mesActual).padStart(2, '0')}/${anioActual}`,
-        hora24: hora24Actual,
-        cedula: formData.cedula,
-        funcionario: formData.nombreFuncionario,
-        nombreFuncionario: formData.nombreFuncionario,
-        cargo: formData.cargo || 'Funcionario Acuasan',
-        dependencia: formData.dependencia || 'Operativa',
-        tipo: formData.tipoPermiso,
-        duracion: formData.horasCalculadas || '07:00 a 15:00 (8 horas)',
-        estadoEnvio: 'APROBADO',
-        estado: 'APROBADO',
-        motivo: formData.motivo,
-        soporte: documentFileName.value || 'Permiso_Escaneado.pdf',
-        archivoUrl: customFileUrl.value,
-        isPdf: isPdfFile.value,
-        archivoMimeType: archivoMimeType.value || ''
-      }
-    }
+    // El servicio guarda en el backend (fuente de verdad) o, sin conexión,
+    // deja un provisional local pendiente de sincronización (origen 'LOCAL').
+    const nuevoRegistro = await permisosService.crearPermiso(payload)
 
     if (nuevoRegistro) {
       // Agregar al inicio evitando duplicados por radicado o id
@@ -2173,16 +2148,28 @@ const confirmarYEnviar = async () => {
     }
 
     const nombreEnviado = formData.nombreFuncionario
-    const radicadoGenerado = nuevoRegistro?.radicado || 'PERM-2026'
+    const radicadoGenerado = nuevoRegistro?.radicado || 'PERM'
 
     limpiarFormularioYVisor()
 
-    lanzarAlertaBootstrap(
-      'success',
-      '¡Permiso Radicado y Registrado Exitosamente!',
-      `Se radicó con éxito en MongoDB Atlas a las ${hora24Actual} hrs con Radicado #${radicadoGenerado} (${payload.tipo}) para ${nombreEnviado}. Formulario y visor listos para procesar la siguiente solicitud.`,
-      7500
-    )
+    if (nuevoRegistro && nuevoRegistro.origen === 'LOCAL') {
+      const avisoArchivo = nuevoRegistro.archivoOmitido
+        ? ' ATENCIÓN: el soporte escaneado no cupo en el almacenamiento local y NO se guardó; el permiso se publicará sin documento.'
+        : ''
+      lanzarAlertaBootstrap(
+        'warning',
+        'Guardado Local — Pendiente de Sincronización',
+        `Sin conexión con el servidor: el permiso de ${nombreEnviado} quedó guardado en este equipo con radicado provisional #${radicadoGenerado}. Se publicará en la nube automáticamente cuando se restablezca la conexión.${avisoArchivo}`,
+        8000
+      )
+    } else {
+      lanzarAlertaBootstrap(
+        'success',
+        '¡Permiso Radicado y Publicado en la Base de Datos!',
+        `Se radicó con éxito a las ${hora24Actual} hrs con Radicado #${radicadoGenerado} (${payload.tipo}) para ${nombreEnviado}. Gerencia lo verá al instante en su tablero. Formulario y visor listos para la siguiente solicitud.`,
+        7500
+      )
+    }
 
   } catch (error) {
     console.error('Error al radicar permiso:', error)

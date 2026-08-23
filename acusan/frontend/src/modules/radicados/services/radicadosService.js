@@ -8,7 +8,7 @@ const getHeaders = () => ({
   ...authService.getAuthHeader()
 })
 
-// ── Base de datos de Radicados (Inicia vacía y solo almacena los datos ingresados al sistema) ──
+// ── Caché local (espejo del servidor + registros provisionales sin conexión) ──
 const obtenerDbLocal = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -23,21 +23,140 @@ const obtenerDbLocal = () => {
 }
 
 const guardarDbLocal = (lista) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lista))
-  } catch (e) {
-    console.warn('Error guardando en almacenamiento local:', e)
+  // La cuota de localStorage (~5MB) puede agotarse: el fallo NO se traga,
+  // se propaga para que el llamador informe honestamente al usuario.
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(lista))
+}
+
+// Nunca persistir el documento Base64 en localStorage (un PDF escaneado de 2MB
+// genera ~5.4MB en UTF-16 y desborda la cuota él solo). El archivo vive en la BD;
+// el caché local guarda metadatos + hasArchivo, y el documento se sirve por endpoint.
+const sanitizarParaCache = (item) => {
+  if (!item || typeof item !== 'object') return item
+  const { archivoBase64, archivoUrl, ...resto } = item
+  return {
+    ...resto,
+    hasArchivo: resto.hasArchivo || Boolean(archivoBase64) || (typeof archivoUrl === 'string' && archivoUrl.startsWith('data:'))
   }
+}
+
+// Identificador de cliente para idempotencia de la sincronización (dedupe server-side)
+const generarIdLocal = () =>
+  (window.crypto && typeof window.crypto.randomUUID === 'function')
+    ? window.crypto.randomUUID()
+    : `loc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
+// ── OCR en el navegador: pdfjs-dist (texto embebido + render de páginas) y tesseract.js ──
+// Mismo motor que usa el módulo de Permisos. Sin datos simulados: si no hay
+// texto legible se lanza error y el usuario completa los campos manualmente.
+let _pdfjsCache = null
+const getPdfjs = async () => {
+  if (_pdfjsCache) return _pdfjsCache
+  const pdfjsLib = await import('pdfjs-dist')
+  const v = pdfjsLib.version || '4.10.38'
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+  } catch (e) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${v}/build/pdf.worker.min.mjs`
+  }
+  _pdfjsCache = pdfjsLib
+  return pdfjsLib
+}
+
+const ejecutarOcrCanvas = async (canvas) => {
+  const Tesseract = await import('tesseract.js')
+  const res = await Tesseract.recognize(canvas.toDataURL('image/png'), 'spa', {
+    logger: () => {},
+    tessedit_pageseg_mode: '6',
+    tessedit_ocr_engine_mode: '1',
+    preserve_interword_spaces: '1'
+  })
+  return (res && res.data && res.data.text) ? res.data.text : ''
+}
+
+const extraerTextoEnNavegador = async (file, onProgress) => {
+  const esPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')
+  const esImagen = (file.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name || '')
+
+  if (esImagen) {
+    onProgress?.('🔍 Reconociendo imagen con OCR...')
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const img = new Image()
+    img.src = dataUrl
+    await new Promise((r) => { img.onload = r; img.onerror = r })
+    const canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth * 2
+    canvas.height = img.naturalHeight * 2
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+    return ejecutarOcrCanvas(canvas)
+  }
+
+  if (esPdf) {
+    const pdfjsLib = await getPdfjs()
+    onProgress?.('📄 Abriendo documento PDF...')
+    const arrayBuffer = await file.arrayBuffer()
+    const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+
+    // 1) Texto embebido (PDFs vectoriales)
+    let textoCompleto = ''
+    for (let n = 1; n <= pdfDoc.numPages; n++) {
+      const page = await pdfDoc.getPage(n)
+      try {
+        const textContent = await page.getTextContent()
+        const str = textContent.items.map((item) => item.str).join(' ').trim()
+        if (str.length > 15) textoCompleto += str + '\n'
+      } catch (e) {}
+    }
+    if (textoCompleto.replace(/\s/g, '').length > 40) return textoCompleto
+
+    // 2) PDF escaneado: renderizar páginas y aplicar OCR
+    textoCompleto = ''
+    const paginas = Math.min(pdfDoc.numPages, 3)
+    for (let n = 1; n <= paginas; n++) {
+      onProgress?.(`🖼️ Digitalizando página ${n} de ${paginas} con OCR...`)
+      const page = await pdfDoc.getPage(n)
+      const viewport = page.getViewport({ scale: 2.5 })
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+      textoCompleto += (await ejecutarOcrCanvas(canvas)) + '\n'
+    }
+    return textoCompleto
+  }
+
+  // Archivos de texto plano
+  if ((file.type || '').startsWith('text/') || /\.(txt|csv|md)$/i.test(file.name || '')) {
+    return file.text()
+  }
+
+  return ''
+}
+
+// Reemplaza/inserta un registro en la caché local sin duplicados ni Base64
+const fusionarEnCache = (item) => {
+  const lista = obtenerDbLocal()
+  const filtrada = lista.filter(
+    (r) => String(r.id) !== String(item.id) && String(r.numeroRadicado) !== String(item.numeroRadicado)
+  )
+  guardarDbLocal([sanitizarParaCache(item), ...filtrada])
 }
 
 export const radicadosService = {
   /**
-   * Obtiene todos los radicados desde la base de datos central en la nube
+   * Obtiene todos los radicados desde la base de datos central (fuente de verdad).
+   * La caché local NUNCA se pisa con una lista vacía del servidor y los
+   * registros provisionales (sin conexión) se conservan y se muestran al final.
    */
   async obtenerTodos() {
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 4000)
+      const timeoutId = setTimeout(() => controller.abort(), 6000)
 
       const res = await fetch(API_BASE, {
         headers: authService.getAuthHeader(),
@@ -45,11 +164,29 @@ export const radicadosService = {
       })
       clearTimeout(timeoutId)
 
+      if (res.status === 401) {
+        authService.logout()
+        window.location.href = '/login'
+        return []
+      }
+
       if (res.ok) {
         const data = await res.json()
         if (data && data.success && Array.isArray(data.data)) {
-          guardarDbLocal(data.data)
-          return data.data
+          const delServidor = data.data.map(sanitizarParaCache)
+          const localesPendientes = obtenerDbLocal().filter((r) => r.sincronizado === false)
+          if (delServidor.length > 0 || localesPendientes.length === 0) {
+            try {
+              guardarDbLocal([...localesPendientes, ...delServidor])
+            } catch (eCuota) {
+              // Cuota llena (caché vieja con Base64): el espejo no se actualiza,
+              // pero la respuesta al usuario siempre prioriza los datos del servidor
+              console.warn('No se pudo actualizar el espejo local:', eCuota.message)
+            }
+          }
+          return [...delServidor, ...localesPendientes].sort(
+            (a, b) => new Date(b.fechaRadicacion) - new Date(a.fechaRadicacion)
+          )
         }
       }
 
@@ -60,105 +197,235 @@ export const radicadosService = {
   },
 
   /**
-   * Crea un nuevo radicado con persistencia garantizada
+   * Extrae el texto REAL del documento en el navegador (pdfjs/tesseract) y
+   * envía ese texto al backend para el parsing de campos institucionales.
+   * Sin datos simulados: cualquier fallo se propaga como error.
    */
-  async crear(datos) {
-    const numeroRadicado = `RAD-${Math.floor(1000 + Math.random() * 9000)}`
-    const ahora = new Date()
-    const fVenc = new Date(ahora.getTime() + (parseInt(datos.diasParaVencer) || 10) * 24 * 60 * 60 * 1000)
+  async extraerPdf(file, onProgress) {
+    const texto = await extraerTextoEnNavegador(file, onProgress)
 
-    const nuevoItem = {
-      ...datos,
-      id: numeroRadicado,
-      numeroRadicado,
-      radicado: numeroRadicado,
-      estado: 'Pendiente',
-      fechaRadicacion: ahora.toISOString(),
-      fechaVencimiento: fVenc.toISOString(),
-      diasRestantes: parseInt(datos.diasParaVencer) || 10,
-      registradoPor: datos.registradoPor || authService.getUsuarioActual()?.nombre || 'Eliana'
+    if (!texto || !texto.replace(/\s/g, '')) {
+      throw new Error('No se pudo extraer texto del documento. Complete los campos manualmente.')
     }
 
-    // Guardar en base local
-    const listaActual = obtenerDbLocal()
-    listaActual.unshift(nuevoItem)
-    guardarDbLocal(listaActual)
+    const res = await fetch(`${API_BASE}/extraer-campos`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ texto, nombreArchivo: file.name })
+    })
+
+    if (!res.ok) {
+      let msg = 'El servidor no pudo analizar el documento.'
+      try {
+        const data = await res.json()
+        if (data && data.message) msg = data.message
+      } catch (e) {}
+      throw new Error(msg)
+    }
+
+    const data = await res.json()
+    if (data && data.success && data.data) return data.data
+    throw new Error('Respuesta inesperada del servidor al analizar el documento.')
+  },
+
+  /**
+   * Crea un radicado. El backend es la fuente de verdad (numeración y fechas).
+   * Si el backend no responde, se guarda un provisional local marcado como
+   * pendiente de sincronización (origen: 'LOCAL') — nunca se informa como guardado en la nube.
+   */
+  async crear(datos) {
+    // Identificador de idempotencia: si la respuesta del POST se pierde y se
+    // reintenta, el backend deduplica por idLocal en lugar de crear otro registro.
+    const idLocal = datos.idLocal || generarIdLocal()
+    const payload = { ...datos, idLocal }
 
     try {
       const res = await fetch(API_BASE, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify(datos)
+        body: JSON.stringify(payload)
       })
+
+      if (res.status === 401) {
+        authService.logout()
+        window.location.href = '/login'
+        throw new Error('Sesión expirada. Inicie sesión nuevamente.')
+      }
+
       if (res.ok) {
         const data = await res.json()
-        if (data && data.success) return data.data
+        if (data && data.success && data.data) {
+          try {
+            fusionarEnCache(data.data)
+          } catch (eCuota) {
+            console.warn('Espejo local sin espacio; el radicado SÍ está en la BD:', eCuota.message)
+          }
+          return { ...data.data, origen: 'SERVIDOR' }
+        }
+        throw new Error((data && data.message) || 'El servidor rechazó el radicado.')
       }
+      throw new Error(`El servidor respondió ${res.status}`)
     } catch (e) {
-      console.warn('Backend no disponible para guardar radicado, almacenado localmente:', e.message)
-    }
+      if (e.message && e.message.startsWith('Sesión expirada')) throw e
 
-    return nuevoItem
+      // Fallback local EXPLÍCITO: queda pendiente de sincronización automática
+      console.warn('Backend no disponible, radicado guardado localmente (pendiente de sincronización):', e.message)
+      const ahora = new Date()
+      const fVenc = new Date(ahora.getTime() + (parseInt(datos.diasParaVencer) || 10) * 24 * 60 * 60 * 1000)
+      const base = {
+        ...datos,
+        idLocal,
+        id: `RAD-LOCAL-${Date.now()}`,
+        numeroRadicado: `RAD-LOCAL-${Date.now()}`,
+        estado: 'Pendiente',
+        fechaRadicacion: ahora.toISOString(),
+        fechaVencimiento: fVenc.toISOString(),
+        registradoPor: datos.registradoPor || authService.getUsuarioActual()?.nombre || 'Encargada',
+        sincronizado: false,
+        origen: 'LOCAL'
+      }
+      const lista = obtenerDbLocal()
+
+      // 1) Intento con el documento adjunto (necesario para publicarlo después)
+      try {
+        guardarDbLocal([base, ...lista])
+        return base
+      } catch (eCuota) {
+        // 2) Sin espacio: persistir sin el Base64 (el radicado sobrevive; el
+        //    documento se pierde y se informa — NUNCA se finge un guardado completo)
+        const sinArchivo = sanitizarParaCache({ ...base, archivoOmitido: true })
+        try {
+          guardarDbLocal([sinArchivo, ...lista])
+          console.warn('Documento adjunto omitido por cuota de almacenamiento local:', eCuota.message)
+          return sinArchivo
+        } catch (eCuota2) {
+          throw new Error(
+            'No hay espacio en el almacenamiento local del navegador y el servidor no responde. ' +
+            'Libere espacio (cierre sesiones antiguas o borre el historial local) e intente de nuevo.'
+          )
+        }
+      }
+    }
   },
 
   /**
-   * Actualiza el estado de un radicado (ej: marcar como Resuelto)
+   * Reintenta enviar a la nube los radicados guardados localmente sin conexión.
+   * Devuelve la cantidad sincronizados. Se llama al montar la vista.
+   * Lock (Web Locks / flag módulo): dos pestañas abiertas a la vez no duplican
+   * envíos; idLocal deduplica en el servidor si una respuesta se pierde.
+   */
+  async sincronizarPendientes() {
+    const nombreLock = 'acuasan-sync-radicados'
+    if (navigator.locks && typeof navigator.locks.request === 'function') {
+      try {
+        return await navigator.locks.request(nombreLock, { ifAvailable: true }, async (lock) => {
+          if (!lock) return 0 // Otra pestaña ya está sincronizando
+          return await this._ejecutarSincronizacion()
+        })
+      } catch (e) {
+        return 0
+      }
+    }
+    if (this._sincronizando) return 0
+    this._sincronizando = true
+    try {
+      return await this._ejecutarSincronizacion()
+    } finally {
+      this._sincronizando = false
+    }
+  },
+
+  async _ejecutarSincronizacion() {
+    const pendientes = obtenerDbLocal().filter((r) => r.sincronizado === false)
+    let sincronizados = 0
+    for (const p of pendientes) {
+      const { sincronizado, origen, id, numeroRadicado, archivoOmitido, ...payload } = p
+      try {
+        const res = await fetch(API_BASE, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.success && data.data) {
+            const lista = obtenerDbLocal().filter(
+              (r) => String(r.id) !== String(p.id) && String(r.numeroRadicado) !== String(p.numeroRadicado)
+            )
+            try {
+              guardarDbLocal([sanitizarParaCache(data.data), ...lista])
+            } catch (eCuota) {
+              console.warn('Espejo local sin espacio tras sincronizar:', eCuota.message)
+            }
+            sincronizados++
+          }
+        }
+      } catch (e) {
+        // Sigue sin conexión: se reintentará en el próximo montaje
+      }
+    }
+    return sincronizados
+  },
+
+  /**
+   * Actualiza el estado de un radicado en el servidor.
+   * Solo los provisionales locales pueden actualizarse sin conexión;
+   * para registros del servidor se informa el error de conexión real.
    */
   async actualizarEstado(id, estado) {
-    const listaActual = obtenerDbLocal()
-    const idx = listaActual.findIndex(r => r.id === id || r.numeroRadicado === id)
-    if (idx !== -1) {
-      listaActual[idx].estado = estado
-      guardarDbLocal(listaActual)
-    }
+    const lista = obtenerDbLocal()
+    const idx = lista.findIndex((r) => String(r.id) === String(id) || String(r.numeroRadicado) === String(id))
+    const esLocalPendiente = idx !== -1 && lista[idx].sincronizado === false
 
     try {
-      await fetch(`${API_BASE}/${id}`, {
+      const res = await fetch(`${API_BASE}/${id}`, {
         method: 'PUT',
         headers: getHeaders(),
         body: JSON.stringify({ estado })
       })
-    } catch (e) {
-      console.warn('Backend no disponible para actualizar estado de radicado:', e.message)
-    }
-
-    return (idx !== -1) ? listaActual[idx] : { id, estado }
-  },
-
-  async extraerPdf(file) {
-    try {
-      const formData = new FormData()
-      formData.append('archivoPdf', file)
-
-      const res = await fetch(`${API_BASE}/extraer-pdf`, {
-        method: 'POST',
-        headers: authService.getAuthHeader(),
-        body: formData
-      })
-
       if (res.ok) {
         const data = await res.json()
-        if (data && data.success) return data.data
+        if (data && data.success) {
+          if (idx !== -1) {
+            // Merge sin Base64: el PUT devuelve la fila completa y el caché es liviano
+            lista[idx] = { ...lista[idx], ...sanitizarParaCache(data.data || { estado }) }
+            try {
+              guardarDbLocal(lista)
+            } catch (eCuota) {
+              console.warn('Espejo local sin espacio:', eCuota.message)
+            }
+          }
+          return (data.data) || (idx !== -1 ? lista[idx] : { id, estado })
+        }
+        throw new Error((data && data.message) || 'Respuesta inválida del servidor')
       }
+      throw new Error(`El servidor respondió ${res.status}`)
     } catch (e) {
-      // fallback inteligente
+      if (esLocalPendiente) {
+        lista[idx].estado = estado
+        try {
+          guardarDbLocal(lista)
+        } catch (eCuota) {
+          // Cuota llena: el cambio vive en la sesión actual y se sincronizará igual
+          console.warn('Espejo local sin espacio para el cambio de estado:', eCuota.message)
+        }
+        return lista[idx]
+      }
+      throw new Error('No se pudo actualizar el estado: sin conexión con el servidor.')
     }
+  },
 
-    // Extracción inteligente simulada para entornos offline
-    const cleanName = (file.name || '').replace(/\.[^.]+$/, '')
-    return {
-      numeroRadicadoPdf: `${Math.floor(2600000000 + Math.random() * 999999)}`,
-      fechaDocumento: new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      lugarFecha: `San Gil, ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-      peticionario: cleanName.length > 5 ? cleanName : 'Peticionario Ciudadano',
-      dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
-      destinatario: 'Gerencia General & Atención al Usuario',
-      asunto: `Solicitud de trámite correspondiente a ${cleanName}`,
-      referencia: `Referencia Radicado Doc. ${file.name}`,
-      contexto: 'Documento procesado correctamente mediante el sistema institucional de Acuasan.',
-      diasParaVencer: 10,
-      metodo: 'Extracción Asistida Acuasan'
-    }
+  /**
+   * Descarga el documento original del radicado como URL de objeto.
+   * El listado viaja sin Base64 (peso); el archivo se sirve bajo demanda.
+   */
+  async obtenerArchivoRadicado(id) {
+    const res = await fetch(`${API_BASE}/${id}/archivo`, {
+      headers: authService.getAuthHeader()
+    })
+    if (!res.ok) throw new Error('No fue posible obtener el documento del radicado')
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
   },
 
   getDescargarExcelUrl() {

@@ -122,7 +122,7 @@
         <button 
           class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2 fw-bold shadow-sm"
           style="background-color: white; border-radius: 8px;"
-          @click="cargarPermisos"
+          @click="cargarPermisos()"
           :disabled="cargando"
           title="Forzar descarga desde la nube"
         >
@@ -806,37 +806,40 @@ const cambiarMes = (delta) => {
   }
 }
 
-// Cargar permisos oficiales del sistema
-const cargarPermisos = async () => {
-  cargando.value = true
+// Cargar permisos oficiales del sistema.
+// silencioso=true (polling/visibilitychange): no toca `cargando` para que el
+// botón Sincronizar no parpadee cada 5 segundos.
+const cargarPermisos = async (silencioso = false) => {
+  if (!silencioso) cargando.value = true
   try {
     const lista = await permisosService.obtenerHistorialPermisos()
     permisos.value = lista || []
   } catch (error) {
     console.error('Error al cargar permisos:', error)
   } finally {
-    cargando.value = false
+    if (!silencioso) cargando.value = false
   }
 }
 
 const onStorageChange = (e) => {
   if (e.key === 'acuasan_permisos_v2' || !e.key) {
-    cargarPermisos()
+    cargarPermisos(true)
   }
 }
 
 const onVisibilityChange = () => {
-  if (document.visibilityState === 'visible') cargarPermisos()
+  if (document.visibilityState === 'visible') cargarPermisos(true)
 }
 
-// Listado automatico: refresco al montar, al volver la pestaÃ±a visible y por polling cada 15s
+// Listado automatico: refresco al montar, al volver la pestaña visible y por polling cada 5s
+// (mismo intervalo que Radicados: lo que publica el Encargado aparece casi al instante)
 let intervaloRefresco = null
 
 onMounted(() => {
   cargarPermisos()
   window.addEventListener('storage', onStorageChange)
   document.addEventListener('visibilitychange', onVisibilityChange)
-  intervaloRefresco = setInterval(cargarPermisos, 15000)
+  intervaloRefresco = setInterval(() => cargarPermisos(true), 5000)
 })
 
 onUnmounted(() => {

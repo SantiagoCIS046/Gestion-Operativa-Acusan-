@@ -18,7 +18,12 @@ export const RadicadosController = {
 
   async crear(req, res) {
     try {
-      const nuevo = await RadicadosService.crear(req.body)
+      // registradoPor: fuente de verdad = usuario autenticado (para filtros Eliana/Román reales)
+      const payload = {
+        ...req.body,
+        registradoPor: req.usuario?.nombre || req.body.registradoPor || 'Encargada'
+      }
+      const nuevo = await RadicadosService.crear(payload)
 
       const usuario = req.usuario?.email || 'anónimo'
       const radicado = nuevo?.numeroRadicado || nuevo?.id || '?'
@@ -35,7 +40,11 @@ export const RadicadosController = {
       })
     } catch (error) {
       logger.error('RADICADOS', 'CREAR ERR', error.message)
-      res.status(500).json({ success: false, message: 'Error al registrar el radicado' })
+      // 503: el radicado NO se persistió — el cliente lo conservará como pendiente local
+      res.status(503).json({
+        success: false,
+        message: 'El radicado no pudo guardarse en la base de datos. Quedará pendiente de sincronización.'
+      })
     }
   },
 
@@ -45,6 +54,13 @@ export const RadicadosController = {
       const { estado } = req.body
       const actualizado = await RadicadosService.actualizarEstado(id, estado)
 
+      if (!actualizado) {
+        return res.status(404).json({
+          success: false,
+          message: 'El radicado no existe en la base de datos (posiblemente es un registro local pendiente de sincronizar)'
+        })
+      }
+
       const usuario = req.usuario?.email || 'anónimo'
       logger.update(
         'RADICADOS',
@@ -52,14 +68,68 @@ export const RadicadosController = {
         `Por: ${usuario} | ID: ${id} | Nuevo estado: ${estado}`
       )
 
+      // Sin Base64 en la respuesta (mismo criterio que el listado): el archivo
+      // se sirve bajo demanda desde /:id/archivo
+      const { archivoBase64, ...actualizadoLigero } = actualizado
+
       res.json({
         success: true,
         message: 'Estado actualizado correctamente',
-        data: actualizado
+        data: { ...actualizadoLigero, hasArchivo: Boolean(archivoBase64) }
       })
     } catch (error) {
       logger.error('RADICADOS', 'ACTUAL ERR', `ID: ${req.params.id} — ${error.message}`)
-      res.status(500).json({ success: false, message: 'Error al actualizar el estado' })
+      res.status(503).json({ success: false, message: 'Error al actualizar el estado' })
+    }
+  },
+
+  async extraerCampos(req, res) {
+    try {
+      const { texto, nombreArchivo } = req.body || {}
+      if (!texto || !String(texto).trim()) {
+        return res.status(400).json({ success: false, message: 'No se recibió texto para analizar' })
+      }
+
+      const resultado = await RadicadosService.parsearTexto(String(texto), nombreArchivo)
+
+      logger.info(
+        'RADICADOS',
+        'EXTRAER CAMPOS',
+        `Archivo: ${nombreArchivo || '?'} | Texto: ${String(texto).length} caracteres`
+      )
+
+      res.json({ success: true, data: resultado })
+    } catch (error) {
+      logger.error('RADICADOS', 'CAMPOS ERR', error.message)
+      res.status(500).json({ success: false, message: 'Error al analizar el texto del documento' })
+    }
+  },
+
+  async servirArchivo(req, res) {
+    try {
+      const { id } = req.params
+      const radicado = await RadicadosService.obtenerPorId(id)
+      if (!radicado || !radicado.archivoBase64) {
+        return res.status(404).json({ success: false, message: 'El radicado no tiene documento adjunto' })
+      }
+
+      const dataUrl = radicado.archivoBase64
+      const matches = dataUrl.match(/^data:([^;]+);base64,(.*)$/s)
+      if (!matches) {
+        return res.status(422).json({ success: false, message: 'Formato de documento almacenado no soportado' })
+      }
+
+      const mime = matches[1] || 'application/pdf'
+      const buffer = Buffer.from(matches[2], 'base64')
+      const nombreSeguro = (radicado.archivoNombre || 'Radicado.pdf').replace(/["\r\n]/g, '')
+
+      res.setHeader('Content-Type', mime)
+      res.setHeader('Content-Disposition', `inline; filename="${nombreSeguro}"`)
+      res.setHeader('Cache-Control', 'private, max-age=300')
+      return res.send(buffer)
+    } catch (error) {
+      logger.error('RADICADOS', 'ARCHIVO ERR', `ID: ${req.params.id} — ${error.message}`)
+      res.status(500).json({ success: false, message: 'Error al servir el documento del radicado' })
     }
   },
 

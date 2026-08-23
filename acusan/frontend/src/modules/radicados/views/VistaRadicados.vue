@@ -733,7 +733,14 @@ const onStorageChange = (e) => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Reintentar publicar radicados guardados sin conexión (pendientes de sincronización)
+  try {
+    const sincronizados = await radicadosService.sincronizarPendientes()
+    if (sincronizados > 0) {
+      mostrarAlertaBootstrap('Sincronización Nube', `${sincronizados} radicado(s) pendiente(s) se publicaron correctamente en la base de datos.`, 'info')
+    }
+  } catch (e) { /* sin conexión */ }
   CargarLista()
   window.addEventListener('storage', onStorageChange)
   // Auto-actualización periódica silenciosa
@@ -804,6 +811,11 @@ const onFileSelected = async (event) => {
   pdfPreviewUrl.value = URL.createObjectURL(file)
   form.archivoNombre = file.name
 
+  // Aviso temprano: documentos muy pesados pueden exceder el límite de la nube
+  if (file.size > 4 * 1024 * 1024) {
+    mostrarAlertaBootstrap('Documento Pesado', 'El archivo supera 4 MB y podría no guardarse en la nube. Considere comprimirlo antes de radicar.', 'warning')
+  }
+
   // Convertir a base64 para almacenar el documento PDF original en la BD
   const reader = new FileReader()
   reader.onload = (e) => {
@@ -814,11 +826,12 @@ const onFileSelected = async (event) => {
 
   try {
     cargandoOcr.value = true
-    ocrMensaje.value = '🔍 Analizando y extrayendo campos con OCR de Acuasan...'
     ocrError.value = false
     resumenOcr.value = null
 
-    const resultado = await radicadosService.extraerPdf(file)
+    const resultado = await radicadosService.extraerPdf(file, (mensaje) => {
+      ocrMensaje.value = `🔍 ${mensaje}`
+    })
 
     form.numeroRadicadoPdf = resultado.numeroRadicadoPdf || form.numeroRadicadoPdf
     form.fechaDocumento = resultado.fechaDocumento || form.fechaDocumento
@@ -849,8 +862,24 @@ const guardarRadicado = async () => {
   try {
     guardando.value = true
     const nuevoRad = await radicadosService.crear(form)
-    mostrarAlertaBootstrap('Radicado Registrado', `Se guardó exitosamente el radicado ${nuevoRad.numeroRadicado}`, 'success')
-    
+
+    if (nuevoRad && nuevoRad.origen === 'LOCAL') {
+      const avisoArchivo = nuevoRad.archivoOmitido
+        ? ' ATENCIÓN: el documento adjunto no cupo en el almacenamiento local y NO se guardó; el radicado se publicará sin archivo.'
+        : ''
+      mostrarAlertaBootstrap(
+        'Guardado Local — Pendiente de Sincronización',
+        `Sin conexión con el servidor: el radicado ${nuevoRad.numeroRadicado} se guardó en este equipo y se publicará automáticamente en la nube cuando se restablezca la conexión.${avisoArchivo}`,
+        'warning'
+      )
+    } else {
+      mostrarAlertaBootstrap(
+        'Radicado Publicado en la Base de Datos',
+        `Se guardó exitosamente el radicado ${nuevoRad.numeroRadicado}. Gerencia lo verá al instante en su tablero.`,
+        'success'
+      )
+    }
+
     // Reset parcial del formulario
     form.numeroRadicadoPdf = ''
     form.fechaDocumento = ''
@@ -861,6 +890,7 @@ const guardarRadicado = async () => {
     form.referencia = ''
     form.contexto = ''
     form.archivoBase64 = ''
+    form.archivoNombre = null
     pdfPreviewUrl.value = null
 
     resumenOcr.value = null
@@ -888,8 +918,20 @@ const abrirModal = (rad) => {
   modalRadicado.value = rad
 }
 
-const abrirArchivoAdjunto = (rad) => {
+const abrirArchivoAdjunto = async (rad) => {
   modalRadicado.value = null
+
+  // 1. Documento oficial almacenado en la base de datos (se sirve bajo demanda)
+  if (rad && rad.id) {
+    try {
+      const url = await radicadosService.obtenerArchivoRadicado(rad.id)
+      window.open(url, '_blank')
+      mostrarAlertaBootstrap('Archivo Original', 'Visualizando el documento original guardado en la base de datos.', 'success')
+      return
+    } catch (e) {
+      // Sin documento en la nube → continuar con los respaldos locales
+    }
+  }
 
   const base64Data = (rad && rad.archivoBase64) || form.archivoBase64
 
