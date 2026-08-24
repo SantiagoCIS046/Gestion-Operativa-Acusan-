@@ -9,11 +9,23 @@ import { createObjectCsvWriter } from "csv-writer";
 import prisma from "../../config/prisma.js";
 
 const require = createRequire(import.meta.url);
-const pdfParseModule = require("pdf-parse");
-const pdfParse =
-  typeof pdfParseModule === "function"
-    ? pdfParseModule
-    : pdfParseModule.default || pdfParseModule;
+
+// pdf-parse se carga perezosamente: el build que Vercel empaqueta en la
+// función serverless referencia globals de navegador (DOMMatrix) durante su
+// inicialización y mataría el proceso completo si se require al importar el
+// módulo. Cargándolo bajo demanda, un entorno sin DOM degrada a la respuesta
+// vacía honesta (el navegador hace la extracción) en vez de tumbar el API.
+let _pdfParse = null;
+const getPdfParse = () => {
+  if (_pdfParse === null) {
+    const pdfParseModule = require("pdf-parse");
+    _pdfParse =
+      typeof pdfParseModule === "function"
+        ? pdfParseModule
+        : pdfParseModule.default || pdfParseModule;
+  }
+  return _pdfParse;
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -514,7 +526,7 @@ export const RadicadosService = {
 
     if (mimeType === "application/pdf" || !mimeType) {
       try {
-        const data = await pdfParse(dataBuffer);
+        const data = await getPdfParse()(dataBuffer);
         texto = (data.text || "").trim();
         if (texto.length > 40) {
           metodo = "pdf-parse";
