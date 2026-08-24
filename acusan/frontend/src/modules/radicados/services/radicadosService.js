@@ -230,8 +230,11 @@ export const radicadosService = {
 
   /**
    * Crea un radicado. El backend es la fuente de verdad (numeración y fechas).
-   * Si el backend no responde, se guarda un provisional local marcado como
-   * pendiente de sincronización (origen: 'LOCAL') — nunca se informa como guardado en la nube.
+   * Ante un fallo TRANSITORIO (5xx / caída de red) se reintenta una vez antes de
+   * caer al local: una intermitencia de segundos de la BD no debe dejar el
+   * radicado colgando como pendiente. Si el backend sigue sin responder, se
+   * guarda un provisional local marcado como pendiente de sincronización
+   * (origen: 'LOCAL') — nunca se informa como guardado en la nube.
    */
   async crear(datos) {
     // Identificador de idempotencia: si la respuesta del POST se pierde y se
@@ -239,7 +242,7 @@ export const radicadosService = {
     const idLocal = datos.idLocal || generarIdLocal()
     const payload = { ...datos, idLocal }
 
-    try {
+    const enviarAlServidor = async () => {
       const res = await fetch(API_BASE, {
         method: 'POST',
         headers: getHeaders(),
@@ -264,46 +267,95 @@ export const radicadosService = {
         }
         throw new Error((data && data.message) || 'El servidor rechazó el radicado.')
       }
-      throw new Error(`El servidor respondió ${res.status}`)
-    } catch (e) {
-      if (e.message && e.message.startsWith('Sesión expirada')) throw e
+      const error = new Error(`El servidor respondió ${res.status}`)
+      error.status = res.status
+      throw error
+    }
 
-      // Fallback local EXPLÍCITO: queda pendiente de sincronización automática
-      console.warn('Backend no disponible, radicado guardado localmente (pendiente de sincronización):', e.message)
-      const ahora = new Date()
-      const fVenc = new Date(ahora.getTime() + (parseInt(datos.diasParaVencer) || 10) * 24 * 60 * 60 * 1000)
-      const base = {
-        ...datos,
-        idLocal,
-        id: `RAD-LOCAL-${Date.now()}`,
-        numeroRadicado: `RAD-LOCAL-${Date.now()}`,
-        estado: 'Pendiente',
-        fechaRadicacion: ahora.toISOString(),
-        fechaVencimiento: fVenc.toISOString(),
-        registradoPor: datos.registradoPor || authService.getUsuarioActual()?.nombre || 'Encargada',
-        sincronizado: false,
-        origen: 'LOCAL'
-      }
-      const lista = obtenerDbLocal()
+    try {
+      return await enviarAlServidor()
+    } catch (ePrimer) {
+      if (ePrimer.message && ePrimer.message.startsWith('Sesión expirada')) throw ePrimer
 
-      // 1) Intento con el documento adjunto (necesario para publicarlo después)
-      try {
-        guardarDbLocal([base, ...lista])
-        return base
-      } catch (eCuota) {
-        // 2) Sin espacio: persistir sin el Base64 (el radicado sobrevive; el
-        //    documento se pierde y se informa — NUNCA se finge un guardado completo)
-        const sinArchivo = sanitizarParaCache({ ...base, archivoOmitido: true })
+      // Fallo de red (sin status) o 5xx = transitorio → un reintento breve.
+      // Un 4xx es un rechazo definitivo del servidor: reintentar no cambia nada.
+      const esTransitorio = ePrimer.status === undefined || ePrimer.status >= 500
+      if (esTransitorio) {
         try {
-          guardarDbLocal([sinArchivo, ...lista])
-          console.warn('Documento adjunto omitido por cuota de almacenamiento local:', eCuota.message)
-          return sinArchivo
-        } catch (eCuota2) {
-          throw new Error(
-            'No hay espacio en el almacenamiento local del navegador y el servidor no responde. ' +
-            'Libere espacio (cierre sesiones antiguas o borre el historial local) e intente de nuevo.'
-          )
+          await new Promise((resolver) => setTimeout(resolver, 1500))
+          return await enviarAlServidor()
+        } catch (eSegundo) {
+          if (eSegundo.message && eSegundo.message.startsWith('Sesión expirada')) throw eSegundo
+          return this._guardarPendienteLocal(datos, idLocal, eSegundo)
         }
+      }
+      return this._guardarPendienteLocal(datos, idLocal, ePrimer)
+    }
+  },
+
+  /**
+   * Fallback offline: persiste el radicado como provisional local
+   * (sincronizado: false, origen: 'LOCAL') y devuelve el registro guardado.
+   */
+  _guardarPendienteLocal(datos, idLocal, errorCausa) {
+    console.warn(
+      'Backend no disponible (reintentos agotados), radicado guardado localmente (pendiente de sincronización):',
+      errorCausa.message
+    )
+    const ahora = new Date()
+    const fVenc = new Date(ahora.getTime() + (parseInt(datos.diasParaVencer) || 10) * 24 * 60 * 60 * 1000)
+    const base = {
+      ...datos,
+      idLocal,
+      id: `RAD-LOCAL-${Date.now()}`,
+      numeroRadicado: `RAD-LOCAL-${Date.now()}`,
+      estado: 'Pendiente',
+      fechaRadicacion: ahora.toISOString(),
+      fechaVencimiento: fVenc.toISOString(),
+      registradoPor: datos.registradoPor || authService.getUsuarioActual()?.nombre || 'Encargada',
+      sincronizado: false,
+      origen: 'LOCAL'
+    }
+    const lista = obtenerDbLocal()
+    const pesoAdjunto =
+      (datos.archivoBase64 || '').length +
+      (typeof datos.archivoUrl === 'string' ? datos.archivoUrl.length : 0)
+
+    // 1) Adjunto que no cabe en la cuota: un PDF escaneado (~2MB) genera ~5.4MB
+    //    en UTF-16 y desborda él solo los ~5MB de localStorage. Intentarlo está
+    //    condenado: se omite desde el inicio y se informa UNA sola vez — NUNCA
+    //    se finge un guardado completo.
+    if (pesoAdjunto > 1500000) {
+      const sinArchivo = sanitizarParaCache({ ...base, archivoOmitido: true })
+      try {
+        guardarDbLocal([sinArchivo, ...lista])
+        console.warn('Documento adjunto omitido (excede la cuota del navegador): el radicado se publicará sin archivo.')
+        return sinArchivo
+      } catch (eCuota2) {
+        throw new Error(
+          'No hay espacio en el almacenamiento local del navegador y el servidor no responde. ' +
+          'Libere espacio (cierre sesiones antiguas o borre el historial local) e intente de nuevo.'
+        )
+      }
+    }
+
+    // 2) Adjunto liviano: intentar con el documento (necesario para publicarlo después)
+    try {
+      guardarDbLocal([base, ...lista])
+      return base
+    } catch (eCuota) {
+      // Sin espacio: persistir sin el Base64 (el radicado sobrevive; el
+      // documento se pierde y se informa)
+      const sinArchivo = sanitizarParaCache({ ...base, archivoOmitido: true })
+      try {
+        guardarDbLocal([sinArchivo, ...lista])
+        console.warn('Documento adjunto omitido por cuota de almacenamiento local:', eCuota.message)
+        return sinArchivo
+      } catch (eCuota2) {
+        throw new Error(
+          'No hay espacio en el almacenamiento local del navegador y el servidor no responde. ' +
+          'Libere espacio (cierre sesiones antiguas o borre el historial local) e intente de nuevo.'
+        )
       }
     }
   },
