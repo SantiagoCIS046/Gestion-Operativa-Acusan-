@@ -561,8 +561,8 @@
   </div>
 
     <!-- ═══════════════ MODAL VISTA DIGITAL STAMP (ULTRA-COMPACT BOOTSTRAP MODAL) ═══════════════ -->
-    <div v-if="modalRadicado" class="modal-overlay" @click.self="modalRadicado = null">
-      <div class="modal-card modal-card-micro animate-zoom-in">
+    <div v-if="modalRadicado" class="modal-overlay" @click.self="cerrarModal()">
+      <div class="modal-card modal-card-micro modal-viewer-wide animate-zoom-in">
         <div class="modal-header bg-light py-1 px-2 border-bottom">
           <div class="modal-header-info d-flex align-items-center gap-2">
             <span class="modal-icon fs-6">🏛️</span>
@@ -571,7 +571,7 @@
               <div class="text-muted" style="font-size: 0.62rem;">Registrado: {{ formatearFechaHora(modalRadicado.fechaRadicacion) }}</div>
             </div>
           </div>
-          <button type="button" class="btn-close btn-close-sm" @click="modalRadicado = null" aria-label="Close"></button>
+          <button type="button" class="btn-close btn-close-sm" @click="cerrarModal()" aria-label="Close"></button>
         </div>
 
         <div class="modal-body p-2" style="max-height: 75vh; overflow-y: auto;">
@@ -600,31 +600,43 @@
             <span class="text-secondary">{{ modalRadicado.contexto || 'Sin observaciones adicionales.' }}</span>
           </div>
 
-          <!-- 📎 DOCUMENTO / ARCHIVO ADJUNTO INTERACTIVO -->
-          <div 
-            class="alert alert-info mb-0 p-1 px-2 d-flex align-items-center justify-content-between border border-info shadow-sm"
-            @click="abrirArchivoAdjunto(modalRadicado)"
-            title="Haz clic para abrir o previsualizar el archivo"
-            style="cursor: pointer;"
-          >
-            <div class="d-flex align-items-center gap-1 overflow-hidden me-1">
-              <span class="fs-6">📎</span>
-              <div class="text-truncate">
-                <small class="d-block text-muted fw-bold" style="font-size: 0.58rem;">DOCUMENTO / ARCHIVO ADJUNTO</small>
-                <strong class="text-dark d-block text-truncate" style="font-size: 0.7rem;">
+          <!-- 📄 VISOR DEL DOCUMENTO ORIGINAL (inline) -->
+          <div class="modal-pdf-vista border rounded bg-white mb-0 overflow-hidden">
+            <div class="d-flex align-items-center justify-content-between gap-2 px-2 py-1 bg-light border-bottom">
+              <div class="text-truncate me-auto">
+                <small class="d-block text-muted fw-bold" style="font-size: 0.58rem;">📎 DOCUMENTO ORIGINAL</small>
+                <strong class="text-dark d-block text-truncate" style="font-size: 0.68rem;">
                   {{ modalRadicado.archivoNombre || (modalRadicado.numeroRadicadoPdf ? modalRadicado.numeroRadicadoPdf + '.pdf' : 'Radicado.pdf') }}
                 </strong>
               </div>
+              <button
+                v-if="modalPdfUrl"
+                class="btn btn-outline-primary btn-sm py-0 px-2 flex-shrink-0"
+                style="font-size: 0.62rem;"
+                type="button"
+                @click="abrirPdfPantallaCompleta"
+                title="Abrir en una pestaña nueva a pantalla completa"
+              >
+                ⤢ Abrir
+              </button>
             </div>
-            <button class="btn btn-primary btn-sm py-0.5 px-2 fw-bold flex-shrink-0" style="font-size: 0.65rem;" type="button">
-              👁️ Abrir Archivo
-            </button>
+            <div class="modal-pdf-cuerpo">
+              <div v-if="modalPdfCargando" class="h-100 d-flex align-items-center justify-content-center text-muted" style="font-size: 0.72rem;">
+                ⏳ Cargando documento...
+              </div>
+              <iframe v-else-if="modalPdfUrl" :src="modalPdfUrl" class="pdf-frame" title="Documento original del radicado"></iframe>
+              <div v-else class="h-100 d-flex flex-column align-items-center justify-content-center text-muted px-2 text-center" style="font-size: 0.72rem;">
+                <span style="font-size: 1.4rem;">📄</span>
+                <span v-if="modalPdfError">Este radicado no tiene documento adjunto en la base de datos.</span>
+                <span v-else>Sin documento cargado.</span>
+              </div>
+            </div>
           </div>
 
         </div>
 
         <div class="modal-footer bg-light p-1 pe-2 border-top">
-          <button class="btn btn-secondary btn-sm px-2 py-0.5" style="font-size: 0.72rem;" @click="modalRadicado = null">Cerrar</button>
+          <button class="btn btn-secondary btn-sm px-2 py-0.5" style="font-size: 0.72rem;" @click="cerrarModal()">Cerrar</button>
         </div>
       </div>
     </div>
@@ -752,6 +764,10 @@ onMounted(async () => {
 onUnmounted(() => {
   if (timerAutoRefresh) clearInterval(timerAutoRefresh)
   window.removeEventListener('storage', onStorageChange)
+  // Liberar el blob del visor si la vista se desmonta con el modal abierto
+  if (modalPdfUrl.value && modalPdfUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(modalPdfUrl.value)
+  }
 })
 
 const toggleHistorial = () => {
@@ -914,60 +930,53 @@ const confirmarMarcarResuelto = async (rad) => {
   }
 }
 
-const abrirModal = (rad) => {
+const modalPdfUrl = ref(null)
+const modalPdfCargando = ref(false)
+const modalPdfError = ref(false)
+
+const abrirModal = async (rad) => {
   modalRadicado.value = rad
+
+  // Visor inline: el documento oficial de la BD se sirve bajo demanda como blob;
+  // los provisionales locales usan su Base64 si lo conservaron (sanitizado no lo tiene).
+  modalPdfUrl.value = null
+  modalPdfError.value = false
+  const esLocalPendiente = rad && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
+  const tieneDoc = rad && (rad.hasArchivo || rad.archivoBase64)
+
+  if (!tieneDoc) {
+    modalPdfError.value = true
+    return
+  }
+
+  modalPdfCargando.value = true
+  try {
+    if (esLocalPendiente) {
+      modalPdfUrl.value = rad.archivoBase64 || null
+      if (!modalPdfUrl.value) modalPdfError.value = true
+    } else {
+      modalPdfUrl.value = await radicadosService.obtenerArchivoRadicado(rad.id)
+    }
+  } catch (e) {
+    // Sin documento en la nube → respaldo local si existe
+    modalPdfUrl.value = (rad && rad.archivoBase64) || null
+    if (!modalPdfUrl.value) modalPdfError.value = true
+  } finally {
+    modalPdfCargando.value = false
+  }
 }
 
-const abrirArchivoAdjunto = async (rad) => {
+const cerrarModal = () => {
+  // Liberar el blob del visor (el Base64 del caché local no se revoca: no es blob)
+  if (modalPdfUrl.value && modalPdfUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(modalPdfUrl.value)
+  }
+  modalPdfUrl.value = null
   modalRadicado.value = null
+}
 
-  // 1. Documento oficial almacenado en la base de datos (se sirve bajo demanda)
-  if (rad && rad.id) {
-    try {
-      const url = await radicadosService.obtenerArchivoRadicado(rad.id)
-      window.open(url, '_blank')
-      mostrarAlertaBootstrap('Archivo Original', 'Visualizando el documento original guardado en la base de datos.', 'success')
-      return
-    } catch (e) {
-      // Sin documento en la nube → continuar con los respaldos locales
-    }
-  }
-
-  const base64Data = (rad && rad.archivoBase64) || form.archivoBase64
-
-  if (base64Data) {
-    const win = window.open('', '_blank')
-    if (win) {
-      win.document.write(`
-        <!DOCTYPE html>
-        <html style="margin:0;height:100%;">
-        <head>
-          <title>Documento Original Escaneado - ${rad ? rad.numeroRadicado : 'Radicado'}</title>
-        </head>
-        <body style="margin:0;height:100%;overflow:hidden;background:#525659;">
-          <iframe src="${base64Data}" width="100%" height="100%" frameborder="0"></iframe>
-        </body>
-        </html>
-      `)
-      win.document.close()
-      mostrarAlertaBootstrap('Archivo Original', `Visualizando el documento original escaneado.`, 'success')
-      return
-    }
-  }
-
-  if (pdfPreviewUrl.value) {
-    window.open(pdfPreviewUrl.value, '_blank')
-    mostrarAlertaBootstrap('Documento Abierto', `Se abrió el archivo PDF original en una nueva pestaña.`, 'success')
-    return
-  }
-
-  if (rad && rad.archivoUrl) {
-    window.open(rad.archivoUrl, '_blank')
-    mostrarAlertaBootstrap('Documento Abierto', `Se abrió el archivo adjunto original.`, 'success')
-    return
-  }
-
-  mostrarAlertaBootstrap('Aviso Documento', `No hay archivo PDF escaneado guardado para este registro anterior. Suba el PDF desde el visor para guardar copias completas.`, 'warning')
+const abrirPdfPantallaCompleta = () => {
+  if (modalPdfUrl.value) window.open(modalPdfUrl.value, '_blank')
 }
 
 // Helpers de formato y estado
@@ -1184,6 +1193,19 @@ const getBadgeBootstrap = (rad) => {
   width: 100%;
   height: 100%;
   border: none;
+}
+
+/* Visor de documento dentro del modal de detalle del radicado */
+.modal-pdf-vista {
+  height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-pdf-cuerpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #525659;
 }
 
 .ocr-resumen-box {
@@ -1837,6 +1859,12 @@ const getBadgeBootstrap = (rad) => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* El modal de detalle lleva el visor de PDF: más ancho para leer el documento
+   (width: 92% lo mantiene responsive en pantallas pequeñas) */
+.modal-viewer-wide {
+  max-width: 640px;
 }
 
 .modal-header-info {
