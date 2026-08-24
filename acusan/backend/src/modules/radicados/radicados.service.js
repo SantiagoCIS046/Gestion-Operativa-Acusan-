@@ -491,9 +491,33 @@ export const RadicadosService = {
   },
 
   /**
-   * Parsing de campos institucionales a partir del texto REAL extraído por
-   * el OCR del navegador (pdfjs-dist + tesseract.js del lado cliente).
+   * Elimina un radicado por ID o numeroRadicado.
+   * Solo lo puede ejecutar la encargada de Radicados (controlado en ruta/middleware).
    */
+  async eliminar(id) {
+    try {
+      return await prisma.radicado.delete({
+        where: { id: String(id) },
+      });
+    } catch (e) {
+      // Intentar por numeroRadicado si el id no es un ObjectId válido
+      try {
+        const porNumero = await prisma.radicado.findFirst({
+          where: { numeroRadicado: String(id) },
+        });
+        if (porNumero) {
+          return await prisma.radicado.delete({
+            where: { id: porNumero.id },
+          });
+        }
+        return null;
+      } catch (e2) {
+        throw new Error(`Error al eliminar el radicado: ${e2.message}`);
+      }
+    }
+  },
+
+
   async parsearTexto(texto, originalname) {
     const campos = extraerCamposPdf(texto);
     return {

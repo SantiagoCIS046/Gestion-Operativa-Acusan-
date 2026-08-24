@@ -10,6 +10,7 @@ const router = Router()
 router.get('/', RadicadosController.obtenerTodos)
 router.post('/', verificarToken, RadicadosController.crear)
 router.put('/:id', verificarToken, RadicadosController.actualizarEstado)
+router.delete('/:id', verificarToken, RadicadosController.eliminar)
 router.post('/extraer-pdf', upload.single('archivoPdf'), RadicadosController.extraerPdf)
 // OCR real en el navegador (pdfjs + tesseract) → el servidor parsea el texto extraído
 router.post('/extraer-campos', verificarToken, RadicadosController.extraerCampos)
@@ -18,3 +19,4 @@ router.get('/descargar-excel', RadicadosController.descargarExcel)
 router.get('/:id/archivo', RadicadosController.servirArchivo)
 
 export default router
+

@@ -176,5 +176,31 @@ export const RadicadosController = {
       logger.error('RADICADOS', 'EXCEL ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al generar el reporte Excel' })
     }
+  },
+
+  async eliminar(req, res) {
+    try {
+      const { id } = req.params
+      const eliminado = await RadicadosService.eliminar(id)
+
+      if (!eliminado) {
+        return res.status(404).json({
+          success: false,
+          message: 'El radicado no existe en la base de datos'
+        })
+      }
+
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.update('RADICADOS', 'ELIMINAR', `Por: ${usuario} | ID: ${id} | N°: ${eliminado.numeroRadicado}`)
+
+      res.json({
+        success: true,
+        message: `Radicado ${eliminado.numeroRadicado} eliminado correctamente`
+      })
+    } catch (error) {
+      logger.error('RADICADOS', 'ELIMINAR ERR', `ID: ${req.params.id} — ${error.message}`)
+      res.status(500).json({ success: false, message: 'Error al eliminar el radicado' })
+    }
   }
 }
+
