@@ -73,7 +73,12 @@ app.use((err, req, res, next) => {
 })
 
 // ─── Inicio del servidor ──────────────────────────────────────────────────────
-if (process.env.NODE_ENV !== 'test') {
+// ─── Inicio del servidor ──────────────────────────────────────────────────────
+// En Vercel la app corre como función serverless (api/index.js la exporta y
+// Vercel la invoca por request): NO se debe arrancar listener allí —
+// app.listen() al importarse provoca FUNCTION_INVOCATION_FAILED. Vercel define
+// process.env.VERCEL automáticamente, así que sirve de guard.
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
   app.listen(PORT, async () => {
     logger.startup(PORT, process.env.NODE_ENV || 'development')
 
