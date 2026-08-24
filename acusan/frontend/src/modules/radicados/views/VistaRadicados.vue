@@ -551,6 +551,21 @@
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                   </button>
+                  <!-- Botón eliminar: solo encargada de Radicados -->
+                  <button 
+                    v-if="esEncargadaRadicados"
+                    class="btn-action btn-action-delete" 
+                    @click="solicitarEliminar(rad)" 
+                    title="Eliminar radicado"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                      <path d="M10 11v6"></path>
+                      <path d="M14 11v6"></path>
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                    </svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -559,6 +574,49 @@
       </div>
     </div>
   </div>
+
+    <!-- ═══════════════ MODAL CONFIRMAR ELIMINACIÓN ═══════════════ -->
+    <div v-if="modalEliminar.visible" class="modal-overlay" @click.self="modalEliminar.visible = false">
+      <div class="modal-card animate-zoom-in" style="max-width: 420px; width: 90%;">
+        <div class="modal-header bg-danger py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center gap-2">
+            <span class="text-white fs-6">🗑️</span>
+            <strong class="text-white" style="font-size: 0.88rem;">Eliminar Radicado</strong>
+          </div>
+          <button type="button" class="btn-close btn-close-white btn-close-sm" @click="modalEliminar.visible = false" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-3 text-center">
+          <div class="mb-3">
+            <div class="bg-danger-subtle rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width:56px;height:56px;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path><path d="M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+              </svg>
+            </div>
+            <h6 class="fw-bold text-dark mb-1">¿Eliminar este radicado?</h6>
+            <p class="text-muted mb-2" style="font-size: 0.82rem;">Esta acción es <strong>permanente</strong> y no se puede deshacer.</p>
+            <div class="alert alert-warning py-1 px-2 mb-0" style="font-size: 0.8rem;">
+              <strong>{{ modalEliminar.radicado?.numeroRadicado }}</strong><br>
+              <span class="text-muted" style="font-size: 0.74rem;">{{ modalEliminar.radicado?.peticionario }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 bg-light py-2 px-3 d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-sm btn-light border fw-semibold px-3" @click="modalEliminar.visible = false">Cancelar</button>
+          <button 
+            type="button" 
+            class="btn btn-sm btn-danger fw-bold px-3 d-inline-flex align-items-center gap-1"
+            @click="ejecutarEliminar"
+            :disabled="eliminando"
+          >
+            <span v-if="eliminando" class="spinner-border spinner-border-sm" role="status"></span>
+            <span>🗑️ Eliminar definitivamente</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- ═══════════════ MODAL VISTA DIGITAL STAMP (ULTRA-COMPACT BOOTSTRAP MODAL) ═══════════════ -->
     <div v-if="modalRadicado" class="modal-overlay" @click.self="cerrarModal()">
@@ -600,7 +658,7 @@
             <span class="text-secondary">{{ modalRadicado.contexto || 'Sin observaciones adicionales.' }}</span>
           </div>
 
-          <!-- 📄 VISOR DEL DOCUMENTO ORIGINAL (inline) -->
+          <!-- 📄 VISOR DEL DOCUMENTO ORIGINAL (mismo patrón que Permisos) -->
           <div class="modal-pdf-vista border rounded bg-white mb-0 overflow-hidden">
             <div class="d-flex align-items-center justify-content-between gap-2 px-2 py-1 bg-light border-bottom">
               <div class="text-truncate me-auto">
@@ -609,26 +667,50 @@
                   {{ modalRadicado.archivoNombre || (modalRadicado.numeroRadicadoPdf ? modalRadicado.numeroRadicadoPdf + '.pdf' : 'Radicado.pdf') }}
                 </strong>
               </div>
-              <button
+              <a
                 v-if="modalPdfUrl"
+                :href="modalPdfUrl"
+                target="_blank"
                 class="btn btn-outline-primary btn-sm py-0 px-2 flex-shrink-0"
                 style="font-size: 0.62rem;"
-                type="button"
-                @click="abrirPdfPantallaCompleta"
                 title="Abrir en una pestaña nueva a pantalla completa"
               >
-                ⤢ Abrir
-              </button>
+                ↗️ Abrir Archivo
+              </a>
             </div>
-            <div class="modal-pdf-cuerpo">
-              <div v-if="modalPdfCargando" class="h-100 d-flex align-items-center justify-content-center text-muted" style="font-size: 0.72rem;">
+            <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2" style="min-height: 380px; max-height: 540px;">
+              <div v-if="modalPdfCargando" class="d-flex align-items-center justify-content-center text-white-50" style="font-size: 0.78rem; min-height: 300px;">
                 ⏳ Cargando documento...
               </div>
-              <iframe v-else-if="modalPdfUrl" :src="modalPdfUrl" class="pdf-frame" title="Documento original del radicado"></iframe>
-              <div v-else class="h-100 d-flex flex-column align-items-center justify-content-center text-muted px-2 text-center" style="font-size: 0.72rem;">
-                <span style="font-size: 1.4rem;">📄</span>
-                <span v-if="modalPdfError">Este radicado no tiene documento adjunto en la base de datos.</span>
-                <span v-else>Sin documento cargado.</span>
+
+              <!-- PDF original de la base de datos -->
+              <object
+                v-else-if="modalPdfUrl && !esImagenDocumento(modalRadicado)"
+                :data="modalPdfUrl"
+                type="application/pdf"
+                class="w-100 rounded-3 border-0 bg-white"
+                style="min-height: 460px;"
+              >
+                <iframe :src="modalPdfUrl" class="w-100 h-100 rounded-3 border-0 bg-white" style="min-height: 460px;" title="Visor PDF Radicado Original"></iframe>
+              </object>
+
+              <!-- Imagen escaneada adjunta -->
+              <div v-else-if="modalPdfUrl" class="w-100 text-center">
+                <div class="badge bg-info text-dark mb-2 shadow-sm px-3 py-1 fw-bold">IMAGEN ADJUNTA ORIGINAL</div>
+                <img
+                  :src="modalPdfUrl"
+                  class="img-fluid rounded shadow bg-white border w-100"
+                  style="max-width: 720px; object-fit: contain;"
+                  alt="Documento original del radicado"
+                />
+              </div>
+
+              <!-- Sin documento (estado honesto) -->
+              <div v-else class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
+                <div style="font-size: 2rem;">📄</div>
+                <p class="text-white-50 mb-0" style="font-size: 0.8rem;">
+                  Este radicado no tiene documento adjunto en la base de datos.
+                </p>
               </div>
             </div>
           </div>
@@ -930,6 +1012,40 @@ const confirmarMarcarResuelto = async (rad) => {
   }
 }
 
+// ── Control de eliminación (solo encargada de Radicados) ──
+const esEncargadaRadicados = computed(() => authService.getUsuarioActual()?.rol === 'RADICADOS')
+
+const modalEliminar = reactive({
+  visible: false,
+  radicado: null
+})
+const eliminando = ref(false)
+
+const solicitarEliminar = (rad) => {
+  modalEliminar.radicado = rad
+  modalEliminar.visible = true
+}
+
+const ejecutarEliminar = async () => {
+  if (!modalEliminar.radicado) return
+  try {
+    eliminando.value = true
+    await radicadosService.eliminar(modalEliminar.radicado.id)
+    mostrarAlertaBootstrap(
+      'Radicado Eliminado',
+      `El radicado ${modalEliminar.radicado.numeroRadicado} fue eliminado correctamente.`,
+      'danger'
+    )
+    modalEliminar.visible = false
+    modalEliminar.radicado = null
+    await CargarLista()
+  } catch (err) {
+    mostrarAlertaBootstrap('Error al Eliminar', err.message || 'No se pudo eliminar el radicado.', 'danger')
+  } finally {
+    eliminando.value = false
+  }
+}
+
 const modalPdfUrl = ref(null)
 const modalPdfCargando = ref(false)
 const modalPdfError = ref(false)
@@ -975,9 +1091,10 @@ const cerrarModal = () => {
   modalRadicado.value = null
 }
 
-const abrirPdfPantallaCompleta = () => {
-  if (modalPdfUrl.value) window.open(modalPdfUrl.value, '_blank')
-}
+// El documento adjunto puede ser PDF (visor object/iframe) o imagen escaneada (<img>)
+const esImagenDocumento = (rad) =>
+  String(rad?.archivoMimeType || '').startsWith('image/') ||
+  /\.(png|jpe?g|webp|gif|bmp)$/i.test(rad?.archivoNombre || '')
 
 // Helpers de formato y estado
 const formatearFecha = (fecha) => {
@@ -1195,17 +1312,10 @@ const getBadgeBootstrap = (rad) => {
   border: none;
 }
 
-/* Visor de documento dentro del modal de detalle del radicado */
+/* Visor de documento dentro del modal de detalle del radicado (patrón Permisos) */
 .modal-pdf-vista {
-  height: 380px;
   display: flex;
   flex-direction: column;
-}
-
-.modal-pdf-cuerpo {
-  flex: 1 1 auto;
-  min-height: 0;
-  background: #525659;
 }
 
 .ocr-resumen-box {
@@ -1830,6 +1940,19 @@ const getBadgeBootstrap = (rad) => {
   transform: scale(1.06);
 }
 
+.btn-action-delete {
+  border-color: #fecaca;
+  color: #dc2626;
+  background: #fff5f5;
+}
+
+.btn-action-delete:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+  transform: scale(1.06);
+}
+
 /* Empty State */
 .empty-state-box {
   padding: 1.5rem;
@@ -1864,7 +1987,7 @@ const getBadgeBootstrap = (rad) => {
 /* El modal de detalle lleva el visor de PDF: más ancho para leer el documento
    (width: 92% lo mantiene responsive en pantallas pequeñas) */
 .modal-viewer-wide {
-  max-width: 640px;
+  max-width: 720px;
 }
 
 .modal-header-info {

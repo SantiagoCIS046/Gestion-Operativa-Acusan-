@@ -497,7 +497,7 @@
             <p class="mb-0 text-dark">{{ radicadoSeleccionado.contexto }}</p>
           </div>
 
-          <!-- Documento original embebido en el modal -->
+          <!-- Documento original embebido en el modal (mismo patrón que Permisos) -->
           <div class="detalle-pdf-vista">
             <div class="detalle-pdf-header">
               <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
@@ -509,14 +509,51 @@
                   </strong>
                 </div>
               </div>
-              <button v-if="detallePdfUrl" type="button" class="btn btn-sm btn-primary px-2 py-1 fw-bold" style="font-size: 0.72rem; flex-shrink: 0;" @click="abrirPdfPantallaCompleta()">
-                ⤢ Abrir
-              </button>
+              <a
+                v-if="detallePdfUrl"
+                :href="detallePdfUrl"
+                target="_blank"
+                class="btn btn-sm btn-outline-primary px-2 py-1 fw-bold"
+                style="font-size: 0.72rem; flex-shrink: 0;"
+                title="Abrir en una pestaña nueva a pantalla completa"
+              >
+                ↗️ Abrir Archivo
+              </a>
             </div>
-            <div class="detalle-pdf-cuerpo">
-              <div v-if="detallePdfCargando" class="detalle-pdf-estado">⏳ Cargando documento...</div>
-              <iframe v-else-if="detallePdfUrl" :src="detallePdfUrl" class="pdf-frame" title="Documento original del radicado"></iframe>
-              <div v-else class="detalle-pdf-estado">📄 Este radicado no tiene documento adjunto en la base de datos.</div>
+            <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2" style="min-height: 380px; max-height: 540px;">
+              <div v-if="detallePdfCargando" class="d-flex align-items-center justify-content-center text-white-50" style="font-size: 0.78rem; min-height: 300px;">
+                ⏳ Cargando documento...
+              </div>
+
+              <!-- PDF original de la base de datos -->
+              <object
+                v-else-if="detallePdfUrl && !esImagenDocumento(radicadoSeleccionado)"
+                :data="detallePdfUrl"
+                type="application/pdf"
+                class="w-100 rounded-3 border-0 bg-white"
+                style="min-height: 460px;"
+              >
+                <iframe :src="detallePdfUrl" class="w-100 h-100 rounded-3 border-0 bg-white" style="min-height: 460px;" title="Visor PDF Radicado Original"></iframe>
+              </object>
+
+              <!-- Imagen escaneada adjunta -->
+              <div v-else-if="detallePdfUrl" class="w-100 text-center">
+                <div class="badge bg-info text-dark mb-2 shadow-sm px-3 py-1 fw-bold">IMAGEN ADJUNTA ORIGINAL</div>
+                <img
+                  :src="detallePdfUrl"
+                  class="img-fluid rounded shadow bg-white border w-100"
+                  style="max-width: 720px; object-fit: contain;"
+                  alt="Documento original del radicado"
+                />
+              </div>
+
+              <!-- Sin documento (estado honesto) -->
+              <div v-else class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
+                <div style="font-size: 2rem;">📄</div>
+                <p class="text-white-50 mb-0" style="font-size: 0.8rem;">
+                  Este radicado no tiene documento adjunto en la base de datos.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -782,9 +819,10 @@ const cerrarModalDetalle = () => {
   radicadoSeleccionado.value = null
 }
 
-const abrirPdfPantallaCompleta = () => {
-  if (detallePdfUrl.value) window.open(detallePdfUrl.value, '_blank')
-}
+// El documento adjunto puede ser PDF (visor object/iframe) o imagen escaneada (<img>)
+const esImagenDocumento = (rad) =>
+  String(rad?.archivoMimeType || '').startsWith('image/') ||
+  /\.(png|jpe?g|webp|gif|bmp)$/i.test(rad?.archivoNombre || '')
 </script>
 
 <style scoped>
@@ -1522,7 +1560,7 @@ const abrirPdfPantallaCompleta = () => {
   background: #ffffff;
   border-radius: 12px;
   width: 100%;
-  max-width: 640px;
+  max-width: 720px;
   max-height: 85vh;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
   overflow: hidden;
@@ -1592,7 +1630,7 @@ const abrirPdfPantallaCompleta = () => {
   box-shadow: 0 2px 8px rgba(0, 72, 132, 0.1);
 }
 
-/* Visor del documento original embebido en el modal de detalle */
+/* Visor del documento original embebido en el modal de detalle (patrón Permisos) */
 .detalle-pdf-vista {
   background: #f8fafc;
   border: 1px solid #cbd5e1;
@@ -1606,29 +1644,6 @@ const abrirPdfPantallaCompleta = () => {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #e2e8f0;
-}
-
-.detalle-pdf-cuerpo {
-  height: 340px;
-  background: #525659;
-}
-
-.detalle-pdf-estado {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 0 1rem;
-  color: #e2e8f0;
-  font-size: 0.78rem;
-}
-
-.pdf-frame {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: none;
 }
 
 .modal-detalle-footer {
