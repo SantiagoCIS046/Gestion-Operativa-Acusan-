@@ -297,7 +297,7 @@ export const permisosService = {
       fechaInicio: datos.fechaInicio || fechaEntrega,
       estado: datos.estado || "APROBADO",
       estadoEnvio: datos.estadoEnvio || "APROBADO",
-      confianzaOCR: datos.confianzaOCR || 98,
+      confianzaOCR: datos.confianzaOCR ?? 0,
       createdAt: datos.createdAt || ahora.toISOString(),
       sincronizado: false,
       origen: "LOCAL",

@@ -121,10 +121,10 @@
         </div>
       </transition>
 
-      <!-- Main Workspace (Visor Original + Cuadro de Datos OCR con Bootstrap) -->
+      <!-- Main Workspace (Visor Original + Cuadro de Datos OCR con Bootstrap parejos 50/50) -->
       <div class="row g-3">
-        <!-- LEFT COLUMN: Visor del PDF / Archivo Original Real Escaneado (En todo el cuadro) -->
-        <div class="col-lg-7">
+        <!-- LEFT COLUMN: Visor del PDF / Archivo Original Real Escaneado (50% Parejo) -->
+        <div class="col-lg-6 col-md-12">
           <div class="card border shadow-sm rounded-3 overflow-hidden h-100 d-flex flex-column">
             <!-- Header Toolbar -->
             <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
@@ -238,16 +238,19 @@
           </div>
         </div>
 
-        <!-- RIGHT COLUMN: Formulario con Todos los Campos de Texto Estilo Bootstrap -->
-        <div class="col-lg-5">
+        <!-- RIGHT COLUMN: Formulario con Todos los Campos de Texto Estilo Bootstrap (50% Parejo) -->
+        <div class="col-lg-6 col-md-12">
           <div class="card border shadow-sm rounded-3">
             <div class="card-header bg-white py-3 px-3 border-bottom">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <h5 class="fw-bold text-primary m-0" style="color: #004884 !important;">
                   Revisión de Datos (OCR)
                 </h5>
-                <span v-if="documentLoaded" class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                  ✔ 99% OCR Extraído
+                <span v-if="isScanningOCR" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
+                  ⏳ Extrayendo datos del documento...
+                </span>
+                <span v-else-if="documentLoaded" :class="['badge px-2 py-1 border', claseConfianzaOcr]">
+                  {{ textoConfianzaOcr }}
                 </span>
                 <span v-else class="badge bg-secondary-subtle text-secondary border px-2 py-1">
                   ⏳ Esperando Documento
@@ -259,7 +262,7 @@
             </div>
 
             <div class="card-body p-3">
-              <form @submit.prevent="confirmarYEnviar">
+              <form class="permiso-form" @submit.prevent="confirmarYEnviar">
                 <!-- SECTION 1: INFORMACIÓN DEL TRABAJADOR -->
                 <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
                   <div class="bg-success rounded" style="width: 4px; height: 14px;"></div>
@@ -346,7 +349,11 @@
                       <span class="input-group-text bg-light text-muted">📅</span>
                       <input
                         v-model="formData.fechaInicio"
+                        @input="escribirFechaInput($event, 'fechaInicio')"
+                        @blur="completarAnioFechaInput($event, 'fechaInicio')"
                         type="text"
+                        inputmode="numeric"
+                        maxlength="10"
                         class="form-control fw-bold"
                         placeholder="DD/MM/YYYY"
                         :disabled="!documentLoaded"
@@ -356,19 +363,50 @@
                   </div>
 
                   <div class="col-md-6">
-                    <label class="form-label mb-1 fw-semibold text-secondary small d-flex justify-content-between">
-                      <span>Horario del Permiso</span>
-                      <span class="text-muted fw-normal" style="font-size: 0.7rem;">(Manual)</span>
-                    </label>
-                    <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-light text-muted">⏱️</span>
-                      <input
-                        v-model="formData.horasCalculadas"
-                        type="text"
-                        class="form-control fw-bold text-primary"
-                        placeholder="Ingrese el horario..."
-                        :disabled="!documentLoaded"
-                      />
+                    <label class="form-label mb-1 fw-semibold text-secondary small">Horario del Permiso</label>
+
+                    <!-- Confirmación compacta: las horas coinciden con la jornada del día -->
+                    <div v-if="esJornadaCompleta" class="aviso-horario aviso-jornada mb-2" :title="tituloJornadaBoton">
+                      <span>✓</span> Jornada completa — {{ textoJornadaResumen }}
+                    </div>
+                    <div
+                      v-else-if="esFinDeSemana"
+                      class="aviso-horario aviso-fin-semana mb-2"
+                      title="En fin de semana solo labora personal en horas extras: registre el horario con los relojes."
+                    >
+                      <span>⚠</span> Fin de semana — solo horas extras
+                    </div>
+
+                    <!-- Relojes: hora de inicio y fin del permiso -->
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <label for="horaInicioPermiso" class="form-label mb-1">Hora de inicio</label>
+                        <div class="input-group input-group-sm">
+                          <span class="input-group-text">🕗</span>
+                          <input
+                            id="horaInicioPermiso"
+                            v-model="horaInicioPermiso"
+                            @change="construirHorario"
+                            type="time"
+                            class="form-control text-center fw-bold"
+                            :disabled="!documentLoaded"
+                          />
+                        </div>
+                      </div>
+                      <div class="col-6">
+                        <label for="horaFinPermiso" class="form-label mb-1">Hora de fin</label>
+                        <div class="input-group input-group-sm">
+                          <span class="input-group-text">🕤</span>
+                          <input
+                            id="horaFinPermiso"
+                            v-model="horaFinPermiso"
+                            @change="construirHorario"
+                            type="time"
+                            class="form-control text-center fw-bold"
+                            :disabled="!documentLoaded"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -381,6 +419,7 @@
                       class="form-select form-select-sm fw-bold"
                       :disabled="!documentLoaded"
                     >
+                      <option value="" disabled>Según el PDF — seleccione...</option>
                       <option value="Compensatorio">Compensatorio</option>
                       <option value="Cita Médica">Cita Médica</option>
                       <option value="Personal">Personal / Asunto Propio</option>
@@ -677,6 +716,11 @@
                     <!-- Col H: Duración / Horas -->
                     <td class="excel-cell text-center fw-bold text-primary" style="color: #004884 !important;">
                       {{ fila.duracion }}
+                      <div v-if="fila.jornadaCompleta" class="mt-1">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.65rem;">
+                          Jornada completa
+                        </span>
+                      </div>
                     </td>
 
                     <!-- Col I: Recurrencia Real (Veces en el Mes y Año) -->
@@ -925,6 +969,26 @@ const isSubmitting = ref(false)
 const ocrProgress = ref(0)
 const ocrStepMessage = ref('Iniciando lectura...')
 
+// Confianza OCR REAL: % de campos clave que el documento aportó con evidencia.
+// Los campos que el OCR no pudo leer quedan listados para diligenciar manualmente.
+const confianzaOcrReal = ref(0)
+const camposFaltantesOcr = ref([])
+
+const claseConfianzaOcr = computed(() => {
+  const c = confianzaOcrReal.value
+  if (c >= 80) return 'bg-success-subtle text-success border-success-subtle'
+  if (c >= 40) return 'bg-warning-subtle text-warning border-warning-subtle'
+  return 'bg-danger-subtle text-danger border-danger-subtle'
+})
+
+const textoConfianzaOcr = computed(() => {
+  if (confianzaOcrReal.value >= 100) return '✔ OCR 100% — verifique antes de radicar'
+  const faltan = camposFaltantesOcr.value.length
+    ? `completar: ${camposFaltantesOcr.value.join(', ')}`
+    : 'verifique los datos'
+  return `⚠ OCR ${confianzaOcrReal.value}% — ${faltan}`
+})
+
 // BOOTSTRAP ALERT STATE
 const alertaBootstrap = reactive({
   visible: false,
@@ -1072,11 +1136,134 @@ const formData = reactive({
   fechaInicio: '',
   fechaFin: '',
   horasCalculadas: '',
-  tipoPermiso: 'Compensatorio',
+  tipoPermiso: '',
   motivoManuscrito: '',
   motivo: '',
   observaciones: ''
 })
+
+// ─── HORARIO DEL PERMISO ─────────────────────────────────────────────────────
+// Jornada laboral Acuasan: lunes a jueves 07:30 a 18:00, viernes 07:30 a
+// 17:30. Sábados y domingos NO hay jornada regular: solo labora personal en
+// horas extras, por lo que el horario se registra manualmente.
+// El horario resultante (formData.horasCalculadas) sigue siendo editable a
+// mano, pero lo normal es construirlo con el interruptor de Jornada Completa
+// (según el día de la fecha del permiso) o con los dos relojes:
+// 08:00 + 12:00 → "08:00 a 12:00 (4 horas)", el formato del radicado/historial.
+const JORNADAS_ACUASAN = {
+  lunesAJueves: { inicio: '07:30', fin: '18:00' },
+  viernes: { inicio: '07:30', fin: '17:30' },
+}
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+// Relojes del permiso: única entrada del horario. Cuando las horas coinciden
+// exactamente con la jornada del día (según la fecha), esJornadaCompleta se
+// activa solo: se muestra la alerta y queda marcado en el historial.
+const horaInicioPermiso = ref('')
+const horaFinPermiso = ref('')
+
+// Día de la semana (0=domingo … 6=sábado) de una fecha DD/MM/YYYY válida
+const diaSemanaDeFecha = (textoFecha) => {
+  if (!esFechaValida(textoFecha)) return null
+  const m = textoFecha.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)).getDay()
+}
+
+// La fecha seleccionada cae en sábado o domingo (no hay jornada regular)
+const esFinDeSemana = computed(() => {
+  const dia = diaSemanaDeFecha(formData.fechaInicio)
+  return dia === 0 || dia === 6
+})
+
+// Las horas elegidas coinciden con la jornada completa del día de la fecha
+const esJornadaCompleta = computed(() => {
+  const dia = diaSemanaDeFecha(formData.fechaInicio)
+  if (dia === null || dia === 0 || dia === 6) return false
+  const j = dia === 5 ? JORNADAS_ACUASAN.viernes : JORNADAS_ACUASAN.lunesAJueves
+  return horaInicioPermiso.value === j.inicio && horaFinPermiso.value === j.fin
+})
+
+// Texto de la alerta: la jornada que se reconoció, p. ej. "07:30 a 18:00 · lunes"
+const textoJornadaResumen = computed(() => {
+  const dia = diaSemanaDeFecha(formData.fechaInicio)
+  if (dia === null) return ''
+  const j = dia === 5 ? JORNADAS_ACUASAN.viernes : JORNADAS_ACUASAN.lunesAJueves
+  return `${j.inicio} a ${j.fin} · ${DIAS_SEMANA[dia]}`
+})
+
+// Referencia de la jornada (tooltip de la alerta, no ocupa espacio en pantalla)
+const tituloJornadaBoton =
+  'Jornada Acuasan: lunes a jueves 07:30 a 18:00 · viernes 07:30 a 17:30 · fines de semana solo personal en horas extras.'
+
+const minutosDeHora = (hhmm) => {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/)
+  if (!m) return null
+  const h = parseInt(m[1], 10), min = parseInt(m[2], 10)
+  if (h > 23 || min > 59) return null
+  return h * 60 + min
+}
+
+// Escribe formData.horasCalculadas a partir de los relojes. Si las horas no
+// forman un rango válido (falta una o el fin es menor/igual al inicio) no se
+// toca el campo: queda disponible para diligenciamiento manual.
+const construirHorario = () => {
+  const ini = minutosDeHora(horaInicioPermiso.value)
+  const fin = minutosDeHora(horaFinPermiso.value)
+  if (ini === null || fin === null || fin <= ini) return
+  const horas = (fin - ini) / 60
+  const horasTexto = Number.isInteger(horas) ? String(horas) : horas.toFixed(1).replace('.', ',')
+  formData.horasCalculadas = `${horaInicioPermiso.value} a ${horaFinPermiso.value} (${horasTexto} horas)`
+}
+
+const reiniciarHorarioPermiso = () => {
+  horaInicioPermiso.value = ''
+  horaFinPermiso.value = ''
+}
+
+// ─── MÁSCARA DE FECHA ────────────────────────────────────────────────────────
+// Mientras se escribe, el campo coloca solo el separador de fecha: al digitar
+// 03082026 se va mostrando 03 → 03/ → 03/08 → 03/08/2026. Si el usuario digita
+// guiones, puntos o espacios (03-08-2026) se ignoran y queda el formato
+// DD/MM/YYYY que usa todo el sistema (radicado, historial, duplicados y backend).
+const formatearDigitosFecha = (digitos) => {
+  const d = digitos.slice(0, 8)
+  if (d.length <= 2) return d
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`
+}
+
+const escribirFechaInput = (evento, campo) => {
+  const el = evento.target
+  const formateado = formatearDigitosFecha(el.value.replace(/\D/g, ''))
+  // Se fuerza el valor del input además del modelo: si el usuario digita un
+  // carácter suelto (letra, guión) el valor formateado no cambia, Vue no
+  // repinta el input y sin esto el carácter quedaría visible en el campo.
+  if (el.value !== formateado) el.value = formateado
+  formData[campo] = formateado
+}
+
+// Al salir del campo, un año de 2 dígitos (03/08/26) se completa a 4 (03/08/2026)
+const completarAnioFechaInput = (evento, campo) => {
+  const m = String(formData[campo] || '').match(/^(\d{2})\/(\d{2})\/(\d{2})$/)
+  if (!m) return
+  const completo = `${m[1]}/${m[2]}/20${m[3]}`
+  formData[campo] = completo
+  evento.target.value = completo
+}
+
+// La máscara garantiza la forma DD/MM/YYYY, pero no que la fecha exista
+// (31/02/2026 pasaría la máscara). Esta validación se usa antes de radicar.
+const esFechaValida = (textoFecha) => {
+  const m = String(textoFecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!m) return false
+  const dia = parseInt(m[1], 10)
+  const mes = parseInt(m[2], 10)
+  const anio = parseInt(m[3], 10)
+  if (mes < 1 || mes > 12) return false
+  const bisiesto = (anio % 4 === 0 && anio % 100 !== 0) || anio % 400 === 0
+  const diasPorMes = [31, bisiesto ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return dia >= 1 && dia <= diasPorMes[mes - 1]
+}
 
 // Historial de Remisiones (Inicia vacío y solo contiene los permisos reales radicados)
 const historialRemisiones = ref([])
@@ -1240,7 +1427,7 @@ const normalizarItem = (item) => {
     fechaEntrega,
     fechaInicio: fechaEntrega,
     hora24: item.hora24 || '08:00',
-    duracion: item.duracion || item.horasCalculadas || '07:00 a 15:00 (8 horas)',
+    duracion: item.duracion || item.horasCalculadas || '',
     cargo: item.cargo || 'Funcionario Acuasan',
     tipo: item.tipo || item.tipoPermiso || 'Compensatorio',
     tipoPermiso: item.tipo || item.tipoPermiso || 'Compensatorio',
@@ -1300,7 +1487,9 @@ const totalPendientesEnvioPeriodo = computed(() => {
   return historialFiltrado.value.filter(item => item.estadoEnvio === 'PENDIENTE_ENVIO').length
 })
 
-// Reinicia unicamente los campos del formulario (sin tocar el visor)
+// Reinicia unicamente los campos del formulario (sin tocar el visor).
+// tipoPermiso inicia VACÍO: el tipo se toma del PDF o lo elige el encargado,
+// nunca se pre-selecciona un valor que el documento no respalde.
 const resetFormData = () => {
   formData.nombreFuncionario = ''
   formData.cedula = ''
@@ -1311,13 +1500,14 @@ const resetFormData = () => {
   formData.fechaPermisoTexto = ''
   formData.horaDetalle = ''
   formData.horasCalculadas = ''
-  formData.tipoPermiso = 'Compensatorio'
+  formData.tipoPermiso = ''
   formData.motivoManuscrito = ''
   formData.motivo = ''
   formData.observaciones = ''
   formData.id = ''
   formData.radicado = ''
   formData.createdAt = ''
+  reiniciarHorarioPermiso()
 }
 
 // Limpia el formulario y el visor por completo para procesar una nueva solicitud
@@ -1331,6 +1521,8 @@ const limpiarFormularioYVisor = () => {
   isImageFile.value = false
   textoDocumentoExtraido.value = ''
   archivoMimeType.value = ''
+  confianzaOcrReal.value = 0
+  camposFaltantesOcr.value = []
   resetFormData()
   // Reiniciar los inputs de archivo para permitir subir el mismo archivo de nuevo
   if (typeof document !== 'undefined') {
@@ -1439,7 +1631,6 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
   console.groupEnd()
 
   const nombresMes = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const mesesMap = { enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12 }
 
   // 1. NOMBRE DEL TRABAJADOR
   let nombreEncontrado = ''
@@ -1469,21 +1660,57 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
 
   if (nombreEncontrado) campos.nombreFuncionario = nombreEncontrado
 
-  // 2. CÉDULA DE CIUDADANÍA
+  // 2. CÉDULA DE CIUDADANÍA — SOLO con evidencia explícita del documento.
+  // El membrete de Acuasan trae el NIT 68.679.000 impreso; el OCR suele mal
+  // leerlo (p. ej. "58679000") y antes se reportaba como si fuera la cédula.
+  // Estrategia: primero etiquetas ("CÉDULA:", "documento No."), y el fallback
+  // de número suelto RECHAZA números rodeados de contexto empresarial (NIT,
+  // membrete) o que parecen teléfono/año. Sin evidencia: campo vacío.
   const numerosAExcluir = ['890120175', '8901201757', '68679000', '1686790001', '2640000', '2610000']
   let cedulaDetectada = ''
 
-  const mCed1 = texto.match(/(?:ID|CC|C\.C\.?|CEDULA|CÉDULA|Identificaci[oó]n)[:\s]*([0-9]{6,11})/i)
-  if (mCed1 && !numerosAExcluir.includes(mCed1[1])) {
-    cedulaDetectada = mCed1[1]
+  // Valida que una secuencia de dígitos pueda ser una cédula colombiana
+  const esCedulaPlausible = (digitos) => {
+    if (!/^[0-9]{6,11}$/.test(digitos)) return false
+    if (numerosAExcluir.includes(digitos)) return false
+    if (/^20(1[5-9]|2[0-9])$/.test(digitos)) return false        // año suelto
+    if (/^20(1[5-9]|2[0-9])[0-9]{4}$/.test(digitos)) return false // aaaamm
+    if (/^(30|31|32)[0-9]{8}$/.test(digitos)) return false        // celular
+    return true
   }
 
+  // El texto previo a un número delata si es un dato empresarial, no la cédula
+  const contextoEsEmpresarial = (textoPrevio) =>
+    /(nit|n\.?\s*i\.?\s*t|registro|empresa|acueducto|alcantarillado|acuasan|e\.?\s?s\.?\s?p|tel[eé]fono|pbx)/i.test(textoPrevio || '')
+
+  // A. Etiquetas del formulario de solicitud y del certificado electoral E-18
+  const patronesCedula = [
+    /\b(?:CEDULA|C[eÉ]DULA)\s*(?:DE\s*CIUDADANIA)?\s*[:\-]?\s*N?o?\.?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi,
+    /\bC\.?\s?C\.?\s*(?:No\.?|#)?\s*[:\-]?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi,
+    /\bdocumento\s*(?:No\.?|n[uú]mero|#)?\s*[:\-]?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi,
+    /\bidentificad[oa]\s*(?:con)?\s*(?:el)?\s*(?:documento|c[eé]dula)?\s*(?:No\.?|#)?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi
+  ]
+  for (const rx of patronesCedula) {
+    for (const m of texto.matchAll(rx)) {
+      const digitos = (m[1] || '').trim().replace(/[^\d]/g, '')
+      // Para un número ETIQUETADO la etiqueta es la evidencia; NO se aplica el
+      // guard de contexto (el membrete "ACUASAN..." queda a pocas decenas de
+      // caracteres de los campos del propio formulario y los rechazaría).
+      if (esCedulaPlausible(digitos)) {
+        cedulaDetectada = digitos
+        break
+      }
+    }
+    if (cedulaDetectada) break
+  }
+
+  // B. Último recurso: número suelto FUERA de contexto empresarial
   if (!cedulaDetectada) {
-    const todosNums = [...texto.matchAll(/\b([0-9]{7,10})\b/g)]
-    for (const numMatch of todosNums) {
-      const n = numMatch[1]
-      if (!numerosAExcluir.includes(n) && !n.startsWith('2026') && !n.startsWith('300') && !n.startsWith('315') && !n.startsWith('320')) {
-        cedulaDetectada = n
+    for (const m of texto.matchAll(/\b[0-9][0-9\.,]{5,14}\b/g)) {
+      const digitos = (m[0] || '').replace(/[^\d]/g, '')
+      const previo = texto.slice(Math.max(0, m.index - 45), m.index)
+      if (esCedulaPlausible(digitos) && !contextoEsEmpresarial(previo)) {
+        cedulaDetectada = digitos
         break
       }
     }
@@ -1491,10 +1718,28 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
 
   if (cedulaDetectada) campos.cedula = cedulaDetectada
 
-  // 3. CARGO & ÁREA / DEPENDENCIA
-  const cargoInfo = normalizarCargoYDependencia(p1 + ' ' + texto)
-  campos.cargo = cargoInfo.cargo
-  campos.dependencia = cargoInfo.dependencia
+  // 3. CARGO & ÁREA / DEPENDENCIA — SOLO si el formulario lo declara con
+  // etiqueta. Antes se infería por palabras clave sobre TODO el texto y el
+  // membrete "Acueducto y Alcantarillado de San Gil" hacía que TODOS los
+  // funcionarios aparecieran como "Operario de Alcantarillado".
+  // NOTA: la captura NO puede cruzar de línea ([ \t] en vez de \s): si el
+  // formulario trae "CARGO:" vacío, la regex brincaría al renglón siguiente.
+  const mCargo = texto.match(/\bCARGO[ \t]*[:\-][ \t]*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ\.\t ]{2,50})/i)
+  if (mCargo) {
+    const cargoLiteral = mCargo[1].replace(/\s{2,}/g, ' ').trim()
+    const info = normalizarCargoYDependencia(cargoLiteral)
+    // El normalizador solo es confiable si reconoció el cargo; su valor por
+    // defecto ("Funcionario Acuasan") NO debe tapar lo que dice el formulario
+    campos.cargo = info.cargo !== 'Funcionario Acuasan' ? info.cargo : cargoLiteral
+  }
+
+  const mDependencia = texto.match(/\b(?:DEPENDENCIA|ÁREA|AREA)[ \t]*[:\-][ \t]*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ\.\t ]{2,50})/i)
+  if (mDependencia) {
+    const depLiteral = mDependencia[1].replace(/\s{2,}/g, ' ').trim()
+    const info = normalizarCargoYDependencia(depLiteral)
+    campos.dependencia = info.dependencia !== 'Operativa' ? info.dependencia : depLiteral
+  }
+  // Sin etiqueta CARGO/DEPENDENCIA: los campos quedan vacíos para el encargado
 
   // 4. FECHA DEL PERMISO (EXTRACCIÓN EXCLUSIVA DE LA PÁGINA 1 — SOLICITUD DE ACUASAN)
   let dd = '', mm = '', aa = ''
@@ -1530,10 +1775,12 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // B. Buscar en P1 formato numérico: "03-08-2026", "03-08- 2026", "18/08/2026", "18.08.2026"
+  // B. Buscar en P1 formato numérico SOLO con etiqueta ("FECHA: 18/08/2026").
+  // Antes había un fallback que tomaba CUALQUIER fecha de la página (fechas de
+  // impresión, del anexo E-18, etc.) y otra que inventaba el año "2026" o usaba
+  // la fecha del nombre del archivo: eso producía fechas ajenas al PDF.
   if (!dd || !mm || !aa) {
-    const mP1Num = p1.match(/(?:FECHA|PERMISO|SOLICITUD)[\s\:\.\-]*?([0-3]?[0-9])\s*[-.\/_]\s*([0-1]?[0-9])\s*[-.\/_]?\s*(202\d)/i) ||
-                   p1.match(/\b([0-3]?[0-9])\s*[-.\/_]\s*([0-1]?[0-9])\s*[-.\/_]\s*(202\d)\b/)
+    const mP1Num = p1.match(/(?:FECHA|PERMISO|SOLICITUD)[\s\:\.\-]{0,12}([0-3]?[0-9])\s*[-.\/_]\s*([0-1]?[0-9])\s*[-.\/_]\s*(202\d)/i)
     if (mP1Num) {
       const dVal = parseInt(mP1Num[1]), mVal = parseInt(mP1Num[2])
       if (dVal >= 1 && dVal <= 31 && mVal >= 1 && mVal <= 12) {
@@ -1544,37 +1791,7 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // C. Si en P1 sólo dice el día y el mes aproximado (ej. "18" y "Agoslo/Agosto")
-  if (!dd || !mm || !aa) {
-    const mP1DiaMes = p1.match(/\b([0-3]?[0-9])\s*(?:de|\/|\-|\s)\s*(agost|agosl|ago|agto|sept|oct|nov|dic|ene|feb|mar|abr|may|jun|jul)/i)
-    if (mP1DiaMes) {
-      const dVal = parseInt(mP1DiaMes[1])
-      const mStr = mP1DiaMes[2].toLowerCase()
-      let mVal = 8
-      for (const [k, v] of Object.entries(mesesVariaciones)) {
-        if (mStr.startsWith(k) || k.startsWith(mStr)) { mVal = v; break }
-      }
-      if (dVal >= 1 && dVal <= 31) {
-        dd = String(dVal).padStart(2, '0')
-        mm = String(mVal).padStart(2, '0')
-        aa = '2026'
-      }
-    }
-  }
-
-  // D. Respaldo por nombre de archivo
-  if ((!dd || !mm || !aa) && nombreArchivo) {
-    const mArchFecha = nombreArchivo.match(/(202\d)(0[1-9]|1[0-2])([0-3]\d)/) || nombreArchivo.match(/([0-3]\d)(0[1-9]|1[0-2])(202\d)/)
-    if (mArchFecha) {
-      if (mArchFecha[1].startsWith('202')) {
-        aa = mArchFecha[1]; mm = mArchFecha[2]; dd = mArchFecha[3]
-      } else {
-        dd = mArchFecha[1]; mm = mArchFecha[2]; aa = mArchFecha[3]
-      }
-    }
-  }
-
-  // E. Sin fecha reconocida: se deja vacía para diligenciamiento manual (sin fechas inventadas)
+  // C. Sin fecha reconocida: se deja vacía para diligenciamiento manual (sin fechas inventadas)
   if (dd && mm && aa) {
     campos.fechaInicio = `${dd}/${mm}/${aa}`
     campos.fechaFin = `${dd}/${mm}/${aa}`
@@ -1597,15 +1814,24 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
 
   let tipoDetectado = ''
 
+  // A0. Caso E-18 / función electoral: si la casilla COMPENSATORIO está marcada
+  // y el anexo es un certificado electoral (Registraduría/juramento/jurado),
+  // el permiso es Compensatorio aunque también esté marcada la casilla Médico
+  // (la casilla médica suele venir pre-marcada en el formato impresión).
+  const rxCompMarcado = /[Cc]ompensatori[ao]\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]ompensatori[ao]/
+  const hayEvidenciaElectoral = /registradur|jurament|jurado|electoral|votaci[oó]n|E-18|E\.?18/i.test(texto)
+  if (rxCompMarcado.test(p1) && hayEvidenciaElectoral) {
+    tipoDetectado = 'Compensatorio'
+  }
+
   // A. Detectar casilla MÉDICO marcada: "Médico X", "Médico* X", "Medico [X]", "Médico✓"
   const rxMedicoMarcado = /M[eé]dic[ao]\*?\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*M[eé]dic[ao]\*?/
-  if (rxMedicoMarcado.test(p1)) {
+  if (!tipoDetectado && rxMedicoMarcado.test(p1)) {
     tipoDetectado = 'Cita Médica'
   }
 
   // B. Detectar casilla COMPENSATORIO marcada
   if (!tipoDetectado) {
-    const rxCompMarcado = /[Cc]ompensatori[ao]\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]ompensatori[ao]/
     if (rxCompMarcado.test(p1)) {
       tipoDetectado = 'Compensatorio'
     }
@@ -1635,10 +1861,11 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // F. Si no se detectó por casilla, inferir del contexto del texto completo
+  // F. Si no se detectó por casilla, inferir SOLO del contexto textual real.
+  // Sin evidencia: '' — el encargado elige el tipo; no se pre-selecciona nada.
   if (!tipoDetectado) {
     const hayMedico = /m[eé]dic[ao]|cita\s*m[eé]dic|eps|cardiolog|urolog|ortoped|remisi[oó]n|especialista|orden\s*m[eé]dic|diagn[oó]stico/i.test(texto)
-    const hayJurado = /jurado|consulta\s*popular|votaci[oó]n|electoral|certificado\s*electoral/i.test(texto)
+    const hayJurado = /jurado|consulta\s*popular|votaci[oó]n|electoral|certificado\s*electoral|registradur|jurament/i.test(texto)
     const hayCalamidad = /calamidad|fallecimiento|inundaci[oó]n|accidente\s*familiar/i.test(texto)
     const hayEstudio = /universidad|capacitaci[oó]n|seminario|congreso|examen\s*acad[eé]mico/i.test(texto)
 
@@ -1646,35 +1873,54 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     else if (hayMedico) tipoDetectado = 'Cita Médica'
     else if (hayCalamidad) tipoDetectado = 'Calamidad Doméstica'
     else if (hayEstudio) tipoDetectado = 'Estudio / Capacitación'
-    else tipoDetectado = 'Compensatorio'
   }
 
   campos.tipoPermiso = tipoDetectado
 
-  // 7. MOTIVO / JUSTIFICACIÓN — EXTRAÍDO DEL TEXTO MANUSCRITO REAL DEL FORMULARIO
+  // 7. MOTIVO / JUSTIFICACIÓN — EXTRAÍDO DEL TEXTO REAL DEL FORMULARIO.
+  // Antes la captura arrastraba el ruido de las casillas impresas (p. ej.
+  // "DY Médico") y, si no hallaba nada, inventaba un motivo genérico. Ahora:
+  // se limpia el ruido; sin texto manuscrito verificable se construye un
+  // motivo contextual SOLO cuando el documento lo respalda; si no, va vacío
+  // para que el encargado lo diligencie.
   let motivoExtraido = ''
 
-  // A. Buscar el texto escrito a mano DESPUÉS de la línea MOTIVO del formulario de Acuasan
+  // A. Texto manuscrito después de la línea MOTIVO del formulario de Acuasan
   // El formato es: "MOTIVO: Compensatorio [] Médico* [X] Personal [] {texto_manuscrito}"
-  // También: "c/ta medica pa tomar medicamentos" aparece después de la selección
   const rxMotivoLinea = /MOTIVO[\s\:\*]*(?:Compensatorio|M[eé]dic[ao]\*?|Personal|Calamidad)?[\s\[\]\(\)xXoO\*]*([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\/\s\,\.\-\(\)]{6,120})/i
   const mMotivoLinea = p1.match(rxMotivoLinea)
   if (mMotivoLinea) {
-    let rawMot = mMotivoLinea[1]
+    let trabajo = mMotivoLinea[1]
       .replace(/en caso de cita.*/i, '')
       .replace(/\*en caso.*/i, '')
       .replace(/firma.*/i, '')
       .replace(/solicitante.*/i, '')
       .replace(/jefe.*/i, '')
       .replace(/[_|~]{2,}/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-    if (rawMot.length >= 5 && /[a-záéíóúñ]/i.test(rawMot)) {
-      motivoExtraido = rawMot
+
+    // Quitar símbolos de casilla y las palabras-etiqueta impresas del formato
+    trabajo = trabajo
+      .replace(/[\[\]\(\)\{\}]/g, ' ')
+      .replace(/[xX✓✗☑☒☐]{1,2}/g, ' ')
+      .replace(/\b(?:compensatorio|m[eé]dic[oa]\*?|calamidad|personal|estudio|capacitaci[oó]n)\b/gi, ' ')
+
+    // Descartar tokens de ruido INICIALES cortos ("DY", "X", "O", números sueltos)
+    const rxRuidoInicial = /^(?:[^\wáéíóúñ]+|\b[a-záéíóúñ]{1,2}\b|\b\d{1,2}\b)\s*/i
+    let estable = false
+    while (!estable) {
+      const recorte = trabajo.replace(rxRuidoInicial, '')
+      estable = recorte === trabajo
+      trabajo = recorte
+    }
+    trabajo = trabajo.replace(/\s{2,}/g, ' ').trim()
+
+    // ¿Quedó texto manuscrito real? (al menos una palabra con 3+ letras)
+    if (trabajo.length >= 5 && /[a-záéíóúñ]{3,}/i.test(trabajo)) {
+      motivoExtraido = trabajo
     }
   }
 
-  // B. Buscar texto escrito cerca a las palabras "c/ta", "cita", "pa tomar", "reclamar"
+  // B. Texto manuscrito cerca de "c/ta médica", "pa tomar", "reclamar"
   if (!motivoExtraido || motivoExtraido.length < 5) {
     const rxCitaManuscrita = /c[\/\.]?ta\s+m[eé]dic[ao][a-z\s\/\,\.]{0,60}/i
     const mCita = texto.match(rxCitaManuscrita)
@@ -1683,31 +1929,18 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // C. Construir motivo descriptivo según tipo y contexto del documento
+  // C. Motivo contextual — SOLO con respaldo literal en el documento.
+  // Nada de motivos genéricos inventados: si el texto no lo dice, va vacío.
   if (!motivoExtraido || motivoExtraido.length < 5) {
-    if (tipoDetectado === 'Cita Médica') {
-      if (/cardiolog/i.test(texto)) {
-        motivoExtraido = 'Cita médica - Consulta especialista Cardiología'
-        if (/reclamar|medicam/i.test(texto)) motivoExtraido += ' / Reclamar medicamentos'
-      } else if (/urolog/i.test(texto)) {
-        motivoExtraido = 'Cita médica - Consulta especialista Urología'
-      } else if (/reclamar|medicam/i.test(texto)) {
-        motivoExtraido = 'Cita médica - Reclamar medicamentos (EPS)'
-      } else {
-        motivoExtraido = 'Cita médica programada con soporte EPS adjunto'
-      }
-    } else if (tipoDetectado === 'Compensatorio') {
-      if (/jurado|votaci[oó]n|electoral/i.test(texto)) {
-        motivoExtraido = 'Compensatorio - Jurado de votación (Certificado Electoral adjunto)'
-      } else {
-        motivoExtraido = 'Permiso compensatorio'
-      }
-    } else if (tipoDetectado === 'Calamidad Doméstica') {
-      motivoExtraido = 'Calamidad doméstica'
-    } else if (tipoDetectado === 'Personal') {
-      motivoExtraido = 'Asunto personal'
-    } else if (tipoDetectado === 'Estudio / Capacitación') {
-      motivoExtraido = 'Permiso por estudio o capacitación'
+    if (/registradur|jurament|jurado|electoral|votaci[oó]n|E-18/i.test(texto)) {
+      motivoExtraido = 'Compensatorio por función electoral (certificado E-18 / Registraduría adjunto)'
+    } else if (/cardiolog/i.test(texto)) {
+      motivoExtraido = 'Cita médica - Consulta especialista Cardiología'
+      if (/reclamar|medicam/i.test(texto)) motivoExtraido += ' / Reclamar medicamentos'
+    } else if (/urolog/i.test(texto)) {
+      motivoExtraido = 'Cita médica - Consulta especialista Urología'
+    } else if (/reclamar|medicam/i.test(texto)) {
+      motivoExtraido = 'Cita médica - Reclamar medicamentos (EPS)'
     }
   }
 
@@ -1717,19 +1950,21 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
   return campos
 }
 
-// Aplicar campos al formulario Vue
+// Aplicar campos al formulario Vue. Se asignan TODAS las claves que administra
+// el parser (incluidas las vacías): si el OCR no encontró un dato, el campo
+// debe quedar VACÍO, no conservar un valor de un escaneo anterior.
 const aplicarCampos = (campos) => {
-  if (campos.nombreFuncionario) formData.nombreFuncionario = campos.nombreFuncionario
-  if (campos.cedula)            formData.cedula = campos.cedula
-  if (campos.cargo)             formData.cargo = campos.cargo
-  if (campos.dependencia)       formData.dependencia = campos.dependencia
-  if (campos.fechaInicio)       formData.fechaInicio = campos.fechaInicio
-  if (campos.fechaFin)          formData.fechaFin = campos.fechaFin
-  if (campos.fechaPermisoTexto) formData.fechaPermisoTexto = campos.fechaPermisoTexto
-  if (campos.horaDetalle)       formData.horaDetalle = campos.horaDetalle
-  if (campos.horasCalculadas)   formData.horasCalculadas = campos.horasCalculadas
-  if (campos.tipoPermiso)       formData.tipoPermiso = campos.tipoPermiso
-  if (campos.motivo)            formData.motivo = campos.motivo
+  formData.nombreFuncionario = campos.nombreFuncionario || ''
+  formData.cedula = campos.cedula || ''
+  formData.cargo = campos.cargo || ''
+  formData.dependencia = campos.dependencia || ''
+  formData.fechaInicio = campos.fechaInicio || ''
+  formData.fechaFin = campos.fechaFin || ''
+  formData.fechaPermisoTexto = campos.fechaPermisoTexto || ''
+  formData.tipoPermiso = campos.tipoPermiso || ''
+  formData.horaDetalle = campos.horaDetalle || ''
+  formData.horasCalculadas = campos.horasCalculadas || ''
+  formData.motivo = campos.motivo || ''
   formData.motivoManuscrito = campos.motivo || ''
 }
 
@@ -1751,38 +1986,68 @@ const initPdfWorker = async () => {
   }
 }
 
-// Ejecutar Tesseract sobre un canvas con timeout y protección de red
+// Worker de Tesseract persistente: se crea una sola vez por sesión y se
+// reutiliza en todas las páginas y documentos. En tesseract.js v7 los
+// parámetros de Tesseract (tessedit_*) SOLO se aplican vía setParameters —
+// pasarlos dentro de recognize() no tiene efecto y el OCR corría con la
+// configuración por defecto.
+let _ocrWorkerTesseract = null
+const obtenerWorkerOCR = async () => {
+  if (_ocrWorkerTesseract) return _ocrWorkerTesseract
+  const { createWorker } = await import('tesseract.js')
+  const worker = await createWorker('spa', '1', { logger: () => {} })
+  await worker.setParameters({
+    tessedit_pageseg_mode: '6',      // bloque de texto uniforme (formatos)
+    preserve_interword_spaces: '1'
+  })
+  _ocrWorkerTesseract = worker
+  return worker
+}
+
+const terminarWorkerOCR = async () => {
+  if (_ocrWorkerTesseract) {
+    try { await _ocrWorkerTesseract.terminate() } catch (e) {}
+    _ocrWorkerTesseract = null
+  }
+}
+
+// Ejecutar Tesseract sobre un canvas. Timeout de 60s: los escaneos borrosos o
+// con letra irregular a escala 2.5 tardan bastante más de los 5s que había
+// antes — con 5s el OCR devolvía texto vacío en silencio y el parser terminaba
+// inventando datos ajenos al documento.
 const ejecutarOCR = async (canvas) => {
   try {
     const canvasMejorado = mejorarImagenParaOCR(canvas)
-    const Tesseract = await import('tesseract.js')
-    
-    // Timeout de 5s para evitar bloqueos si la conexión CDN está lenta en Vercel
-    const ocrTask = Tesseract.recognize(canvasMejorado.toDataURL('image/png'), 'spa', {
-      logger: () => {},
-      tessedit_pageseg_mode: '6',
-      tessedit_ocr_engine_mode: '1',
-      preserve_interword_spaces: '1'
-    })
+    const worker = await obtenerWorkerOCR()
 
-    const timeoutTask = new Promise((resolve) => 
-      setTimeout(() => resolve({ data: { text: '' } }), 5000)
+    const ocrTask = worker.recognize(canvasMejorado)
+    const timeoutTask = new Promise((resolve) =>
+      setTimeout(() => resolve({ agotado: true }), 60000)
     )
 
     const res = await Promise.race([ocrTask, timeoutTask])
+    if (res && res.agotado) {
+      console.warn('[OCR] Tiempo agotado (60s) para esta página')
+      return { texto: '', confianza: 0, agotado: true }
+    }
     const texto = (res && res.data && res.data.text) ? res.data.text : ''
-    console.info(`[OCR Resultado] ${texto.length} caracteres reconocidos`)
-    return texto
+    const confianza = (res && res.data && typeof res.data.confidence === 'number') ? res.data.confidence : null
+    console.info(`[OCR Resultado] ${texto.length} caracteres reconocidos (confianza Tesseract: ${confianza ?? 'n/d'})`)
+    return { texto, confianza, agotado: false }
   } catch (e) {
     console.warn('[OCR Bypass]', e)
-    return ''
+    // Worker corrupto: se descarta para que el próximo intento lo reconstruya
+    await terminarWorkerOCR()
+    return { texto: '', confianza: 0, agotado: false }
   }
 }
 
 // 🎯 PROCESAMIENTO MULTI-PÁGINA INTELIGENTE CON PROTECCIÓN TOTAL
-const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
+const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
   let textoPagina1 = ''
   let textoCompleto = ''
+  let ocrDocumentoIlegible = false
+  let paginasOCRAgotadas = 0
 
   // --- WORD / ODT: extraccion de texto con mammoth ---
   if (isWordFile.value) {
@@ -1845,8 +2110,9 @@ const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
           await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
 
           ocrStepMessage.value = `Extrayendo datos de página ${pNum}...`
-          const textoOcrPag = await ejecutarOCR(canvas)
-          textoPag += textoOcrPag
+          const ocrPag = await ejecutarOCR(canvas)
+          textoPag += ocrPag.texto
+          if (ocrPag.agotado) paginasOCRAgotadas++
         } catch (renderErr) {
           console.warn(`[Page ${pNum} Render Warn]`, renderErr)
         }
@@ -1857,9 +2123,13 @@ const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
         textoCompleto += `\n--- PÁGINA ${pNum} ---\n` + textoPag
       }
     } catch (pdfErr) {
-      console.warn('[PDF Process Warning, usando heurística de archivo]', pdfErr)
-      textoCompleto = fileName
-      textoPagina1 = fileName
+      // PDF ilegible/dañado: NO se usa el nombre de archivo como si fuera el
+      // texto del documento (el parser "inventaría" datos de él). Se informa
+      // honestamente y los campos quedan para diligenciamiento manual.
+      console.warn('[PDF Process Warning — documento no legible]', pdfErr)
+      ocrDocumentoIlegible = true
+      textoCompleto = ''
+      textoPagina1 = ''
     }
   } else {
     try {
@@ -1872,8 +2142,10 @@ const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
       canvas.width = img.naturalWidth * 2
       canvas.height = img.naturalHeight * 2
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-      textoCompleto = await ejecutarOCR(canvas)
+      const ocrImg = await ejecutarOCR(canvas)
+      textoCompleto = ocrImg.texto
       textoPagina1 = textoCompleto
+      if (ocrImg.agotado) paginasOCRAgotadas++
     } catch (imgErr) {
       console.warn('[Image OCR Error]', imgErr)
     }
@@ -1883,7 +2155,7 @@ const procesarDocumentoCompleto = async (dataUrl, fileName, isPdf) => {
   ocrProgress.value = 95
   await new Promise(r => setTimeout(r, 150))
 
-  return { textoCompleto, textoPagina1 }
+  return { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas }
 }
 
 // 🎯 MANEJADOR PRINCIPAL RESILIENTE CON RESPUESTA INMEDIATA
@@ -1910,40 +2182,67 @@ const handleScannedFileUpload = async (e) => {
   isScanningOCR.value = true
   ocrProgress.value = 10
   ocrStepMessage.value = `Cargando ${file.name}...`
+  confianzaOcrReal.value = 0
+  camposFaltantesOcr.value = []
 
-  // 1. Pre-llenado inmediato de datos desde metadatos/nombre de archivo (0ms de espera para el usuario)
-  const preCampos = parsearTextoPermiso(file.name, file.name, file.name)
-  aplicarCampos(preCampos)
-
+  // NOTA: no se pre-llena nada desde el nombre del archivo. Antes se sembraban
+  // datos ("nombre + fecha del nombre.pdf") que quedaban como si el OCR los
+  // hubiera leído del documento aunque la lectura fallara. El único origen de
+  // datos es el contenido real del archivo.
   const reader = new FileReader()
   reader.onload = async (event) => {
     // Almacenar siempre en Base64 para que la base de datos pueda guardar el archivo real
     customFileUrl.value = event.target.result
 
     try {
-      const { textoCompleto, textoPagina1 } = await procesarDocumentoCompleto(event.target.result, file.name, isPdfFile.value)
+      const { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas } =
+        await procesarDocumentoCompleto(event.target.result, isPdfFile.value)
       const campos = parsearTextoPermiso(textoCompleto, file.name, textoPagina1)
       aplicarCampos(campos)
 
-      ocrProgress.value = 100
-      ocrStepMessage.value = '¡Lectura completada con éxito!'
-      await new Promise(r => setTimeout(r, 300))
+      // Confianza REAL: % de campos clave con evidencia en el documento.
+      const clavesRevision = [
+        ['nombreFuncionario', 'Nombre'],
+        ['cedula', 'Cédula'],
+        ['fechaInicio', 'Fecha'],
+        ['tipoPermiso', 'Tipo'],
+        ['motivo', 'Motivo']
+      ]
+      const faltantes = clavesRevision.filter(([k]) => !String(formData[k] || '').trim())
+      confianzaOcrReal.value = Math.round(((clavesRevision.length - faltantes.length) / clavesRevision.length) * 100)
+      camposFaltantesOcr.value = faltantes.map(([, etiqueta]) => etiqueta)
 
-      const n = Object.keys(campos).length
-      lanzarAlertaBootstrap(
-        'success',
-        `✅ Datos del Permiso Extraídos`,
-        `Se cargó la solicitud de ${formData.nombreFuncionario || 'el trabajador'} (${formData.cargo}) para permiso de ${formData.tipoPermiso} (${formData.fechaInicio}).`
-      )
+      ocrProgress.value = 100
+      ocrStepMessage.value = '¡Lectura completada!'
+
+      if (ocrDocumentoIlegible) {
+        lanzarAlertaBootstrap(
+          'warning',
+          'Documento no legible automáticamente',
+          `No fue posible leer el contenido de "${file.name}" (puede estar dañado o protegido). El documento queda en el visor: diligencie los campos manualmente antes de radicar.`,
+          9000
+        )
+      } else if (faltantes.length === 0) {
+        lanzarAlertaBootstrap(
+          'success',
+          '✅ Datos del Permiso Extraídos',
+          `Se cargó la solicitud de ${formData.nombreFuncionario} para permiso de ${formData.tipoPermiso} (${formData.fechaInicio}). Verifique que los datos coincidan con el PDF antes de radicar.`
+        )
+      } else {
+        lanzarAlertaBootstrap(
+          'warning',
+          `OCR parcial (${confianzaOcrReal.value}%) — ${faltantes.length} campo(s) pendiente(s)`,
+          `El documento se leyó, pero no se pudo confirmar en el PDF: ${faltantes.map(([, etiqueta]) => etiqueta).join(', ')}. Diligencie esos campos manualmente. ${paginasOCRAgotadas > 0 ? `(${paginasOCRAgotadas} página(s) tardaron demasiado en leerse).` : ''}`,
+          9000
+        )
+      }
     } catch (err) {
       console.error('[OCR ERROR]', err)
-      // En caso de cualquier error imprevisto, asegurar que los datos del pre-llenado permanezcan
-      const fallbackCampos = parsearTextoPermiso(file.name, file.name, file.name)
-      aplicarCampos(fallbackCampos)
       lanzarAlertaBootstrap(
         'info',
         'Documento Cargado',
-        `El archivo "${file.name}" fue cargado en el visor. Verifique los campos antes de guardar.`
+        `El archivo "${file.name}" fue cargado en el visor, pero la extracción automática falló (${err.message || 'error desconocido'}). Diligencie los campos manualmente.`,
+        9000
       )
     } finally {
       isScanningOCR.value = false
@@ -1965,6 +2264,13 @@ const handleScannedFileUpload = async (e) => {
 // 🎯 CARGAR PERMISO ORIGINAL DESDE EL HISTORIAL (MUESTRA EL DOCUMENTO ESPECÍFICO DEL PERMISO SELECCIONADO)
 const cargarEnFormulario = async (item) => {
   documentLoaded.value = true
+  // Al venir de un registro ya radicado, los datos son del historial (no de un
+  // OCR nuevo): la confianza parte completa, no "0% pendiente".
+  confianzaOcrReal.value = 100
+  camposFaltantesOcr.value = []
+  // El horario mostrado viene del registro del historial: los relojes y el
+  // interruptor se limpian para no contradecir el valor cargado.
+  reiniciarHorarioPermiso()
   documentFileName.value = item.soporte || `Permiso_${(item.funcionario || 'Funcionario').replace(/\s+/g, '_')} _${item.anio || anioActual}.pdf`
 
   formData.nombreFuncionario = item.funcionario || item.nombreFuncionario || ''
@@ -1980,7 +2286,13 @@ const cargarEnFormulario = async (item) => {
   formData.createdAt = item.createdAt || ''
   formData.fechaPermisoTexto = `${item.dia} de ${todosLosMeses.find(m => m.mesNum === item.mesNum)?.nombre || 'Mes'} ${item.anio}`
   formData.horaDetalle = item.hora24 || item.duracion || '08:00'
-  formData.horasCalculadas = item.duracion || '07:00 a 15:00 (8 horas)'
+  formData.horasCalculadas = item.duracion || ''
+  // Los relojes toman las horas del horario guardado ("07:30 a 18:00 (10,5 horas)")
+  // para que la alerta de jornada completa se derive sola al cargar el registro.
+  const mHorasGuardadas = String(item.duracion || '').match(/(\d{1,2}:\d{2})\s*a\s*(\d{1,2}:\d{2})/)
+  // padStart: "7:30" → "07:30", para que esJornadaCompleta compare bien
+  horaInicioPermiso.value = mHorasGuardadas ? mHorasGuardadas[1].padStart(5, '0') : ''
+  horaFinPermiso.value = mHorasGuardadas ? mHorasGuardadas[2].padStart(5, '0') : ''
   formData.fechaInicio = item.fechaInicio || item.fechaEntrega || `${String(item.dia).padStart(2, '0')}/${String(item.mesNum).padStart(2, '0')}/${item.anio}`
   formData.fechaFin = item.fechaFin || item.fechaInicio || item.fechaEntrega || `${String(item.dia).padStart(2, '0')}/${String(item.mesNum).padStart(2, '0')}/${item.anio}`
 
@@ -2079,12 +2391,43 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('storage', onStorageChange)
+  // Liberar el worker de Tesseract al salir de la vista
+  terminarWorkerOCR()
 })
 
 // Confirm and Send to Gerencia (Guardar en Base de Datos MongoDB & Formato 24h)
 const confirmarYEnviar = async () => {
   if (!formData.nombreFuncionario || !formData.cedula) {
     lanzarAlertaBootstrap('warning', 'Sin Información', 'No hay ninguna solicitud cargada para enviar a Gerencia.')
+    return
+  }
+
+  // Validación de campos que el OCR pudo dejar vacíos: se exigen explícitos,
+  // así ningún permiso se radica con tipo o fecha heredados de un default.
+  const pendientes = []
+  if (!formData.fechaInicio) pendientes.push('Fecha del Permiso')
+  if (!formData.tipoPermiso) pendientes.push('Tipo de Permiso')
+  if (!String(formData.motivo || '').trim()) pendientes.push('Motivo')
+  if (!String(formData.horasCalculadas || '').trim()) pendientes.push('Horario')
+  if (pendientes.length) {
+    lanzarAlertaBootstrap(
+      'warning',
+      'Campos pendientes',
+      `Complete manualmente: ${pendientes.join(', ')}. El OCR no los pudo confirmar en el PDF.`,
+      7000
+    )
+    return
+  }
+
+  // La máscara da la forma DD/MM/YYYY, pero se verifica que sea una fecha real
+  // (evita radicar 31/02/2026 o 03/13/2026).
+  if (!esFechaValida(formData.fechaInicio)) {
+    lanzarAlertaBootstrap(
+      'warning',
+      'Fecha inválida',
+      `La Fecha del Permiso "${formData.fechaInicio}" no es una fecha real. Verifique día y mes (formato DD/MM/YYYY).`,
+      7000
+    )
     return
   }
 
@@ -2121,7 +2464,11 @@ const confirmarYEnviar = async () => {
       tipoPermiso: formData.tipoPermiso,
       fechaInicio: formData.fechaInicio,
       fechaFin: formData.fechaFin || formData.fechaInicio,
-      duracion: formData.horasCalculadas || '07:00 a 15:00 (8 horas)',
+      // Sin default: la validación de pendientes ya exige este campo, y un
+      // horario inventado radica horas que el documento no respalda.
+      duracion: formData.horasCalculadas,
+      // Marcador de jornada completa (horas = jornada del día): queda en el historial
+      jornadaCompleta: esJornadaCompleta.value,
       hora24: hora24Actual,
       justificacion: formData.motivo,
       motivoManuscrito: formData.motivoManuscrito,
@@ -2130,6 +2477,8 @@ const confirmarYEnviar = async () => {
       archivoUrl: customFileUrl.value,
       isPdf: isPdfFile.value,
       archivoMimeType: archivoMimeType.value || mimeDesdeDataUrl(customFileUrl.value),
+      // Confianza OCR real (campos confirmados en el PDF / campos clave).
+      confianzaOCR: confianzaOcrReal.value,
       id: formData.id || undefined,
       radicado: formData.radicado || undefined,
       createdAt: formData.createdAt || undefined
@@ -2317,5 +2666,73 @@ const confirmarYEnviar = async () => {
 
 .excel-row-empty:hover .excel-row-num {
   background-color: #f1f5f9 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FORMULARIO DE RADICACIÓN — CAMPOS UNIFORMES Y SOBRIOS
+   Bordes, foco y etiquetas consistentes en todo el formulario del permiso.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.permiso-form .form-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #5c6770;
+}
+
+.permiso-form .input-group-text {
+  background-color: #f6f8fa;
+  border-color: #d9e0e6;
+  color: #6c757d;
+}
+
+.permiso-form .form-control,
+.permiso-form .form-select {
+  border-color: #d9e0e6;
+  color: #212529;
+}
+
+/* Foco sobrio en azul institucional (Acuasan #004884) */
+.permiso-form .form-control:focus,
+.permiso-form .form-select:focus {
+  border-color: #004884;
+  box-shadow: 0 0 0 0.2rem rgba(0, 72, 132, 0.12);
+}
+
+.permiso-form .form-control::placeholder {
+  color: #adb5bd;
+  font-weight: 400;
+}
+
+/* Relojes del permiso: dígitos tabulares y área de click cómoda */
+.permiso-form input[type='time'] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  min-height: 34px;
+}
+
+/* Avisos compactos del horario: píldoras, no alertas gigantes */
+.aviso-horario {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 2rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.15;
+  max-width: 100%;
+}
+
+.aviso-jornada {
+  background-color: #e7f4ec;
+  border: 1px solid #bfe0cc;
+  color: #14602f;
+}
+
+.aviso-fin-semana {
+  background-color: #fdf6e3;
+  border: 1px solid #f0dfae;
+  color: #7a5d0b;
 }
 </style>

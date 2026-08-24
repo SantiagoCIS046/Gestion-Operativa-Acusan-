@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite acusan/frontend",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite acusan/frontend",
+    "dev:api": "npm --prefix acusan/backend run dev",
     "build": "prisma generate --schema=acusan/backend/prisma/schema.prisma && vite build",
     "preview": "vite preview"
   },

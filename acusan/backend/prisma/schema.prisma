@@ -40,6 +40,9 @@ model Permiso {
   fechaInicio       DateTime
   fechaFin          DateTime
   duracion          String?
+  // true cuando el horario del permiso coincide con la jornada completa del día
+  // (lunes a jueves 07:30–18:00, viernes 07:30–17:30). Lo marca el frontend.
+  jornadaCompleta   Boolean       @default(false)
   hora24            String?
   justificacion     String?
   motivoManuscrito  String?

@@ -384,8 +384,8 @@ const confirmarCerrarSesion = () => {
 
 /* === SIDEBAR === */
 .sidebar {
-  width: 235px;
-  min-width: 235px;
+  width: 220px;
+  min-width: 220px;
   background: #02203d;
   background: linear-gradient(180deg, #021f3a 0%, #011427 100%);
   display: flex;
@@ -400,7 +400,7 @@ const confirmarCerrarSesion = () => {
 }
 
 .sidebar-brand {
-  padding: 20px 16px 18px 16px;
+  padding: 14px 10px 12px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -409,9 +409,9 @@ const confirmarCerrarSesion = () => {
 }
 
 .acuasan-emblem-wrapper {
-  width: 56px;
-  height: 56px;
-  margin-bottom: 8px;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -428,24 +428,24 @@ const confirmarCerrarSesion = () => {
 }
 
 .brand-title {
-  font-size: 1.05rem;
+  font-size: 0.92rem;
   font-weight: 900;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   color: #ffffff;
   margin: 0;
 }
 
 .brand-sub {
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   font-weight: 700;
   color: #73be28;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
   margin-top: 2px;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 14px 10px;
+  padding: 10px 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -456,11 +456,11 @@ const confirmarCerrarSesion = () => {
 .nav-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 10px;
   color: #cbd5e1;
   text-decoration: none;
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   font-weight: 500;
   border-radius: 8px;
   transition: all 0.2s ease;
@@ -514,7 +514,7 @@ const confirmarCerrarSesion = () => {
 }
 
 .nav-btn.active .active-indicator-dot { display: block; }
-.nav-icon { font-size: 1rem; }
+.nav-icon { font-size: 0.92rem; }
 
 /* ─── Divisor ────────────────────────────────────────────────────── */
 .nav-divider {
@@ -533,10 +533,10 @@ const confirmarCerrarSesion = () => {
 .nav-group-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 10px;
   color: #cbd5e1;
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   font-weight: 500;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -562,7 +562,7 @@ const confirmarCerrarSesion = () => {
 
 .group-chevron {
   margin-left: auto;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #64748b;
   display: inline-block;
@@ -580,18 +580,18 @@ const confirmarCerrarSesion = () => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 4px 0 4px 12px;
+  padding: 4px 0 4px 10px;
   overflow: hidden;
 }
 
 .nav-child {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 6px 8px;
   color: #8fa7be;
   text-decoration: none;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 500;
   border-radius: 6px;
   border-left: 2px solid rgba(255, 255, 255, 0.08);
@@ -612,7 +612,7 @@ const confirmarCerrarSesion = () => {
   border-left: 2px solid #73be28;
 }
 
-.child-icon { font-size: 0.85rem; }
+.child-icon { font-size: 0.8rem; }
 
 /* Animación acordeón */
 .slide-down-enter-active,
@@ -629,29 +629,29 @@ const confirmarCerrarSesion = () => {
 
 /* Sidebar Footer & Logout */
 .sidebar-footer {
-  padding: 12px 14px;
+  padding: 10px 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   background: rgba(0, 0, 0, 0.25);
 }
 
 .sidebar-footer-user {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .user-avatar-circle {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: #004884;
   color: #ffffff;
   font-weight: 700;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -668,7 +668,7 @@ const confirmarCerrarSesion = () => {
 }
 
 .user-name {
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 600;
   color: #ffffff;
   white-space: nowrap;
@@ -677,7 +677,7 @@ const confirmarCerrarSesion = () => {
 }
 
 .user-role {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   color: #8fa7be;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -685,16 +685,17 @@ const confirmarCerrarSesion = () => {
 }
 
 .btn-logout {
-  padding: 6px 12px;
+  padding: 5px 8px;
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #fca5a5;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   white-space: nowrap;
   transition: all 0.2s ease;

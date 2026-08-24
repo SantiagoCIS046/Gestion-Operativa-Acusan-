@@ -94,7 +94,9 @@ const formatearParaFrontend = (p, incluirArchivo = false) => {
     fechaFin: formatearFecha(p.fechaFin) || fechaEntrega,
     fechaEntrega,
     hora24: p.hora24 || "08:00",
-    duracion: p.duracion || "07:00 a 15:00 (8 horas)",
+    duracion: p.duracion || "",
+    // Indica si el horario coincidió con la jornada completa del día
+    jornadaCompleta: p.jornadaCompleta === true,
     motivo: p.justificacion || p.motivoManuscrito || "",
     motivoManuscrito: p.motivoManuscrito || "",
     observaciones: p.observaciones || "",
@@ -276,8 +278,9 @@ export const PermisosService = {
       tipo: tipoEnum,
       fechaInicio: fechaInicioParsed,
       fechaFin: fechaFinParsed,
-      duracion:
-        datos.duracion || datos.horasCalculadas || "07:00 a 15:00 (8 horas)",
+      duracion: datos.duracion || datos.horasCalculadas || "",
+      // El frontend la marca cuando las horas coinciden con la jornada del día
+      jornadaCompleta: datos.jornadaCompleta === true,
       hora24: hora24Actual,
       justificacion: datos.justificacion || datos.motivo || "",
       motivoManuscrito: datos.motivoManuscrito || "",
@@ -286,10 +289,8 @@ export const PermisosService = {
       soporteUrl: datos.soporteUrl || "",
       archivoUrl,
       archivoMimeType: datos.archivoMimeType || "",
-      ocrConfidence:
-        datos.ocrConfidence || datos.confianzaOCR
-          ? Number(datos.ocrConfidence || datos.confianzaOCR)
-          : 0.98,
+      // Confianza OCR real (0 si no se pudo leer); nunca se inventa un 0.98
+      ocrConfidence: Number(datos.ocrConfidence ?? datos.confianzaOCR ?? 0),
       ocrRawPayload: datos.ocrRawPayload || {},
       observaciones: datos.observaciones || "",
       estado: estadoInicial,
@@ -355,6 +356,10 @@ export const PermisosService = {
           fechaInicio: fechaInicioParsed,
           fechaFin: fechaFinParsed,
           duracion: datos.duracion || datos.horasCalculadas || undefined,
+          jornadaCompleta:
+            typeof datos.jornadaCompleta === "boolean"
+              ? datos.jornadaCompleta
+              : undefined,
           hora24: datos.hora24 || undefined,
           justificacion: datos.justificacion || datos.motivo || undefined,
           motivoManuscrito: datos.motivoManuscrito || undefined,
