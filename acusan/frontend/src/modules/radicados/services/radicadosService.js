@@ -482,6 +482,65 @@ export const radicadosService = {
 
   getDescargarExcelUrl() {
     return `${API_BASE}/descargar-excel`
+  },
+
+  /**
+   * Elimina un radicado por su ID (acepta también el objeto completo).
+   * Provisional local (nunca sincronizado): se quita del caché del navegador.
+   * Radicado del servidor: DELETE al backend + limpieza del caché local.
+   * Un 404 se trata como éxito (ya fue eliminado desde otro equipo): lo que
+   * no existe en la BD no debe revivir en pantalla desde el espejo local.
+   */
+  async eliminar(rad) {
+    const id = rad && typeof rad === 'object' ? rad.id : rad
+    const numero = rad && typeof rad === 'object' ? rad.numeroRadicado : null
+
+    const quitarDelCacheLocal = () => {
+      const lista = obtenerDbLocal().filter(
+        (r) => String(r.id) !== String(id) && (!numero || String(r.numeroRadicado) !== String(numero))
+      )
+      try {
+        guardarDbLocal(lista)
+      } catch (eCuota) {
+        // Espejo sin espacio: obtenerTodos lo corrige en el próximo refresco
+      }
+    }
+
+    const esLocalPendiente = String(id).startsWith('RAD-LOCAL') ||
+      obtenerDbLocal().some((r) => String(r.id) === String(id) && r.sincronizado === false)
+
+    if (esLocalPendiente) {
+      quitarDelCacheLocal()
+      return { success: true, origen: 'LOCAL', message: 'Radicado local eliminado' }
+    }
+
+    const res = await fetch(`${API_BASE}/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    })
+
+    if (res.status === 401) {
+      authService.logout()
+      window.location.href = '/login'
+      throw new Error('Sesión expirada. Inicie sesión nuevamente.')
+    }
+
+    if (res.ok || res.status === 404) {
+      quitarDelCacheLocal()
+      let mensaje = 'Radicado eliminado correctamente'
+      try {
+        const data = await res.json()
+        if (data && data.message) mensaje = data.message
+      } catch (e) {}
+      return { success: true, origen: 'SERVIDOR', message: mensaje }
+    }
+
+    let msg = `El servidor respondió ${res.status}`
+    try {
+      const data = await res.json()
+      if (data && data.message) msg = data.message
+    } catch (e) {}
+    throw new Error(msg)
   }
 }
 
