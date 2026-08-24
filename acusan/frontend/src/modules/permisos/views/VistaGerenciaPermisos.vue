@@ -640,13 +640,7 @@
                     class="w-100 h-100 rounded-3 border-0 bg-white"
                     style="min-height: 520px;"
                     title="Visor PDF Permiso Original"
-                  >
-                    <div class="p-4 text-center bg-light">
-                      <a :href="getUrlDocumento(permisoSeleccionado)" target="_blank" class="btn btn-primary btn-sm">
-                        📥 Abrir / Descargar PDF del Permiso
-                      </a>
-                    </div>
-                  </iframe>
+                  ></iframe>
                 </object>
 
                 <!-- IF UPLOADED IMAGE FILE (JPG/PNG/WEBP) -->
