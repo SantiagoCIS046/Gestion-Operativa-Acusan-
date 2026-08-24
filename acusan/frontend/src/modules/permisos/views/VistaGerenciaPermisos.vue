@@ -118,21 +118,20 @@
       </div>
 
       <div class="toolbar-right">
-        <!-- Botón de Sincronización Manual -->
+        <!-- Botón de Sincronización Manual Profesional -->
         <button 
-          class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2 fw-bold shadow-sm"
-          style="background-color: white; border-radius: 8px;"
+          class="btn-sync-action"
           @click="cargarPermisos()"
           :disabled="cargando"
-          title="Forzar descarga desde la nube"
+          title="Forzar sincronización de datos con la nube"
         >
-          <span v-if="cargando" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-          <span v-else>🔄</span>
-          <span>Sincronizar Datos Nube</span>
+          <span v-if="cargando" class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+          <span v-else class="btn-sync-icon">🔄</span>
+          <span>Sincronizar Nube</span>
         </button>
 
-        <!-- Live Search -->
-        <div class="search-box ms-3">
+        <!-- Live Search Input -->
+        <div class="search-box">
           <span class="search-icon">🔍</span>
           <input
             v-model="busqueda"
@@ -140,7 +139,7 @@
             class="search-input"
             placeholder="Buscar por funcionario, cédula o radicado..."
           />
-          <button v-if="busqueda" class="clear-search" @click="busqueda = ''">✕</button>
+          <button v-if="busqueda" class="clear-search" @click="busqueda = ''" title="Limpiar búsqueda">✕</button>
         </div>
       </div>
     </div>
@@ -1178,6 +1177,7 @@ const getIniciales = (nombre) => {
   padding: 8px 14px;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .toolbar-left {
@@ -1185,6 +1185,55 @@ const getIniciales = (nombre) => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.btn-sync-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  color: #004884;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.btn-sync-action:hover:not(:disabled) {
+  background: #004884;
+  border-color: #004884;
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(0, 72, 132, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-sync-action:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-sync-icon {
+  font-size: 0.88rem;
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+
+.btn-sync-action:hover:not(:disabled) .btn-sync-icon {
+  transform: rotate(180deg);
 }
 
 .view-mode-tabs {
@@ -1244,26 +1293,39 @@ const getIniciales = (nombre) => {
   position: relative;
   display: flex;
   align-items: center;
+  height: 34px;
 }
 
 .search-icon {
   position: absolute;
-  left: 8px;
-  font-size: 0.78rem;
+  left: 9px;
+  font-size: 0.8rem;
+  color: #64748b;
+  pointer-events: none;
 }
 
 .search-input {
-  padding: 5px 24px 5px 28px;
+  height: 34px;
+  padding: 0 28px 0 30px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 0.76rem;
-  width: 230px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #1e293b;
+  width: 260px;
+  background: #f8fafc;
   outline: none;
+  transition: all 0.2s ease;
 }
 
 .search-input:focus {
+  background: #ffffff;
   border-color: #004884;
-  box-shadow: 0 0 0 2px rgba(0, 72, 132, 0.1);
+  box-shadow: 0 0 0 3px rgba(0, 72, 132, 0.12);
+}
+
+.search-input::placeholder {
+  color: #94a3b8;
 }
 
 .clear-search {
@@ -1274,6 +1336,13 @@ const getIniciales = (nombre) => {
   cursor: pointer;
   color: #94a3b8;
   font-size: 0.75rem;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.clear-search:hover {
+  color: #ef4444;
 }
 
 /* ==================== VISTA 1: CUADRILLA ESTILO EXCEL AUTÉNTICO ==================== */

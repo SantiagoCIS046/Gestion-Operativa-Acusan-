@@ -340,10 +340,10 @@
                 </div>
 
                 <div class="row g-2 mb-3">
-                  <div class="col-md-6">
+                  <div class="col-md-4">
                     <label class="form-label mb-1 fw-semibold text-secondary small d-flex justify-content-between">
-                      <span>Fecha del Permiso</span>
-                      <span class="text-muted fw-normal" style="font-size: 0.7rem;">(DD/MM/YYYY)</span>
+                      <span>Fecha Permiso</span>
+                      <span class="text-muted fw-normal" style="font-size: 0.68rem;">(DD/MM/YYYY)</span>
                     </label>
                     <div class="input-group input-group-sm">
                       <span class="input-group-text bg-light text-muted">📅</span>
@@ -362,7 +362,7 @@
                     </div>
                   </div>
 
-                  <div class="col-md-6">
+                  <div class="col-md-8">
                     <label class="form-label mb-1 fw-semibold text-secondary small">Horario del Permiso</label>
 
                     <!-- Confirmación compacta: las horas coinciden con la jornada del día -->
@@ -380,7 +380,7 @@
                     <!-- Relojes: hora de inicio y fin del permiso -->
                     <div class="row g-2">
                       <div class="col-6">
-                        <label for="horaInicioPermiso" class="form-label mb-1">Hora de inicio</label>
+                        <label for="horaInicioPermiso" class="form-label mb-1 small text-muted" style="font-size: 0.72rem;">Hora de inicio</label>
                         <div class="input-group input-group-sm">
                           <span class="input-group-text">🕗</span>
                           <input
@@ -394,7 +394,7 @@
                         </div>
                       </div>
                       <div class="col-6">
-                        <label for="horaFinPermiso" class="form-label mb-1">Hora de fin</label>
+                        <label for="horaFinPermiso" class="form-label mb-1 small text-muted" style="font-size: 0.72rem;">Hora de fin</label>
                         <div class="input-group input-group-sm">
                           <span class="input-group-text">🕤</span>
                           <input
