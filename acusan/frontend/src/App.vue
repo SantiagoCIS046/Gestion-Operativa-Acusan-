@@ -129,7 +129,7 @@
           <!-- RESTO DE ROLES: Navegación plana actual -->
           <!-- ════════════════════════════════════════ -->
 
-          <!-- ENCARGADO: Permisos -->
+          <!-- ENCARGADO: Permisos (solo su área) -->
           <router-link
             v-if="tieneAcceso(['ENCARGADO'])"
             to="/permisos/encargado"
@@ -137,23 +137,23 @@
             active-class="active"
           >
             <span class="nav-icon">📄</span>
-            <span class="nav-text">Historial de Permisos</span>
+            <span class="nav-text">Permisos</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- ENCARGADO y GERENCIA: Horas Extras -->
+          <!-- ENCARGADO: Horas Extras (solo su área) -->
           <router-link
-            v-if="tieneAcceso(['ENCARGADO', 'GERENCIA'])"
+            v-if="tieneAcceso(['ENCARGADO'])"
             to="/horas-extras/gerencia"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">⏱️</span>
-            <span class="nav-text">Historial de Horas Extras</span>
+            <span class="nav-text">Horas Extras</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- GERENCIA: Consulta de Permisos -->
+          <!-- GERENCIA: Historial de Permisos (visión completa) -->
           <router-link
             v-if="tieneAcceso(['GERENCIA'])"
             to="/permisos/gerencia"
@@ -165,9 +165,33 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- GERENCIA y OPERATIVO: PQR -->
+          <!-- GERENCIA: Historial de Horas Extras (visión completa) -->
           <router-link
-            v-if="tieneAcceso(['OPERATIVO', 'GERENCIA'])"
+            v-if="tieneAcceso(['GERENCIA'])"
+            to="/horas-extras/gerencia"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">⏱️</span>
+            <span class="nav-text">Historial de Horas Extras</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+          <!-- OPERATIVO: su área PQR (solo su área) -->
+          <router-link
+            v-if="tieneAcceso(['OPERATIVO'])"
+            to="/pqr/gestion"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">📋</span>
+            <span class="nav-text">PQR</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+          <!-- GERENCIA: Historial de PQR (visión completa) -->
+          <router-link
+            v-if="tieneAcceso(['GERENCIA'])"
             to="/pqr/gestion"
             class="nav-btn"
             active-class="active"
@@ -177,19 +201,31 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- RADICADOS: Eliana y Román (Gestión y Registro) -->
+          <!-- RADICADOS (Eliana y similares): solo su área -->
           <router-link
-            v-if="tieneAcceso(['RADICADOS', 'ENCARGADO'])"
+            v-if="tieneAcceso(['RADICADOS'])"
             to="/radicados/gestion"
             class="nav-btn"
             active-class="active"
           >
             <span class="nav-icon">📑</span>
-            <span class="nav-text">Historial de Radicados</span>
+            <span class="nav-text">Radicados</span>
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- RADICADOS: Gerencia y Admin (Supervisión y Alertas de Subidas) -->
+          <!-- ENCARGADO con acceso a radicados: solo su área -->
+          <router-link
+            v-if="tieneAcceso(['ENCARGADO'])"
+            to="/radicados/gestion"
+            class="nav-btn"
+            active-class="active"
+          >
+            <span class="nav-icon">📑</span>
+            <span class="nav-text">Radicados</span>
+            <span class="active-indicator-dot"></span>
+          </router-link>
+
+          <!-- GERENCIA: Historial de Radicados (visión completa) -->
           <router-link
             v-if="tieneAcceso(['GERENCIA'])"
             to="/radicados/gerencia"
