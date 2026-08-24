@@ -430,7 +430,7 @@
     </div>
 
     <!-- ═══════════════ MODAL DETALLE DE EXPEDIENTE / SELLO DIGITAL ═══════════════ -->
-    <div v-if="radicadoSeleccionado" class="modal-backdrop-custom" @click.self="radicadoSeleccionado = null">
+    <div v-if="radicadoSeleccionado" class="modal-backdrop-custom" @click.self="cerrarModalDetalle()">
       <div class="modal-detalle-card animate-zoom-in">
         <div class="modal-detalle-header">
           <div class="d-flex align-items-center gap-2">
@@ -440,7 +440,7 @@
               <div class="text-muted" style="font-size: 0.72rem;">ACUASAN E.S.P. — Control Gerencial</div>
             </div>
           </div>
-          <button type="button" class="btn-close-custom" @click="radicadoSeleccionado = null">✕</button>
+          <button type="button" class="btn-close-custom" @click="cerrarModalDetalle()">✕</button>
         </div>
 
         <div class="modal-detalle-body">
@@ -497,25 +497,32 @@
             <p class="mb-0 text-dark">{{ radicadoSeleccionado.contexto }}</p>
           </div>
 
-          <!-- Documento Adjunto PDF -->
-          <div class="adjunto-box" @click="abrirDocumento(radicadoSeleccionado)">
-            <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
-              <span class="fs-5">📄</span>
-              <div class="text-truncate">
-                <span class="d-block text-muted" style="font-size: 0.65rem; font-weight: 700;">DOCUMENTO PDF OFICIAL</span>
-                <strong class="text-dark text-truncate d-block" style="font-size: 0.75rem;">
-                  {{ radicadoSeleccionado.archivoNombre || (radicadoSeleccionado.numeroRadicadoPdf ? radicadoSeleccionado.numeroRadicadoPdf + '.pdf' : 'Radicado.pdf') }}
-                </strong>
+          <!-- Documento original embebido en el modal -->
+          <div class="detalle-pdf-vista">
+            <div class="detalle-pdf-header">
+              <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
+                <span class="fs-5">📄</span>
+                <div class="text-truncate">
+                  <span class="d-block text-muted" style="font-size: 0.65rem; font-weight: 700;">DOCUMENTO PDF OFICIAL</span>
+                  <strong class="text-dark text-truncate d-block" style="font-size: 0.75rem;">
+                    {{ radicadoSeleccionado.archivoNombre || (radicadoSeleccionado.numeroRadicadoPdf ? radicadoSeleccionado.numeroRadicadoPdf + '.pdf' : 'Radicado.pdf') }}
+                  </strong>
+                </div>
               </div>
+              <button v-if="detallePdfUrl" type="button" class="btn btn-sm btn-primary px-2 py-1 fw-bold" style="font-size: 0.72rem; flex-shrink: 0;" @click="abrirPdfPantallaCompleta()">
+                ⤢ Abrir
+              </button>
             </div>
-            <button type="button" class="btn btn-sm btn-primary px-2 py-1 fw-bold" style="font-size: 0.72rem;">
-              Abrir PDF 👁️
-            </button>
+            <div class="detalle-pdf-cuerpo">
+              <div v-if="detallePdfCargando" class="detalle-pdf-estado">⏳ Cargando documento...</div>
+              <iframe v-else-if="detallePdfUrl" :src="detallePdfUrl" class="pdf-frame" title="Documento original del radicado"></iframe>
+              <div v-else class="detalle-pdf-estado">📄 Este radicado no tiene documento adjunto en la base de datos.</div>
+            </div>
           </div>
         </div>
 
         <div class="modal-detalle-footer">
-          <button type="button" class="btn btn-sm btn-secondary" @click="radicadoSeleccionado = null">Cerrar</button>
+          <button type="button" class="btn btn-sm btn-secondary" @click="cerrarModalDetalle()">Cerrar</button>
         </div>
       </div>
     </div>
@@ -535,6 +542,9 @@ const filtroEstado = ref('')
 const filtroSla = ref('')
 const modalAlertasVisible = ref(false)
 const radicadoSeleccionado = ref(null)
+const detallePdfUrl = ref(null)
+const detallePdfCargando = ref(false)
+const detallePdfError = ref(false)
 let timerAutoRefresh = null
 
 // Cargar datos
@@ -568,6 +578,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (timerAutoRefresh) clearInterval(timerAutoRefresh)
   window.removeEventListener('storage', onStorageChange)
+  if (detallePdfUrl.value && detallePdfUrl.value.startsWith('blob:')) URL.revokeObjectURL(detallePdfUrl.value)
 })
 
 // Helper para días restantes
@@ -729,44 +740,50 @@ const abrirPanelAlertas = () => {
 
 const abrirModalDetalle = (rad) => {
   radicadoSeleccionado.value = rad
+  cargarPdfDetalle(rad)
 }
 
 const abrirDetalleDesdeAlerta = (rad) => {
   modalAlertasVisible.value = false
   radicadoSeleccionado.value = rad
+  cargarPdfDetalle(rad)
 }
 
-const abrirDocumento = async (rad) => {
-  // 1. Documento oficial almacenado en la base de datos (se sirve bajo demanda)
-  if (rad && rad.id) {
-    try {
-      const url = await radicadosService.obtenerArchivoRadicado(rad.id)
-      window.open(url, '_blank')
-      return
-    } catch (e) {
-      // Sin documento en la nube → continuar con los respaldos locales
-    }
+// El documento original se muestra DENTRO del modal (iframe), no en pestaña nueva.
+// Blob URL autenticado para los del servidor; Base64 para los pendientes locales.
+const cargarPdfDetalle = async (rad) => {
+  detallePdfUrl.value = null
+  detallePdfError.value = false
+  const esLocalPendiente = rad && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
+  const tieneDoc = rad && (rad.hasArchivo || rad.archivoBase64)
+  if (!tieneDoc) {
+    detallePdfError.value = true
+    return
   }
+  detallePdfCargando.value = true
+  try {
+    if (esLocalPendiente) {
+      detallePdfUrl.value = rad.archivoBase64 || null
+      if (!detallePdfUrl.value) detallePdfError.value = true
+    } else {
+      detallePdfUrl.value = await radicadosService.obtenerArchivoRadicado(rad.id)
+    }
+  } catch (e) {
+    detallePdfUrl.value = (rad && rad.archivoBase64) || null
+    if (!detallePdfUrl.value) detallePdfError.value = true
+  } finally {
+    detallePdfCargando.value = false
+  }
+}
 
-  if (rad && rad.archivoBase64) {
-    const win = window.open('', '_blank')
-    if (win) {
-      win.document.write(`
-        <!DOCTYPE html>
-        <html style="margin:0;height:100%;">
-        <head><title>Expediente Radicado - ${rad.numeroRadicado}</title></head>
-        <body style="margin:0;height:100%;overflow:hidden;background:#525659;">
-          <iframe src="${rad.archivoBase64}" width="100%" height="100%" frameborder="0"></iframe>
-        </body>
-        </html>
-      `)
-      win.document.close()
-    }
-  } else if (rad && rad.urlDocumento) {
-    window.open(rad.urlDocumento, '_blank')
-  } else {
-    alert('Este radicado no tiene documento digital adjunto en la base de datos.')
-  }
+const cerrarModalDetalle = () => {
+  if (detallePdfUrl.value && detallePdfUrl.value.startsWith('blob:')) URL.revokeObjectURL(detallePdfUrl.value)
+  detallePdfUrl.value = null
+  radicadoSeleccionado.value = null
+}
+
+const abrirPdfPantallaCompleta = () => {
+  if (detallePdfUrl.value) window.open(detallePdfUrl.value, '_blank')
 }
 </script>
 
@@ -1505,7 +1522,7 @@ const abrirDocumento = async (rad) => {
   background: #ffffff;
   border-radius: 12px;
   width: 100%;
-  max-width: 440px;
+  max-width: 640px;
   max-height: 85vh;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
   overflow: hidden;
@@ -1573,6 +1590,45 @@ const abrirDocumento = async (rad) => {
   background: #ffffff;
   border-color: #004884;
   box-shadow: 0 2px 8px rgba(0, 72, 132, 0.1);
+}
+
+/* Visor del documento original embebido en el modal de detalle */
+.detalle-pdf-vista {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.detalle-pdf-header {
+  padding: 0.6rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.detalle-pdf-cuerpo {
+  height: 340px;
+  background: #525659;
+}
+
+.detalle-pdf-estado {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 1rem;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+}
+
+.pdf-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 .modal-detalle-footer {
