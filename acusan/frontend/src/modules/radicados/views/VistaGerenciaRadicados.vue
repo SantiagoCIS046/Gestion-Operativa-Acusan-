@@ -27,6 +27,24 @@
 
       <!-- BOTONES DE ACCIÓN DEL HEADER -->
       <div class="header-right d-flex align-items-center gap-2 flex-wrap">
+        <!-- ESTADO DEL SONDEO EN VIVO: confirma que el tablero se actualiza solo -->
+        <span
+          v-if="sinConexion"
+          class="badge bg-danger text-white px-2 py-1"
+          style="font-size: 0.72rem;"
+          title="No hay conexión con el servidor: se muestra la última información guardada en este navegador. Los radicados nuevos aparecerán al restablecerse la conexión."
+        >
+          ⚠ Sin conexión — datos locales
+        </span>
+        <span
+          v-else-if="ultimaActualizacion"
+          class="badge bg-success text-white px-2 py-1"
+          style="font-size: 0.72rem;"
+          title="Este tablero se actualiza automáticamente cada 5 segundos desde que la encargada guarda un radicado"
+        >
+          ● En vivo · {{ horaUltimaActualizacion }}
+        </span>
+
         <!-- BOTÓN PRINCIPAL DE ALERTAS DE RADICACIONES SUBIDAS -->
         <button 
           type="button"
@@ -59,6 +77,27 @@
           <span>Sincronizar</span>
         </button>
       </div>
+    </div>
+
+    <!-- ═══════════════ RADICADOS DE ESTE NAVEGADOR SIN SUBIR ═══════════════ -->
+    <div
+      v-if="radicadosAtrapados > 0"
+      class="alert alert-warning d-flex align-items-center justify-content-between gap-2 mb-3 py-2"
+      role="alert"
+    >
+      <div style="font-size: 0.85rem;">
+        <strong>⚠ {{ radicadosAtrapados }} radicado(s) de este navegador no están en la base de datos.</strong>
+        <span class="text-muted">
+          Se guardaron solo en este equipo (falló la subida) y por eso no aparecen en el tablero. {{ mensajeReintento }}
+        </span>
+      </div>
+      <button
+        class="btn btn-sm btn-warning fw-semibold text-nowrap"
+        @click="reintentarSincronizacion"
+        :disabled="reintentandoSync"
+      >
+        {{ reintentandoSync ? 'Sincronizando…' : 'Reintentar subida' }}
+      </button>
     </div>
 
     <!-- ═══════════════ KPIS DE CONTROL GERENCIAL ═══════════════ -->
@@ -547,11 +586,22 @@
                 />
               </div>
 
+              <!-- Error de carga (reintentable): distinto de "sin documento" -->
+              <div v-else-if="detallePdfError" class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
+                <div style="font-size: 2rem;">⚠️</div>
+                <p class="text-warning mb-2" style="font-size: 0.8rem;">{{ detallePdfError }}</p>
+                <button class="btn btn-outline-light btn-sm px-3" style="font-size: 0.72rem;" @click="cargarPdfDetalle(radicadoSeleccionado)">
+                  🔄 Reintentar
+                </button>
+              </div>
+
               <!-- Sin documento (estado honesto) -->
               <div v-else class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
                 <div style="font-size: 2rem;">📄</div>
                 <p class="text-white-50 mb-0" style="font-size: 0.8rem;">
-                  Este radicado no tiene documento adjunto en la base de datos.
+                  {{ esRadicadoLocalPendiente(radicadoSeleccionado)
+                    ? 'Radicado local pendiente de sincronizar: su documento no quedó guardado en este navegador.'
+                    : 'Este radicado no tiene documento adjunto en la base de datos.' }}
                 </p>
               </div>
             </div>
@@ -569,6 +619,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
+import adjuntosOffline from '../../../services/adjuntosOffline.js'
 
 // Estado
 const listaRadicados = ref([])
@@ -581,18 +632,69 @@ const modalAlertasVisible = ref(false)
 const radicadoSeleccionado = ref(null)
 const detallePdfUrl = ref(null)
 const detallePdfCargando = ref(false)
-const detallePdfError = ref(false)
+// Mensaje de error de CARGA (string | null): fallo de transporte reintentable.
+// "Sin documento" es el estado implícito !cargando && !url && !error (honesto).
+const detallePdfError = ref(null)
+const detallePdfMime = ref('')
 let timerAutoRefresh = null
+// Estado de conexión con el servidor: obtenerTodos nunca rechaza (cae al
+// espejo local), así que el origen lo revela radicadosService.ultimoOrigen.
+const sinConexion = ref(false)
+const ultimaActualizacion = ref(null)
+const horaUltimaActualizacion = computed(() =>
+  ultimaActualizacion.value
+    ? ultimaActualizacion.value.toLocaleTimeString('es-CO', { hour12: false })
+    : ''
+)
+let cargaEnCurso = false
+// Radicados creados en ESTE navegador que no lograron subir (RAD-LOCAL):
+// existen solo aquí y por eso no salen en el tablero. Banner con reintento.
+const radicadosAtrapados = computed(
+  () => (listaRadicados.value || []).filter((r) => r && r.sincronizado === false).length
+)
+const reintentandoSync = ref(false)
+const mensajeReintento = ref('')
+const reintentarSincronizacion = async () => {
+  if (reintentandoSync.value) return
+  reintentandoSync.value = true
+  mensajeReintento.value = ''
+  try {
+    const { publicados, quedan, fallados } = await radicadosService.reintentarFallidos()
+    if (publicados > 0) {
+      mensajeReintento.value = `✓ ${publicados} radicado(s) recién publicados en la base de datos.`
+    }
+    if (quedan > 0) {
+      const detalle = (fallados || []).slice(0, 3).map((f) => `${f.numeroRadicado}: ${f.error}`).join(' | ')
+      mensajeReintento.value = `${quedan} siguen sin subir${detalle ? ` — motivo: ${detalle}` : ''}. Si el motivo es un dato inválido, elimine ese radicado desde el módulo de Radicados y regístrelo de nuevo.`
+    }
+  } catch (e) {
+    mensajeReintento.value = `No se pudo completar el reintento: ${e.message || 'error de conexión'}.`
+  } finally {
+    reintentandoSync.value = false
+    cargarDatos(true)
+  }
+}
 
 // Cargar datos
 const cargarDatos = async (silencioso = false) => {
+  // El sondeo dispara cada 5s pero el fetch aguanta hasta 6s: sin esta
+  // guarda, dos respuestas desordenadas dejan en pantalla la más vieja.
+  if (cargaEnCurso && silencioso) return
+  cargaEnCurso = true
   try {
     if (!silencioso) cargando.value = true
     const datos = await radicadosService.obtenerTodos()
     listaRadicados.value = datos || []
+    if (radicadosService.ultimoOrigen === 'servidor') {
+      sinConexion.value = false
+      ultimaActualizacion.value = new Date()
+    } else {
+      sinConexion.value = true
+    }
   } catch (err) {
     console.error('Error al cargar radicados en gerencia:', err)
   } finally {
+    cargaEnCurso = false
     if (!silencioso) cargando.value = false
   }
 }
@@ -603,10 +705,34 @@ const onStorageChange = (e) => {
   }
 }
 
+// Una pestaña de fondo ve su intervalo congelado por el navegador (1 disparo
+// por minuto o menos): al volver a mirar el tablero se refresca al instante
+// en vez de esperar hasta 5s (o minutos) con datos viejos.
+const onVisibilidadCambio = () => {
+  if (document.visibilityState === 'visible') cargarDatos(true)
+}
+
+let desuscribirCambios = null
+
 onMounted(() => {
+  // Recuperación en este navegador: publicar pendientes creados aquí
+  // (p. ej. creados como Encargado y revisados luego como Gerencia).
+  // Si el token expiró, la propia sincronización redirige al login.
+  radicadosService
+    .sincronizarPendientes()
+    .then((sincronizados) => {
+      if (sincronizados > 0) cargarDatos(true)
+    })
+    .catch(() => { /* sin conexión: el listado cae al espejo local */ })
   cargarDatos()
-  window.addEventListener('storage', onStorageChange)
-  // Actualización periódica silenciosa desde la base local reactiva
+  
+  // Suscripción a eventos en tiempo real (BroadcastChannel + CustomEvents + Storage)
+  desuscribirCambios = radicadosService.suscribirCambios(() => {
+    cargarDatos(true)
+  })
+
+  document.addEventListener('visibilitychange', onVisibilidadCambio)
+  // Actualización periódica silenciosa desde la base local reactiva (respaldo)
   timerAutoRefresh = setInterval(() => {
     cargarDatos(true)
   }, 5000)
@@ -614,7 +740,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (timerAutoRefresh) clearInterval(timerAutoRefresh)
-  window.removeEventListener('storage', onStorageChange)
+  if (desuscribirCambios) desuscribirCambios()
+  document.removeEventListener('visibilitychange', onVisibilidadCambio)
   if (detallePdfUrl.value && detallePdfUrl.value.startsWith('blob:')) URL.revokeObjectURL(detallePdfUrl.value)
 })
 
@@ -628,13 +755,24 @@ const calcularDiasRestantes = (fechaVencimiento) => {
   return Math.ceil((fVenc - hoy) / (1000 * 60 * 60 * 24))
 }
 
+// Helpers de clasificación de responsable
+const esRegistroDeEliana = (registradoPor) => {
+  const p = (registradoPor || '').toLowerCase()
+  return p.includes('eliana') || p.includes('encargada') || p.includes('ventanilla') || p === ''
+}
+
+const esRegistroDeRoman = (registradoPor) => {
+  const p = (registradoPor || '').toLowerCase()
+  return p.includes('román') || p.includes('roman') || p.includes('ayudante')
+}
+
 // Estadísticas de Resumen Gerencial
 const statsEliana = computed(() => {
-  return listaRadicados.value.filter(r => r.registradoPor && r.registradoPor.toLowerCase().includes('eliana')).length
+  return listaRadicados.value.filter(r => esRegistroDeEliana(r.registradoPor)).length
 })
 
 const statsRoman = computed(() => {
-  return listaRadicados.value.filter(r => r.registradoPor && (r.registradoPor.toLowerCase().includes('román') || r.registradoPor.toLowerCase().includes('roman'))).length
+  return listaRadicados.value.filter(r => esRegistroDeRoman(r.registradoPor)).length
 })
 
 const statsPendientes = computed(() => {
@@ -675,9 +813,9 @@ const radicadosFiltrados = computed(() => {
     // Filtro de responsable
     let matchResponsable = true
     if (filtroResponsable.value === 'Eliana') {
-      matchResponsable = r.registradoPor && r.registradoPor.toLowerCase().includes('eliana')
+      matchResponsable = esRegistroDeEliana(r.registradoPor)
     } else if (filtroResponsable.value === 'Román') {
-      matchResponsable = r.registradoPor && (r.registradoPor.toLowerCase().includes('román') || r.registradoPor.toLowerCase().includes('roman'))
+      matchResponsable = esRegistroDeRoman(r.registradoPor)
     }
 
     // Filtro de estado
@@ -742,15 +880,15 @@ const getIniciales = (nombre) => {
 
 const getAvatarClass = (nombre) => {
   const n = (nombre || '').toLowerCase()
-  if (n.includes('eliana')) return 'avatar-eliana'
-  if (n.includes('roman') || n.includes('román')) return 'avatar-roman'
+  if (n.includes('eliana') || n.includes('encargada') || n.includes('ventanilla')) return 'avatar-eliana'
+  if (n.includes('roman') || n.includes('román') || n.includes('ayudante')) return 'avatar-roman'
   return 'avatar-default'
 }
 
 const getRolTexto = (nombre) => {
   const n = (nombre || '').toLowerCase()
-  if (n.includes('eliana')) return 'Encargada Radicaciones'
-  if (n.includes('roman') || n.includes('román')) return 'Ayudante / Encargado'
+  if (n.includes('eliana') || n.includes('encargada') || n.includes('ventanilla')) return 'Encargada Radicaciones'
+  if (n.includes('roman') || n.includes('román') || n.includes('ayudante')) return 'Ayudante / Encargado'
   return 'Funcionario'
 }
 
@@ -786,43 +924,103 @@ const abrirDetalleDesdeAlerta = (rad) => {
   cargarPdfDetalle(rad)
 }
 
-// El documento original se muestra DENTRO del modal (iframe), no en pestaña nueva.
-// Blob URL autenticado para los del servidor; Base64 para los pendientes locales.
-const cargarPdfDetalle = async (rad) => {
-  detallePdfUrl.value = null
-  detallePdfError.value = false
-  const esLocalPendiente = rad && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
-  const tieneDoc = rad && (rad.hasArchivo || rad.archivoBase64)
-  if (!tieneDoc) {
-    detallePdfError.value = true
-    return
+// El documento original se muestra DENTRO del modal (visor object/iframe), no en
+// pestaña nueva. Mismo orden de resolución que Permisos: data URL del registro →
+// IndexedDB (pendiente local) → servidor. El flag hasArchivo del caché NUNCA gatea
+// la consulta: si el documento existe en la BD, se muestra.
+const mimeDesdeDataUrl = (dataUrl) => (String(dataUrl).match(/^data:([^;,]+)/) || [])[1] || ''
+
+// El visor inline acepta data URLs, pero el ancla "Abrir Archivo" (target=_blank)
+// no: los navegadores bloquean la navegación top-level a data:. Se convierte a
+// blob: cuando es posible; si falla, se degrada a la data URL cruda.
+const dataUrlABlobUrl = async (dataUrl) => {
+  try {
+    return URL.createObjectURL(await (await fetch(dataUrl)).blob())
+  } catch (e) {
+    return dataUrl
   }
+}
+
+// Liberar el blob del visor (el Base64 del caché local no se revoca: no es blob)
+const liberarDetallePdfUrl = () => {
+  if (detallePdfUrl.value && detallePdfUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(detallePdfUrl.value)
+  }
+  detallePdfUrl.value = null
+}
+
+// Token de generación: si el usuario cierra/reabre el detalle con una carga en
+// vuelo, la promesa vieja ya no pisa el visor de la nueva (documento equivocado).
+let detallePdfToken = 0
+
+const esRadicadoLocalPendiente = (rad) =>
+  Boolean(rad) && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
+
+const cargarPdfDetalle = async (rad) => {
+  const token = ++detallePdfToken
+  liberarDetallePdfUrl()
+  detallePdfError.value = null
+  detallePdfMime.value = ''
+
+  if (!rad) return
+
   detallePdfCargando.value = true
   try {
-    if (esLocalPendiente) {
-      detallePdfUrl.value = rad.archivoBase64 || null
-      if (!detallePdfUrl.value) detallePdfError.value = true
-    } else {
-      detallePdfUrl.value = await radicadosService.obtenerArchivoRadicado(rad.id)
+    // 1) Data URL del propio registro (solo si el caché la conserva)
+    if (typeof rad.archivoBase64 === 'string' && rad.archivoBase64.startsWith('data:')) {
+      const url = await dataUrlABlobUrl(rad.archivoBase64)
+      if (token !== detallePdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
+      detallePdfMime.value = mimeDesdeDataUrl(rad.archivoBase64)
+      detallePdfUrl.value = url
+      return
     }
+
+    // 2) Adjunto resguardado en IndexedDB (pendiente local cuyo archivo no cupo en localStorage)
+    if (rad.sincronizado === false && rad.archivoEnIndexedDB) {
+      const adj = await adjuntosOffline.obtenerAdjunto(rad.idLocal)
+      if (token !== detallePdfToken) return
+      if (adj && adj.dataUrl) {
+        const url = await dataUrlABlobUrl(adj.dataUrl)
+        if (token !== detallePdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
+        detallePdfMime.value = mimeDesdeDataUrl(adj.dataUrl)
+        detallePdfUrl.value = url
+        return
+      }
+    }
+
+    // 3) Servidor — camino principal para todo radicado con id real
+    if (rad.id && !String(rad.id).startsWith('RAD-LOCAL')) {
+      const { url, mime } = await radicadosService.obtenerArchivoRadicado(rad.id)
+      if (token !== detallePdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
+      detallePdfUrl.value = url
+      detallePdfMime.value = mime
+      return
+    }
+
+    // 4) Sin documento: 404 real del servidor o provisional local que perdió su adjunto
   } catch (e) {
-    detallePdfUrl.value = (rad && rad.archivoBase64) || null
-    if (!detallePdfUrl.value) detallePdfError.value = true
+    if (token !== detallePdfToken) return
+    // 404 = sin documento real: queda todo en null para que el template muestre
+    // el estado honesto, no un error reintentable.
+    if (e && e.status === 404) return
+    detallePdfError.value = (e && e.message) || 'No se pudo cargar el documento del radicado.'
   } finally {
-    detallePdfCargando.value = false
+    if (token === detallePdfToken) detallePdfCargando.value = false
   }
 }
 
 const cerrarModalDetalle = () => {
-  if (detallePdfUrl.value && detallePdfUrl.value.startsWith('blob:')) URL.revokeObjectURL(detallePdfUrl.value)
-  detallePdfUrl.value = null
+  liberarDetallePdfUrl()
   radicadoSeleccionado.value = null
 }
 
-// El documento adjunto puede ser PDF (visor object/iframe) o imagen escaneada (<img>)
-const esImagenDocumento = (rad) =>
-  String(rad?.archivoMimeType || '').startsWith('image/') ||
-  /\.(png|jpe?g|webp|gif|bmp)$/i.test(rad?.archivoNombre || '')
+// El documento adjunto puede ser PDF (visor object/iframe) o imagen escaneada (<img>).
+// Prefiere el MIME REAL del documento mostrado (blob servido o data URL) — mismo
+// criterio que Permisos —; solo si no existe infiere por campo del registro/extensión.
+const esImagenDocumento = (rad) => {
+  const mime = detallePdfMime.value || rad?.archivoMimeType || ''
+  return mime.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(rad?.archivoNombre || '')
+}
 </script>
 
 <style scoped>

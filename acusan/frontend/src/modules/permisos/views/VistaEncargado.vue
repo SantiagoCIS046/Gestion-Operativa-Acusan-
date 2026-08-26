@@ -886,6 +886,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
+import adjuntosOffline from '../../../services/adjuntosOffline.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
 // Controls view mode: 'formulario' | 'historial'
@@ -2330,6 +2331,14 @@ const cargarEnFormulario = async (item) => {
   const docUrl = item.archivoUrl || item.customFileUrl || item.soporteUrl || ''
   if (docUrl.startsWith('data:')) {
     await mostrarDocumentoDesdeDataUrl(docUrl)
+  } else if (item.sincronizado === false && item.archivoEnIndexedDB) {
+    // Adjunto grande resguardado en IndexedDB (no cupo en localStorage)
+    const adj = await adjuntosOffline.obtenerAdjunto(item.idLocal || String(item.id))
+    if (adj && adj.dataUrl) {
+      await mostrarDocumentoDesdeDataUrl(adj.dataUrl)
+    } else {
+      limpiarVisor()
+    }
   } else if (item.id) {
     // El listado ya no viaja con el Base64: se solicita el archivo original al backend
     try {

@@ -273,10 +273,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import PanelAtencionPQR from '../components/PanelAtencionPQR.vue'
 import PageHeader from '../../../components/PageHeader.vue'
 import authService from '../../auth/services/authService.js'
+import pqrService from '../services/pqrService.js'
 
 const alertaBootstrap = ref({
   visible: false,
@@ -292,14 +293,6 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 5000) => {
   }, duracion)
 }
 
-const API_BASE = '/api/pqr'
-const STORAGE_KEY_PQR = 'acuasan_pqr_v2'
-
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  ...authService.getAuthHeader()
-})
-
 const formatearFecha = (iso) => {
   if (!iso) return 'N/D'
   const d = new Date(iso)
@@ -307,22 +300,12 @@ const formatearFecha = (iso) => {
   return d.toLocaleDateString('es-CO')
 }
 
-const obtenerDbLocalPqr = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_PQR)
-    if (raw !== null) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed
-    }
-  } catch (e) {}
-  return []
-}
-
-const guardarDbLocalPqr = (lista) => {
-  try {
-    localStorage.setItem(STORAGE_KEY_PQR, JSON.stringify(lista))
-  } catch (e) {}
-}
+// El espejo local guarda fechas ISO; la vista formatea SOLO para display
+const paraDisplay = (p) => ({
+  ...p,
+  fechaRadicado: formatearFecha(p.fechaRadicado),
+  fechaVencimiento: formatearFecha(p.fechaVencimiento)
+})
 
 const pqrs = ref([])
 const selectedPqr = ref(null)
@@ -331,29 +314,30 @@ const filtroEstado = ref('')
 const modalDetalleVisible = ref(false)
 
 const cargarPqrs = async () => {
-  try {
-    const res = await fetch(API_BASE, { headers: authService.getAuthHeader() })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success && Array.isArray(data.data)) {
-        pqrs.value = data.data.map(p => ({
-          ...p,
-          fechaRadicado: formatearFecha(p.fechaRadicado),
-          fechaVencimiento: formatearFecha(p.fechaVencimiento)
-        }))
-        guardarDbLocalPqr(pqrs.value)
-        selectedPqr.value = pqrs.value.length > 0 ? pqrs.value[0] : null
-        return
-      }
-    }
-  } catch (e) {
-    console.warn('Backend no disponible, usando datos locales de PQR:', e.message)
+  const lista = await pqrService.obtenerTodas()
+  pqrs.value = lista.map(paraDisplay)
+  if (!selectedPqr.value || !pqrs.value.some(p => String(p.id) === String(selectedPqr.value.id))) {
+    selectedPqr.value = pqrs.value.length > 0 ? pqrs.value[0] : null
   }
-  pqrs.value = obtenerDbLocalPqr()
-  selectedPqr.value = pqrs.value.length > 0 ? pqrs.value[0] : null
 }
 
-onMounted(cargarPqrs)
+let intervaloPolling = null
+const alCambiarStorage = (e) => {
+  if (e.key === 'acuasan_pqr_v2') cargarPqrs()
+}
+
+onMounted(async () => {
+  // Primero publicar pendientes offline, después refrescar desde la fuente de verdad
+  await pqrService.sincronizarPendientes()
+  await cargarPqrs()
+  window.addEventListener('storage', alCambiarStorage)
+  intervaloPolling = setInterval(cargarPqrs, 5000)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', alCambiarStorage)
+  if (intervaloPolling) clearInterval(intervaloPolling)
+})
 
 const filteredPqrs = computed(() => {
   const q = busqueda.value.toLowerCase()
@@ -392,114 +376,62 @@ const procesarRespuesta = async (payload) => {
   const pqr = selectedPqr.value
   if (!pqr) return
   try {
-    const res = await fetch(`${API_BASE}/${pqr.id}/responder`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify({
-        respuestaOficial: payload.respuesta,
-        respondidoPor: authService.getUsuarioActual()?.nombre || 'Atención al Usuario Acuasan',
-        nuevoEstado: 'RESUELTO'
-      })
+    const r = await pqrService.responder(pqr, {
+      respuestaOficial: payload.respuesta,
+      respondidoPor: authService.getUsuarioActual()?.nombre || 'Atención al Usuario Acuasan',
+      nuevoEstado: 'RESUELTO'
     })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success) {
-        pqr.estado = 'RESUELTO'
-        pqr.respuestaOficial = payload.respuesta
-        guardarDbLocalPqr(pqrs.value)
-        lanzarAlertaBootstrap('success', 'Respuesta Registrada', `PQR ${pqr.radicado} respondida y guardada en la base de datos.`)
-        modalDetalleVisible.value = false
-        return
-      }
-    }
-    throw new Error('Respuesta inválida del servidor')
-  } catch (e) {
     pqr.estado = 'RESUELTO'
-    guardarDbLocalPqr(pqrs.value)
-    lanzarAlertaBootstrap('warning', 'Guardado Local', `PQR ${pqr.radicado} respondida localmente. Se sincronizará cuando el servidor esté disponible.`)
+    pqr.respuestaOficial = payload.respuesta
+    pqr.sincronizado = r.origen === 'SERVIDOR'
+    if (r.origen === 'SERVIDOR') {
+      lanzarAlertaBootstrap('success', 'Respuesta Registrada', `PQR ${pqr.radicado} respondida y guardada en la base de datos.`)
+    } else {
+      lanzarAlertaBootstrap('warning', 'Guardado Local', `PQR ${pqr.radicado} respondida localmente. Se sincronizará cuando el servidor esté disponible.`)
+    }
     modalDetalleVisible.value = false
+  } catch (e) {
+    lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo registrar la respuesta.')
   }
 }
 
 const escalarCuadrilla = async (item) => {
   if (!item) return
   try {
-    const res = await fetch(`${API_BASE}/${item.id}/responder`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify({
-        respuestaOficial: item.respuestaOficial || 'Asignada a cuadrilla técnica operativa para visita en campo.',
-        respondidoPor: authService.getUsuarioActual()?.nombre || 'Atención al Usuario Acuasan',
-        nuevoEstado: 'EN_TRAMITE'
-      })
-    })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success) {
-        item.estado = 'EN_TRAMITE'
-        guardarDbLocalPqr(pqrs.value)
-        lanzarAlertaBootstrap('warning', 'PQR Escalada', `PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
-        return
-      }
-    }
-    throw new Error('Respuesta inválida del servidor')
-  } catch (e) {
+    const r = await pqrService.escalar(item)
     item.estado = 'EN_TRAMITE'
-    guardarDbLocalPqr(pqrs.value)
-    lanzarAlertaBootstrap('warning', 'PQR Escalada (Local)', `PQR ${item.radicado} marcada en trámite localmente.`)
+    item.sincronizado = r.origen === 'SERVIDOR'
+    if (r.origen === 'SERVIDOR') {
+      lanzarAlertaBootstrap('warning', 'PQR Escalada', `PQR ${item.radicado} asignada a cuadrilla técnica operativa para visita en campo.`)
+    } else {
+      lanzarAlertaBootstrap('warning', 'PQR Escalada (Local)', `PQR ${item.radicado} marcada en trámite localmente. Se sincronizará cuando el servidor esté disponible.`)
+    }
+  } catch (e) {
+    lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo escalar la PQR.')
   }
 }
 
 const nuevoPQR = async () => {
   try {
-    const res = await fetch(API_BASE, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({
-        usuario: 'Usuario Ciudadano San Gil',
-        matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
-        direccion: 'Sector San Gil',
-        motivo: 'Solicitud ciudadana ingresada vía ventanilla',
-        descripcion: 'Petición formal para revisión por parte de la cuadrilla técnica.',
-        prioridad: 'MEDIA'
-      })
-    })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success && data.data) {
-        const nueva = {
-          ...data.data,
-          fechaRadicado: formatearFecha(data.data.fechaRadicado),
-          fechaVencimiento: formatearFecha(data.data.fechaVencimiento)
-        }
-        pqrs.value.unshift(nueva)
-        selectedPqr.value = nueva
-        guardarDbLocalPqr(pqrs.value)
-        lanzarAlertaBootstrap('success', 'PQR Radicada', `Se radicó con éxito el expediente ${nueva.radicado} en la base de datos.`)
-        modalDetalleVisible.value = true
-        return
-      }
-    }
-    throw new Error('Respuesta inválida del servidor')
-  } catch (e) {
-    const nuevoRad = `PQR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-    const nuevaPqr = {
-      id: Date.now(),
-      radicado: nuevoRad,
+    const nueva = await pqrService.crear({
       usuario: 'Usuario Ciudadano San Gil',
       matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
       direccion: 'Sector San Gil',
       motivo: 'Solicitud ciudadana ingresada vía ventanilla',
       descripcion: 'Petición formal para revisión por parte de la cuadrilla técnica.',
-      fechaRadicado: new Date().toLocaleDateString('es-CO'),
-      fechaVencimiento: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString('es-CO'),
-      estado: 'ABIERTO'
+      prioridad: 'MEDIA'
+    })
+    const paraMostrar = paraDisplay(nueva)
+    pqrs.value.unshift(paraMostrar)
+    selectedPqr.value = paraMostrar
+    if (nueva.origen === 'SERVIDOR') {
+      lanzarAlertaBootstrap('success', 'PQR Radicada', `Se radicó con éxito el expediente ${nueva.radicado} en la base de datos.`)
+    } else {
+      lanzarAlertaBootstrap('warning', 'PQR Radicada (Local)', `Servidor no disponible: expediente ${nueva.radicado} guardado localmente. Se sincronizará con la base de datos cuando el servidor esté disponible.`)
     }
-    pqrs.value.unshift(nuevaPqr)
-    selectedPqr.value = nuevaPqr
-    guardarDbLocalPqr(pqrs.value)
-    lanzarAlertaBootstrap('warning', 'PQR Radicada (Local)', `Servidor no disponible: expediente ${nuevoRad} guardado localmente.`)
     modalDetalleVisible.value = true
+  } catch (e) {
+    lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo radicar la PQR.')
   }
 }
 

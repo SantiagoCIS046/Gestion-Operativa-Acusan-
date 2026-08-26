@@ -117,6 +117,9 @@ enum PrioridadPQR {
 model PQR {
   id               String       @id @default(auto()) @map("_id") @db.ObjectId
   radicado         String       @unique
+  // Identificador del cliente para idempotencia de la sincronización offline
+  // (evita duplicados al reintentar el POST de un registro pendiente)
+  idLocal          String?      @unique
   usuario          String
   cedulaNit        String?
   matricula        String?

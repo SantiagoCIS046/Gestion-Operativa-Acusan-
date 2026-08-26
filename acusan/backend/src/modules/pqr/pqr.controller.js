@@ -41,7 +41,7 @@ export const PqrController = {
    */
   async radicar(req, res) {
     try {
-      const { usuario, cedulaNit, matricula, telefono, email, direccion, motivo, descripcion, prioridad } = req.body
+      const { usuario, cedulaNit, matricula, telefono, email, direccion, motivo, descripcion, prioridad, idLocal, estado, respuestaOficial, respondidoPor } = req.body
 
       if (!usuario || !motivo || !descripcion) {
         return res.status(400).json({
@@ -59,7 +59,11 @@ export const PqrController = {
         direccion,
         motivo,
         descripcion,
-        prioridad
+        prioridad,
+        idLocal,
+        estado,
+        respuestaOficial,
+        respondidoPor
       })
 
       const operador = req.usuario?.email || 'anónimo'

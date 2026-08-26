@@ -330,14 +330,44 @@
 
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import authService from './modules/auth/services/authService.js'
+import sincronizacionService from './services/sincronizacionService.js'
 import NotificacionesToast from './components/NotificacionesToast.vue'
 
 const router = useRouter()
 
 const modalCerrarSesionVisible = ref(false)
+
+// ── Sincronización global de pendientes offline ──
+// Al arrancar con sesión, al iniciar sesión y al recuperar la conexión se
+// publican en la BD los registros guardados localmente sin conexión.
+const alQuedarEnLinea = () => sincronizacionService.sincronizarTodo()
+
+// Latido: el navegador puede estar "online" mientras el SERVIDOR estuvo caído
+// (el evento 'online' no se dispara al revivir el backend). Un pendiente guardado
+// sin conexión debe publicarse aunque el usuario no recargue ni cambie de vista.
+// Sin pendientes el latido es solo lectura de localStorage: no hay red de por medio.
+const INTERVALO_LATIDO_MS = 20000
+let timerLatidoSincronizacion = null
+const latidoSincronizacion = () => {
+  if (authService.estaAutenticado()) {
+    sincronizacionService.sincronizarTodo({ silencioso: true })
+  }
+}
+
+onMounted(() => {
+  if (authService.estaAutenticado()) {
+    sincronizacionService.sincronizarTodo({ silencioso: true })
+  }
+  window.addEventListener('online', alQuedarEnLinea)
+  timerLatidoSincronizacion = setInterval(latidoSincronizacion, INTERVALO_LATIDO_MS)
+})
+onUnmounted(() => {
+  window.removeEventListener('online', alQuedarEnLinea)
+  if (timerLatidoSincronizacion) clearInterval(timerLatidoSincronizacion)
+})
 
 // Estado del acordeón del sidebar (admin)
 const menuExpandido = ref({
@@ -360,6 +390,11 @@ function toggleMenu(key) {
 
 const estaAutenticado = computed(() => authService.estaAutenticado())
 const usuario = computed(() => authService.getUsuarioActual())
+
+// Login (incluido el fallback sin backend): publicar pendientes offline en silencio
+watch(estaAutenticado, (autenticado) => {
+  if (autenticado) sincronizacionService.sincronizarTodo({ silencioso: true })
+})
 
 // Iniciales para el avatar (primeras letras del nombre)
 const avatarIniciales = computed(() => {

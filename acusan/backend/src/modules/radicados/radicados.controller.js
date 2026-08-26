@@ -6,6 +6,10 @@ export const RadicadosController = {
   async obtenerTodos(req, res) {
     try {
       const radicados = await RadicadosService.obtenerTodos()
+      // El tablero de Gerencia sondea cada 5s: sin esta cabecera el navegador
+      // o un proxy podría servir una lista vieja y el radicado recién
+      // guardado por la encargada tardaría en aparecer.
+      res.setHeader('Cache-Control', 'no-store')
       res.json({
         success: true,
         data: radicados
@@ -18,10 +22,10 @@ export const RadicadosController = {
 
   async crear(req, res) {
     try {
-      // registradoPor: fuente de verdad = usuario autenticado (para filtros Eliana/Román reales)
+      // registradoPor: fuente de verdad = nombre enviado / usuario autenticado / Eliana por defecto
       const payload = {
         ...req.body,
-        registradoPor: req.usuario?.nombre || req.body.registradoPor || 'Encargada'
+        registradoPor: req.body.registradoPor || req.usuario?.nombre || 'Eliana'
       }
       const nuevo = await RadicadosService.crear(payload)
 
@@ -33,13 +37,30 @@ export const RadicadosController = {
         `Por: ${usuario} | Radicado: ${radicado}`
       )
 
+      // Sin Base64 en la respuesta (mismo criterio que el listado): el cliente
+      // ya tiene el documento y el archivo se sirve bajo demanda desde /:id/archivo
+      const { archivoBase64, ...nuevoLigero } = nuevo
+
       res.status(201).json({
         success: true,
         message: 'Radicado registrado exitosamente',
-        data: nuevo
+        data: {
+          ...nuevoLigero,
+          hasArchivo: Boolean(archivoBase64),
+          archivoMimeType: (String(archivoBase64 || '').match(/^data:([^;,]+)/) || [])[1] || null,
+        }
       })
     } catch (error) {
       logger.error('RADICADOS', 'CREAR ERR', error.message)
+      // Validación (campo obligatorio ausente, tipo incorrecto): 400 con la
+      // causa real. Un 503 aquí haría que el cliente offline lo encole como
+      // RAD-LOCAL "transitorio" y lo reintente para siempre sin explicación.
+      if (error.esValidacion) {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        })
+      }
       // 503: el radicado NO se persistió — el cliente lo conservará como pendiente local
       res.status(503).json({
         success: false,
@@ -83,6 +104,50 @@ export const RadicadosController = {
     }
   },
 
+  async adjuntarArchivo(req, res) {
+    try {
+      const { id } = req.params
+      const { archivoBase64, archivoNombre } = req.body || {}
+
+      // El documento debe llegar como data URL (mismo formato que usa crear)
+      if (!archivoBase64 || !String(archivoBase64).startsWith('data:')) {
+        return res.status(400).json({ success: false, message: 'Documento inválido: se requiere el archivo en Base64 (data URL)' })
+      }
+
+      const actualizado = await RadicadosService.adjuntarArchivo(id, { archivoBase64, archivoNombre })
+      if (!actualizado) {
+        return res.status(404).json({
+          success: false,
+          message: 'El radicado no existe en la base de datos (posiblemente es un registro local pendiente de sincronizar)'
+        })
+      }
+
+      const usuario = req.usuario?.email || 'anónimo'
+      logger.update(
+        'RADICADOS',
+        'ADJUNTAR',
+        `Por: ${usuario} | ID: ${id} | Archivo: ${archivoNombre || '?'}`
+      )
+
+      // Sin Base64 en la respuesta (mismo criterio que el listado): el archivo
+      // se sirve bajo demanda desde /:id/archivo
+      const { archivoBase64: _omitido, ...actualizadoLigero } = actualizado
+
+      res.json({
+        success: true,
+        message: 'Documento adjuntado correctamente',
+        data: {
+          ...actualizadoLigero,
+          hasArchivo: true,
+          archivoMimeType: (String(archivoBase64 || '').match(/^data:([^;,]+)/) || [])[1] || null,
+        }
+      })
+    } catch (error) {
+      logger.error('RADICADOS', 'ADJUNTAR ERR', `ID: ${req.params.id} — ${error.message}`)
+      res.status(503).json({ success: false, message: 'No se pudo adjuntar el documento a la base de datos' })
+    }
+  },
+
   async extraerCampos(req, res) {
     try {
       const { texto, nombreArchivo } = req.body || {}
@@ -114,7 +179,8 @@ export const RadicadosController = {
       }
 
       const dataUrl = radicado.archivoBase64
-      const matches = dataUrl.match(/^data:([^;]+);base64,(.*)$/s)
+      // Tolerante a mimes con parámetros (p. ej. "data:application/pdf;version=1.7;base64,")
+      const matches = dataUrl.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.*)$/s)
       if (!matches) {
         return res.status(422).json({ success: false, message: 'Formato de documento almacenado no soportado' })
       }
@@ -125,7 +191,10 @@ export const RadicadosController = {
 
       res.setHeader('Content-Type', mime)
       res.setHeader('Content-Disposition', `inline; filename="${nombreSeguro}"`)
-      res.setHeader('Cache-Control', 'private, max-age=300')
+      // Sin ventana de frescura: el documento puede reemplazarse vía PUT y el
+      // navegador de Gerencia serviría el viejo hasta 5 min. Con no-cache
+      // revalida siempre contra el ETag que Express emite automáticamente.
+      res.setHeader('Cache-Control', 'private, no-cache')
       return res.send(buffer)
     } catch (error) {
       logger.error('RADICADOS', 'ARCHIVO ERR', `ID: ${req.params.id} — ${error.message}`)

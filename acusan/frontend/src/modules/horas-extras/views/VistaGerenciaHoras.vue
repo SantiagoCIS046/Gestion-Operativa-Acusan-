@@ -31,61 +31,40 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import TablaHorasExtras from '../components/TablaHorasExtras.vue'
 import PageHeader from '../../../components/PageHeader.vue'
 import authService from '../../auth/services/authService.js'
 import notificacionService from '../../../services/notificacionService.js'
-
-const API_BASE = '/api/horas-extras'
-const STORAGE_KEY_HORAS = 'acuasan_horas_v2'
-
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  ...authService.getAuthHeader()
-})
+import horasExtrasService from '../services/horasExtrasService.js'
 
 // Notificaciones profesionales globales (sistema centralizado de toasts)
 const lanzarAlertaBootstrap = notificacionService.mostrar
-
-const obtenerDbLocalHoras = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_HORAS)
-    if (raw !== null) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed
-    }
-  } catch (e) {}
-  return []
-}
-
-const guardarDbLocalHoras = (lista) => {
-  try {
-    localStorage.setItem(STORAGE_KEY_HORAS, JSON.stringify(lista))
-  } catch (e) {}
-}
 
 const horasData = ref([])
 
 // Cargar registros de horas extras desde la base de datos MongoDB
 const cargarHoras = async () => {
-  try {
-    const res = await fetch(API_BASE, { headers: authService.getAuthHeader() })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success && Array.isArray(data.data)) {
-        horasData.value = data.data
-        guardarDbLocalHoras(data.data)
-        return
-      }
-    }
-  } catch (e) {
-    console.warn('Backend no disponible, usando datos locales de horas extras:', e.message)
-  }
-  horasData.value = obtenerDbLocalHoras()
+  horasData.value = await horasExtrasService.obtenerTodas()
 }
 
-onMounted(cargarHoras)
+let intervaloPolling = null
+const alCambiarStorage = (e) => {
+  if (e.key === 'acuasan_horas_v2') cargarHoras()
+}
+
+onMounted(async () => {
+  // Primero publicar dictámenes offline, después refrescar desde la BD
+  await horasExtrasService.sincronizarPendientes()
+  await cargarHoras()
+  window.addEventListener('storage', alCambiarStorage)
+  intervaloPolling = setInterval(cargarHoras, 5000)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', alCambiarStorage)
+  if (intervaloPolling) clearInterval(intervaloPolling)
+})
 
 const totalHoras = computed(() => {
   return horasData.value.reduce((acc, curr) => acc + (Number(curr.cantidadHoras) || 0), 0)
@@ -98,58 +77,44 @@ const totalMonto = computed(() => {
 // Aprueba el registro de horas extras en la base de datos
 const aprobarHora = async (item) => {
   try {
-    const res = await fetch(`${API_BASE}/${item.id}/dictamen`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify({
-        estado: 'APROBADO',
-        autorizadoPor: authService.getUsuarioActual()?.nombre || 'Gerencia General Acuasan',
-        observaciones: item.observacionesGerencia || ''
-      })
+    const r = await horasExtrasService.dictaminar(item, {
+      estado: 'APROBADO',
+      autorizadoPor: authService.getUsuarioActual()?.nombre || 'Gerencia General Acuasan',
+      observaciones: item.observacionesGerencia || ''
     })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success) {
-        item.estado = 'APROBADO'
-        guardarDbLocalHoras(horasData.value)
-        lanzarAlertaBootstrap('success', 'Horas Aprobadas', `Registro de horas para ${item.funcionario} aprobado y guardado en la base de datos.`)
-        return
-      }
-    }
-    throw new Error('Respuesta invalida del servidor')
-  } catch (e) {
     item.estado = 'APROBADO'
-    guardarDbLocalHoras(horasData.value)
-    lanzarAlertaBootstrap('warning', 'Guardado Local', `Registro de ${item.funcionario} aprobado localmente; se sincronizara cuando el servidor este disponible.`)
+    if (r.origen === 'SERVIDOR') {
+      lanzarAlertaBootstrap('success', 'Horas Aprobadas', `Registro de horas para ${item.funcionario} aprobado y guardado en la base de datos.`)
+    } else if (r.origen === 'NO_ENCONTRADA') {
+      lanzarAlertaBootstrap('warning', 'Registro Inexistente', `El registro de ${item.funcionario} ya no existe en la base de datos (eliminado desde otro equipo).`)
+      await cargarHoras()
+    } else {
+      lanzarAlertaBootstrap('warning', 'Guardado Local', `Registro de ${item.funcionario} aprobado localmente; se sincronizará con la base de datos cuando el servidor esté disponible.`)
+    }
+  } catch (e) {
+    lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo aprobar el registro.')
   }
 }
 
 // Rechaza el registro de horas extras en la base de datos
 const rechazarHora = async (item) => {
   try {
-    const res = await fetch(`${API_BASE}/${item.id}/dictamen`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify({
-        estado: 'RECHAZADO',
-        autorizadoPor: authService.getUsuarioActual()?.nombre || 'Gerencia General Acuasan',
-        observaciones: item.observacionesGerencia || ''
-      })
+    const r = await horasExtrasService.dictaminar(item, {
+      estado: 'RECHAZADO',
+      autorizadoPor: authService.getUsuarioActual()?.nombre || 'Gerencia General Acuasan',
+      observaciones: item.observacionesGerencia || ''
     })
-    if (res.ok) {
-      const data = await res.json()
-      if (data && data.success) {
-        item.estado = 'RECHAZADO'
-        guardarDbLocalHoras(horasData.value)
-        lanzarAlertaBootstrap('danger', 'Horas Rechazadas', `Registro de horas para ${item.funcionario} rechazado en la base de datos.`)
-        return
-      }
-    }
-    throw new Error('Respuesta invalida del servidor')
-  } catch (e) {
     item.estado = 'RECHAZADO'
-    guardarDbLocalHoras(horasData.value)
-    lanzarAlertaBootstrap('warning', 'Guardado Local', `Registro de ${item.funcionario} rechazado localmente.`)
+    if (r.origen === 'SERVIDOR') {
+      lanzarAlertaBootstrap('danger', 'Horas Rechazadas', `Registro de horas para ${item.funcionario} rechazado en la base de datos.`)
+    } else if (r.origen === 'NO_ENCONTRADA') {
+      lanzarAlertaBootstrap('warning', 'Registro Inexistente', `El registro de ${item.funcionario} ya no existe en la base de datos (eliminado desde otro equipo).`)
+      await cargarHoras()
+    } else {
+      lanzarAlertaBootstrap('warning', 'Guardado Local', `Registro de ${item.funcionario} rechazado localmente; se sincronizará con la base de datos cuando el servidor esté disponible.`)
+    }
+  } catch (e) {
+    lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo rechazar el registro.')
   }
 }
 

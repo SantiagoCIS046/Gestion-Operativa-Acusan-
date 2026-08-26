@@ -277,6 +277,22 @@
             </svg>
             <span>Actualizar</span>
           </button>
+
+          <!-- RESCATE: radicados atrapados en este navegador que Gerencia no ve -->
+          <button
+            v-if="radicadosAtrapados > 0"
+            class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 fw-semibold"
+            @click="reintentarSincronizacion"
+            :disabled="reintentandoSync"
+            title="Radicados guardados solo en este navegador que no han podido subirse a la base de datos. Reintentar ahora."
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" :class="{ 'spin-animate': reintentandoSync }">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>{{ reintentandoSync ? 'Sincronizando…' : `Reintentar sincronización (${radicadosAtrapados})` }}</span>
+          </button>
         </div>
       </div>
 
@@ -466,6 +482,16 @@
               <td>
                 <div class="radicado-code-box">
                   <span class="radicado-badge">{{ rad.numeroRadicado }}</span>
+                  <span
+                    v-if="rad.sincronizado === false"
+                    :class="['badge ms-1', rad.errorSync ? 'bg-danger text-white' : 'bg-warning text-dark']"
+                    style="font-size: 0.6rem;"
+                    :title="rad.errorSync
+                      ? ('Error del servidor al subir este radicado: ' + (rad.ultimoErrorSync || 'desconocido') + '. Use «Reintentar sincronización» o elimínelo y regístrelo de nuevo.')
+                      : 'Guardado SOLO en este navegador: aún no está en la base de datos y Gerencia no lo ve. Se subirá automáticamente al reconectar.'"
+                  >
+                    {{ rad.errorSync ? '⚠ Error de subida' : '⏳ Pendiente de subir' }}
+                  </span>
                   <span v-if="rad.numeroRadicadoPdf" class="pdf-tag" :title="'N° Documento: ' + rad.numeroRadicadoPdf">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                     PDF: {{ rad.numeroRadicadoPdf }}
@@ -705,12 +731,37 @@
                 />
               </div>
 
-              <!-- Sin documento (estado honesto) -->
+              <!-- Error de carga (reintentable): distinto de "sin documento" -->
+              <div v-else-if="modalPdfError" class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
+                <div style="font-size: 2rem;">⚠️</div>
+                <p class="text-warning mb-2" style="font-size: 0.8rem;">{{ modalPdfError }}</p>
+                <button class="btn btn-outline-light btn-sm px-3" style="font-size: 0.72rem;" @click="abrirModal(modalRadicado)">
+                  🔄 Reintentar
+                </button>
+              </div>
+
+              <!-- Sin documento (estado honesto) + reparación: adjuntar el original a posteriori -->
               <div v-else class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
                 <div style="font-size: 2rem;">📄</div>
-                <p class="text-white-50 mb-0" style="font-size: 0.8rem;">
-                  Este radicado no tiene documento adjunto en la base de datos.
+                <p class="text-white-50 mb-2" style="font-size: 0.8rem;">
+                  {{ esRadicadoLocalPendiente(modalRadicado)
+                    ? 'Radicado local pendiente de sincronizar: su documento no quedó guardado en este navegador.'
+                    : 'Este radicado no tiene documento adjunto en la base de datos.' }}
                 </p>
+                <template v-if="!esRadicadoLocalPendiente(modalRadicado)">
+                  <input ref="inputAdjuntarArchivo" type="file" accept=".pdf,image/*" class="d-none" @change="onAdjuntarArchivo" />
+                  <button
+                    class="btn btn-warning btn-sm px-3 fw-bold"
+                    style="font-size: 0.72rem;"
+                    :disabled="adjuntandoDoc"
+                    @click="inputAdjuntarArchivo && inputAdjuntarArchivo.click()"
+                  >
+                    {{ adjuntandoDoc ? '⏳ Adjuntando documento...' : '📎 Adjuntar documento original' }}
+                  </button>
+                  <small class="text-white-50 mt-1" style="font-size: 0.62rem;">
+                    Seleccione el PDF o imagen escaneada: quedará guardado en la base de datos.
+                  </small>
+                </template>
               </div>
             </div>
           </div>
@@ -731,6 +782,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
 import authService from '../../auth/services/authService.js'
+import adjuntosOffline from '../../../services/adjuntosOffline.js'
 
 // Estado
 const listaRadicados = ref([])
@@ -797,7 +849,7 @@ const form = reactive({
   asunto: '',
   referencia: '',
   contexto: '',
-  registradoPor: usuarioActual?.nombre || 'Encargada',
+  registradoPor: usuarioActual?.nombre || 'Eliana',
   diasParaVencer: 10,
   archivoNombre: null,
   archivoBase64: ''
@@ -827,6 +879,47 @@ const onStorageChange = (e) => {
   }
 }
 
+// Radicados atrapados en ESTE navegador (pendientes o con error de subida):
+// existen solo aquí — Gerencia no los ve. Botón de rescate visible al contador.
+const radicadosAtrapados = computed(() =>
+  (listaRadicados.value || []).filter(esRadicadoLocalPendiente).length
+)
+const reintentandoSync = ref(false)
+const reintentarSincronizacion = async () => {
+  if (reintentandoSync.value) return
+  reintentandoSync.value = true
+  try {
+    const { publicados, quedan, fallados } = await radicadosService.reintentarFallidos()
+    if (publicados > 0) {
+      mostrarAlertaBootstrap(
+        'Sincronización Nube',
+        `${publicados} radicado(s) se publicaron correctamente en la base de datos. Gerencia ya puede verlos.`,
+        'success'
+      )
+    }
+    if (quedan > 0) {
+      const detalle = (fallados || [])
+        .slice(0, 3)
+        .map((f) => `${f.numeroRadicado}: ${f.error}`)
+        .join(' | ')
+      mostrarAlertaBootstrap(
+        'Radicados que aún no suben',
+        `${quedan} radicado(s) siguen sin poder subirse. ${detalle ? `Motivo del servidor — ${detalle}. ` : ''}Si el motivo es un dato inválido, elimine ese radicado de la lista y regístrelo de nuevo; si es de conexión, verifique el servidor y vuelva a intentar.`,
+        'warning'
+      )
+    } else if (publicados === 0) {
+      mostrarAlertaBootstrap('Sincronización Nube', 'No había radicados pendientes por subir.', 'info')
+    }
+  } catch (e) {
+    mostrarAlertaBootstrap('Error de sincronización', e.message || 'No se pudo completar el reintento.', 'danger')
+  } finally {
+    reintentandoSync.value = false
+    CargarLista(true)
+  }
+}
+
+let desuscribirCambios = null
+
 onMounted(async () => {
   // Reintentar publicar radicados guardados sin conexión (pendientes de sincronización)
   try {
@@ -836,8 +929,23 @@ onMounted(async () => {
     }
   } catch (e) { /* sin conexión */ }
   CargarLista()
-  window.addEventListener('storage', onStorageChange)
-  // Auto-actualización periódica silenciosa
+  
+  // Suscripción a eventos en tiempo real (BroadcastChannel + CustomEvents + Storage)
+  desuscribirCambios = radicadosService.suscribirCambios(() => {
+    CargarLista(true)
+  })
+
+  // Aviso honesto: si el intento dejó radicados sin subir, el usuario debe
+  // saberlo (antes quedaban atrapados en silencio hasta el próximo montaje)
+  const atrapados = (listaRadicados.value || []).filter(esRadicadoLocalPendiente).length
+  if (atrapados > 0) {
+    mostrarAlertaBootstrap(
+      'Radicados sin sincronizar',
+      `${atrapados} radicado(s) local(es) no han podido subirse a la base de datos — Gerencia NO los ve. Use el botón «Reintentar sincronización», verifique la conexión o cierre y reinicie sesión.`,
+      'warning'
+    )
+  }
+  // Auto-actualización periódica silenciosa (respaldo)
   timerAutoRefresh = setInterval(() => {
     CargarLista(true)
   }, 5000)
@@ -845,10 +953,13 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (timerAutoRefresh) clearInterval(timerAutoRefresh)
-  window.removeEventListener('storage', onStorageChange)
+  if (desuscribirCambios) desuscribirCambios()
   // Liberar el blob del visor si la vista se desmonta con el modal abierto
   if (modalPdfUrl.value && modalPdfUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(modalPdfUrl.value)
+  }
+  if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(pdfPreviewUrl.value)
   }
 })
 
@@ -906,6 +1017,10 @@ const onFileSelected = async (event) => {
   const file = event.target.files[0]
   if (!file) return
 
+  // Revocar la URL anterior: sin esto, cada re-selección fuga un blob en RAM
+  if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(pdfPreviewUrl.value)
+  }
   pdfPreviewUrl.value = URL.createObjectURL(file)
   form.archivoNombre = file.name
 
@@ -989,6 +1104,10 @@ const guardarRadicado = async () => {
     form.contexto = ''
     form.archivoBase64 = ''
     form.archivoNombre = null
+    form.registradoPor = authService.getUsuarioActual()?.nombre || 'Eliana'
+    if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
+      URL.revokeObjectURL(pdfPreviewUrl.value)
+    }
     pdfPreviewUrl.value = null
 
     resumenOcr.value = null
@@ -1048,53 +1167,141 @@ const ejecutarEliminar = async () => {
 
 const modalPdfUrl = ref(null)
 const modalPdfCargando = ref(false)
-const modalPdfError = ref(false)
+// Mensaje de error de CARGA (string | null): fallo de transporte reintentable.
+// "Sin documento" es el estado implícito !cargando && !url && !error (honesto).
+const modalPdfError = ref(null)
+const modalPdfMime = ref('')
+// Token de generación: si el usuario cierra/reabre el modal con una carga en
+// vuelo, la promesa vieja ya no pisa el visor de la nueva (documento equivocado).
+let modalPdfToken = 0
 
-const abrirModal = async (rad) => {
-  modalRadicado.value = rad
+const mimeDesdeDataUrl = (dataUrl) => (String(dataUrl).match(/^data:([^;,]+)/) || [])[1] || ''
 
-  // Visor inline: el documento oficial de la BD se sirve bajo demanda como blob;
-  // los provisionales locales usan su Base64 si lo conservaron (sanitizado no lo tiene).
-  modalPdfUrl.value = null
-  modalPdfError.value = false
-  const esLocalPendiente = rad && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
-  const tieneDoc = rad && (rad.hasArchivo || rad.archivoBase64)
-
-  if (!tieneDoc) {
-    modalPdfError.value = true
-    return
-  }
-
-  modalPdfCargando.value = true
+// El visor inline acepta data URLs, pero el ancla "Abrir Archivo" (target=_blank)
+// no: los navegadores bloquean la navegación top-level a data:. Se convierte a
+// blob: cuando es posible; si falla, se degrada a la data URL cruda.
+const dataUrlABlobUrl = async (dataUrl) => {
   try {
-    if (esLocalPendiente) {
-      modalPdfUrl.value = rad.archivoBase64 || null
-      if (!modalPdfUrl.value) modalPdfError.value = true
-    } else {
-      modalPdfUrl.value = await radicadosService.obtenerArchivoRadicado(rad.id)
-    }
+    return URL.createObjectURL(await (await fetch(dataUrl)).blob())
   } catch (e) {
-    // Sin documento en la nube → respaldo local si existe
-    modalPdfUrl.value = (rad && rad.archivoBase64) || null
-    if (!modalPdfUrl.value) modalPdfError.value = true
-  } finally {
-    modalPdfCargando.value = false
+    return dataUrl
   }
 }
 
-const cerrarModal = () => {
-  // Liberar el blob del visor (el Base64 del caché local no se revoca: no es blob)
+// Liberar el blob del visor (el Base64 del caché local no se revoca: no es blob)
+const liberarModalPdfUrl = () => {
   if (modalPdfUrl.value && modalPdfUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(modalPdfUrl.value)
   }
   modalPdfUrl.value = null
+}
+
+const abrirModal = async (rad) => {
+  const token = ++modalPdfToken
+  modalRadicado.value = rad
+  liberarModalPdfUrl()
+  modalPdfError.value = null
+  modalPdfMime.value = ''
+
+  if (!rad) return
+
+  // Mismo orden de resolución que el visor de Permisos: el flag hasArchivo del
+  // caché NUNCA gatea la consulta — si el documento existe en la BD, se muestra.
+  modalPdfCargando.value = true
+  try {
+    // 1) Data URL del propio registro (solo si el caché la conserva)
+    if (typeof rad.archivoBase64 === 'string' && rad.archivoBase64.startsWith('data:')) {
+      const url = await dataUrlABlobUrl(rad.archivoBase64)
+      if (token !== modalPdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
+      modalPdfMime.value = mimeDesdeDataUrl(rad.archivoBase64)
+      modalPdfUrl.value = url
+      return
+    }
+
+    // 2) Adjunto resguardado en IndexedDB (pendiente local cuyo archivo no cupo en localStorage)
+    if (rad.sincronizado === false && rad.archivoEnIndexedDB) {
+      const adj = await adjuntosOffline.obtenerAdjunto(rad.idLocal)
+      if (token !== modalPdfToken) return
+      if (adj && adj.dataUrl) {
+        const url = await dataUrlABlobUrl(adj.dataUrl)
+        if (token !== modalPdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
+        modalPdfMime.value = mimeDesdeDataUrl(adj.dataUrl)
+        modalPdfUrl.value = url
+        return
+      }
+    }
+
+    // 3) Servidor — camino principal para todo radicado con id real
+    if (rad.id && !String(rad.id).startsWith('RAD-LOCAL')) {
+      const { url, mime } = await radicadosService.obtenerArchivoRadicado(rad.id)
+      if (token !== modalPdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
+      modalPdfUrl.value = url
+      modalPdfMime.value = mime
+      return
+    }
+
+    // 4) Sin documento: 404 real del servidor o provisional local que perdió su adjunto
+  } catch (e) {
+    if (token !== modalPdfToken) return
+    // 404 = sin documento real: queda todo en null para que el template muestre
+    // el estado honesto (con botón de reparación), no un error reintentable.
+    if (e && e.status === 404) return
+    modalPdfError.value = (e && e.message) || 'No se pudo cargar el documento del radicado.'
+  } finally {
+    if (token === modalPdfToken) modalPdfCargando.value = false
+  }
+}
+
+const cerrarModal = () => {
+  liberarModalPdfUrl()
   modalRadicado.value = null
 }
 
-// El documento adjunto puede ser PDF (visor object/iframe) o imagen escaneada (<img>)
-const esImagenDocumento = (rad) =>
-  String(rad?.archivoMimeType || '').startsWith('image/') ||
-  /\.(png|jpe?g|webp|gif|bmp)$/i.test(rad?.archivoNombre || '')
+// ── Reparación: adjuntar el documento original a un radicado ya creado ──
+// Repara registros que llegaron a la BD sin archivo (p. ej. subidos sin
+// conexión cuyo adjunto no cupo en el almacenamiento local del navegador).
+const inputAdjuntarArchivo = ref(null)
+const adjuntandoDoc = ref(false)
+
+const esRadicadoLocalPendiente = (rad) =>
+  Boolean(rad) && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
+
+const onAdjuntarArchivo = async (event) => {
+  const file = event.target.files[0]
+  event.target.value = '' // permite re-seleccionar el mismo archivo
+  if (!file || !modalRadicado.value) return
+
+  try {
+    adjuntandoDoc.value = true
+    const actualizado = await radicadosService.adjuntarArchivo(modalRadicado.value.id, file)
+    mostrarAlertaBootstrap(
+      'Documento Adjuntado',
+      `El documento quedó guardado en la base de datos del radicado ${actualizado.numeroRadicado || modalRadicado.value.numeroRadicado}.`,
+      'success'
+    )
+    // El usuario pudo cerrar el modal durante la subida (PDF de varios MB):
+    // no se reabre — solo se refresca el tablero.
+    if (!modalRadicado.value) {
+      await CargarLista()
+      return
+    }
+    // Refrescar el visor con el radicado reparado y el tablero
+    await abrirModal({ ...modalRadicado.value, ...actualizado })
+    await CargarLista()
+  } catch (err) {
+    mostrarAlertaBootstrap('Error al Adjuntar', err.message || 'No se pudo adjuntar el documento.', 'danger')
+  } finally {
+    adjuntandoDoc.value = false
+  }
+}
+
+// El documento adjunto puede ser PDF (visor object/iframe) o imagen escaneada (<img>).
+// Prefiere el MIME REAL del documento mostrado (blob servido o data URL) — mismo
+// criterio que Permisos —; solo si no existe infiere por campo del registro/extensión.
+const esImagenDocumento = (rad) => {
+  const mime = modalPdfMime.value || rad?.archivoMimeType || ''
+  return mime.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(rad?.archivoNombre || '')
+}
 
 // Helpers de formato y estado
 const formatearFecha = (fecha) => {

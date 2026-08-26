@@ -151,22 +151,19 @@ export const PermisosService = {
    * El listado NO incluye el Base64 del archivo (peso), solo metadatos e indicadores.
    */
   async listarPermisos(filtros = {}) {
-    try {
-      const where = {};
-      if (filtros.estado) where.estado = filtros.estado;
-      if (filtros.cedula) where.cedula = filtros.cedula;
-      if (filtros.tipo) where.tipo = normalizarTipoEnum(filtros.tipo);
+    const where = {};
+    if (filtros.estado) where.estado = filtros.estado;
+    if (filtros.cedula) where.cedula = filtros.cedula;
+    if (filtros.tipo) where.tipo = normalizarTipoEnum(filtros.tipo);
 
-      const resultados = await prisma.permiso.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-      });
+    // Sin catch silencioso: ante error de BD se propaga (500) para que el
+    // frontend distinga "no hay datos" de "BD no disponible" y use su caché.
+    const resultados = await prisma.permiso.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
 
-      return resultados.map((p) => formatearParaFrontend(p, false));
-    } catch (e) {
-      console.error("[PermisosService.listarPermisos]", e.message);
-      return [];
-    }
+    return resultados.map((p) => formatearParaFrontend(p, false));
   },
 
   /**

@@ -1,4 +1,5 @@
 import authService from "../../auth/services/authService.js";
+import adjuntosOffline from "../../../services/adjuntosOffline.js";
 
 const API_BASE_URL = "/api/permisos";
 const STORAGE_KEY = "acuasan_permisos_v2";
@@ -255,12 +256,30 @@ export const permisosService = {
           guardarDbLocalPermisos(lista);
           return editado;
         } catch (eCuota) {
-          lista[idx] = sanitizarParaCache({ ...editado, archivoOmitido: true });
+          // Sin espacio en localStorage: resguardar el documento en IndexedDB
+          // (cuota de cientos de MB) para no perderlo antes de omitirlo.
+          const claveAdj = editado.idLocal || String(editado.id);
+          const adjuntoEd = editado.archivoUrl || editado.customFileUrl || "";
+          const guardadoEnIdb = adjuntoEd
+            ? await adjuntosOffline.guardarAdjunto(claveAdj, {
+                dataUrl: adjuntoEd,
+                nombre: editado.soporte || "",
+              })
+            : false;
+          lista[idx] = sanitizarParaCache({
+            ...editado,
+            ...(guardadoEnIdb ? { archivoEnIndexedDB: true } : { archivoOmitido: true }),
+          });
           try {
             guardarDbLocalPermisos(lista);
-            console.warn("Documento adjunto omitido por cuota de almacenamiento local:", eCuota.message);
+            console.warn(
+              guardadoEnIdb
+                ? "Cuota de localStorage llena: documento resguardado en IndexedDB para su publicación posterior."
+                : "Documento adjunto omitido por cuota de almacenamiento local: " + eCuota.message
+            );
             return lista[idx];
           } catch (eCuota2) {
+            if (guardadoEnIdb) adjuntosOffline.eliminarAdjunto(claveAdj);
             throw new Error(
               "No hay espacio en el almacenamiento local del navegador y el servidor no responde. Libere espacio e intente de nuevo."
             );
@@ -315,16 +334,32 @@ export const permisosService = {
       guardarDbLocalPermisos(lista);
       return nuevoPermiso;
     } catch (eCuota) {
-      // Sin espacio: persistir sin el documento (el permiso sobrevive; se informa)
-      const sinArchivo = sanitizarParaCache({ ...nuevoPermiso, archivoOmitido: true });
+      // Sin espacio en localStorage: resguardar el documento en IndexedDB
+      // (cuota de cientos de MB) para no perderlo antes de omitirlo.
+      const adjuntoNuevo = nuevoPermiso.archivoUrl || nuevoPermiso.customFileUrl || "";
+      const guardadoEnIdb = adjuntoNuevo
+        ? await adjuntosOffline.guardarAdjunto(idLocal, {
+            dataUrl: adjuntoNuevo,
+            nombre: nuevoPermiso.soporte || "",
+          })
+        : false;
+      const registro = sanitizarParaCache({
+        ...nuevoPermiso,
+        ...(guardadoEnIdb ? { archivoEnIndexedDB: true } : { archivoOmitido: true }),
+      });
       const listaLimpia = lista.filter(
-        (p) => p.id !== sinArchivo.id && p.radicado !== sinArchivo.radicado
+        (p) => p.id !== registro.id && p.radicado !== registro.radicado
       );
       try {
-        guardarDbLocalPermisos([sinArchivo, ...listaLimpia]);
-        console.warn("Documento adjunto omitido por cuota de almacenamiento local:", eCuota.message);
-        return sinArchivo;
+        guardarDbLocalPermisos([registro, ...listaLimpia]);
+        console.warn(
+          guardadoEnIdb
+            ? "Cuota de localStorage llena: documento resguardado en IndexedDB para su publicación posterior."
+            : "Documento adjunto omitido por cuota de almacenamiento local: " + eCuota.message
+        );
+        return registro;
       } catch (eCuota2) {
+        if (guardadoEnIdb) adjuntosOffline.eliminarAdjunto(idLocal);
         throw new Error(
           "No hay espacio en el almacenamiento local del navegador y el servidor no responde. Libere espacio e intente de nuevo."
         );
@@ -366,14 +401,21 @@ export const permisosService = {
     let sincronizados = 0;
     for (const p of pendientes) {
       const esUpdateServidor = Boolean(p.pendienteUpdate) && !esIdLocal(p.id);
-      const { sincronizado, origen, id, radicado, pendienteUpdate, archivoOmitido, ...payload } = p;
+      const { sincronizado, origen, id, radicado, pendienteUpdate, archivoOmitido, archivoEnIndexedDB, ...payload } = p;
       try {
+        // Adjunto resguardado en IndexedDB (no cupo en localStorage): re-adjuntar
+        const conAdjunto = { ...payload };
+        if (archivoEnIndexedDB && !conAdjunto.archivoUrl && !conAdjunto.customFileUrl) {
+          const adj = await adjuntosOffline.obtenerAdjunto(p.idLocal || String(p.id));
+          if (adj) conAdjunto.archivoUrl = adj.dataUrl;
+        }
+
         let res;
         if (esUpdateServidor) {
           res = await fetch(`${API_BASE_URL}/${id}`, {
             method: "PUT",
             headers: getHeaders(),
-            body: JSON.stringify(payload),
+            body: JSON.stringify(conAdjunto),
           });
           // El registro fue eliminado del servidor mientras estaba offline:
           // publicarlo como nuevo (mismo criterio que una alta)
@@ -381,14 +423,14 @@ export const permisosService = {
             res = await fetch(API_BASE_URL, {
               method: "POST",
               headers: getHeaders(),
-              body: JSON.stringify({ ...payload, idLocal: generarIdLocal() }),
+              body: JSON.stringify({ ...conAdjunto, idLocal: generarIdLocal() }),
             });
           }
         } else {
           res = await fetch(API_BASE_URL, {
             method: "POST",
             headers: getHeaders(),
-            body: JSON.stringify(payload),
+            body: JSON.stringify(conAdjunto),
           });
         }
 
@@ -400,11 +442,18 @@ export const permisosService = {
                 String(x.id) !== String(p.id) &&
                 String(x.radicado) !== String(p.radicado)
             );
+            let espejoOk = false;
             try {
               guardarDbLocalPermisos([sanitizarParaCache(data.data), ...lista]);
+              espejoOk = true;
             } catch (eCuota) {
               console.warn("Espejo local sin espacio tras sincronizar:", eCuota.message);
             }
+            // El adjunto de IndexedDB solo se borra si el espejo local se actualizó:
+            // si la fila pendiente sobrevive por cuota llena, sigue apuntando a él
+            // y el visor la resuelve desde ahí.
+            if (archivoEnIndexedDB && espejoOk)
+              adjuntosOffline.eliminarAdjunto(p.idLocal || String(p.id));
             sincronizados++;
           }
         }

@@ -311,6 +311,9 @@ export const RadicadosService = {
       return dbRadicados.map(({ archivoBase64, ...resto }) => ({
         ...resto,
         hasArchivo: Boolean(archivoBase64),
+        // Mime real del documento (viaja en el prefijo del data URL): permite
+        // al visor decidir <object>/<iframe> PDF vs <img> sin el binario
+        archivoMimeType: (String(archivoBase64 || "").match(/^data:([^;,]+)/) || [])[1] || null,
       }));
     } catch (e) {
       // Error real de BD: se propaga (el cliente usa su caché local, nunca datos inventados)
@@ -326,11 +329,14 @@ export const RadicadosService = {
       return await prisma.radicado.findUnique({ where: { id: String(id) } });
     } catch (e) {
       try {
+        // Reintento por numeroRadicado (el id recibido puede no ser ObjectId)
         return await prisma.radicado.findFirst({
           where: { numeroRadicado: String(id) },
         });
       } catch (err) {
-        return null;
+        // Ambos accesos fallaron (BD caída): propagar. Devolver null aquí
+        // convertiría el outage en un 404 "sin documento adjunto" mentiroso.
+        throw new Error(`Base de datos no disponible: ${err.message}`);
       }
     }
   },
@@ -411,10 +417,16 @@ export const RadicadosService = {
     // ⚠️ No enviar `id`: el schema define id como ObjectId autogenerado por MongoDB.
     // Enviarlo causa error de validación y el radicado NUNCA se persistía en la BD.
     const itemData = {
-      peticionario,
-      dependencia,
+      // Blindaje como el módulo de Permisos (que normaliza/rellena TODOS los
+      // campos obligatorios y por eso nunca revienta en validación): el OCR no
+      // inventa datos, así que un documento sin peticionario/dependencia
+      // legibles llegaba vacío y prisma.create lo rechazaba — el radicado
+      // quedaba atrapado como RAD-LOCAL y Gerencia jamás lo veía. El
+      // placeholder es explícito para no presentar un dato inventado como real.
+      peticionario: String(peticionario || "").trim() || "SIN PETICIONARIO",
+      dependencia: String(dependencia || "").trim() || "SIN DEPENDENCIA",
       correoDrive: correoDrive || "encargada@acuasan.gov.co",
-      registradoPor: registradoPor || "Encargada",
+      registradoPor: registradoPor || "Eliana",
       contexto: contexto || "Registro documental de radicación.",
       destinatario: destinatario || null,
       asunto: asunto || null,
@@ -459,6 +471,23 @@ export const RadicadosService = {
       }
     }
 
+    // Validación de Prisma (campo obligatorio ausente, tipo incorrecto…):
+    // NO es un fallo de BD. Si esto se reporta como 503 el cliente offline lo
+    // clasifica como "transitorio", lo encola como RAD-LOCAL y lo reintenta
+    // para siempre sin saber la causa real. Es un 400 con el campo implicado.
+    if (ultimoError?.name === "PrismaClientValidationError") {
+      const campo = ultimoError.message.match(/Argument `(\w+)`/)?.[1] || null;
+      const detalle = String(ultimoError.message)
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.startsWith("+") || l.startsWith("Argument"));
+      const errorValidacion = new Error(
+        `Datos del radicado incompletos o inválidos${campo ? ` (campo: ${campo})` : ""}${detalle ? ` — ${detalle.replace(/^\+\s*/, "")}` : ""}`
+      );
+      errorValidacion.esValidacion = true;
+      throw errorValidacion;
+    }
+
     throw new Error(
       `No se pudo persistir el radicado en la base de datos: ${ultimoError?.message || "error desconocido"}`
     );
@@ -483,6 +512,38 @@ export const RadicadosService = {
           });
         }
         // No existe en la BD (posible provisional local aún sin sincronizar)
+        return null;
+      } catch (e2) {
+        throw new Error(`Base de datos no disponible: ${e2.message}`);
+      }
+    }
+  },
+
+  /**
+   * Adjunta o reemplaza el documento original (Base64) de un radicado existente.
+   * Repara registros que llegaron a la BD sin archivo — p. ej. creados sin
+   * conexión cuyo adjunto no cupo en el almacenamiento local del navegador.
+   */
+  async adjuntarArchivo(id, { archivoBase64, archivoNombre }) {
+    const data = { archivoBase64: String(archivoBase64) };
+    if (archivoNombre) data.archivoNombre = String(archivoNombre);
+    try {
+      return await prisma.radicado.update({
+        where: { id: String(id) },
+        data,
+      });
+    } catch (e) {
+      // Id no es ObjectId válido o no existe: intentar por numeroRadicado
+      try {
+        const porNumero = await prisma.radicado.findFirst({
+          where: { numeroRadicado: String(id) },
+        });
+        if (porNumero) {
+          return await prisma.radicado.update({
+            where: { id: porNumero.id },
+            data,
+          });
+        }
         return null;
       } catch (e2) {
         throw new Error(`Base de datos no disponible: ${e2.message}`);
@@ -525,7 +586,7 @@ export const RadicadosService = {
       metodo: "OCR navegador + parser servidor",
       peticionario: campos.peticionario || "",
       dependencia: campos.dependencia || "",
-      registradoPor: "Encargada",
+      registradoPor: "Eliana",
       contexto: campos.contexto || "",
       numeroRadicadoPdf: campos.numeroRadicadoPdf || "",
       fechaDocumento: campos.fechaDocumento || "",
@@ -584,7 +645,7 @@ export const RadicadosService = {
       metodo,
       peticionario: campos.peticionario || "",
       dependencia: campos.dependencia || "",
-      registradoPor: "Encargada",
+      registradoPor: "Eliana",
       contexto: campos.contexto || "",
       numeroRadicadoPdf: campos.numeroRadicadoPdf || "",
       fechaDocumento: campos.fechaDocumento || "",
@@ -602,8 +663,13 @@ export const RadicadosService = {
       orderBy: { fechaRadicacion: "desc" },
     });
     const fileName = `Historial_Radicados_${moment().format("YYYY-MM-DD")}.csv`;
-    // Escribir en /tmp (único directorio escribible en entornos serverless)
-    const filePath = path.join(os.tmpdir(), fileName);
+    // Escribir en /tmp (único directorio escribible en entornos serverless).
+    // Path ÚNICO por descarga: dos requests concurrentes no deben compartir
+    // archivo (la 2ª lo trunca mientras la 1ª aún lo streamea, o lo borra).
+    const filePath = path.join(
+      os.tmpdir(),
+      `Historial_Radicados_${moment().format("YYYY-MM-DD")}_${randomUUID()}.csv`
+    );
 
     const csvWriter = createObjectCsvWriter({
       path: filePath,
