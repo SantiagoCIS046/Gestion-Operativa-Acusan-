@@ -55,6 +55,17 @@ const esLineaSaludo = (l) => {
 
 const MUNICIPIOS_ZONA = 'San Gil|Pinchote|Socorro|Bucaramanga|Bogot[aá]|Charal[aá]|Curit[ií]|Oiba|Barichara|Villanueva|Piedecuesta|Floridablanca|Gir[oó]n'
 
+const esNombreValido = (s) => {
+  if (!s || typeof s !== 'string') return false
+  const str = s.trim()
+  if (str.length < 3) return false
+  const letras = (str.match(/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/g) || []).length
+  if (letras < 3) return false
+  if (/^[\d\s.,+:;|_\-\/\\()]+$/.test(str)) return false
+  if (/^[+\-.,;:|_]+/.test(str)) return false
+  return true
+}
+
 // Campos que viajan al cliente: el documento Base64 jamás viaja en listados
 // ni en respuestas de creación (pesa MBs; se sirve por /:id/archivo).
 const SELECT_PUBLICO = {
@@ -266,9 +277,7 @@ export const RadicadosService = {
       ...lista.map((r) => columnas.map(([campo]) => celda(r[campo])).join(';'))
     ]
     return `﻿${filas.join('\r\n')}`
-  },
-
-  /**
+  },  /**
    * ============================================================================
    * PARSING DE CAMPOS INSTITUCIONALES
    * ============================================================================
@@ -295,23 +304,41 @@ export const RadicadosService = {
 
     const lineas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
 
-    // 1. N° RADICADO DEL SELLO — la etiqueta "Radicado" (cualquier grafía)
-    // habilita cualquier número; "No."/"N°" solo habilitan valores con forma
-    // de año (2xxx…), y un número suelto solo cuenta con esa misma forma: así
-    // una cédula, un NIT o un teléfono NUNCA llenan este campo. Sin sello
-    // legible el campo queda vacío.
+    // 1. N° RADICADO DEL SELLO
+    // Soporta formatos SIGOB/ORFEO/Ventanilla virtual y sellos físicos:
+    //   "Radicado: 20260012345"  "RADICADO No. 2026-0012"  "No. 20260012345"
+    //   "Radicado No.: 2610000736 Folios: 1"
     const probarRadicado = (crudo) => {
-      // El OCR parte el número con espacios o guiones ("2026 14523",
-      // "RAD-2026-00123"): se retiran antes de normalizar O/0 y l/1.
-      const limpio = normalizarDigitos(String(crudo).replace(/[\- ]/g, '')).trim()
-      const digitosReales = (String(crudo).match(/[0-9]/g) || []).length
-      return /^\d{7,12}$/.test(limpio) && digitosReales >= 4 ? limpio : ''
+      if (!crudo) return ''
+      // Limpiar texto tras el número (ej: "2610000736 Folios: 1")
+      const soloNumero = String(crudo).split(/\s+(?:Folios?|Anexos?|Fecha|Hora)\b/i)[0]
+      const limpio = normalizarDigitos(soloNumero.replace(/[\- ]/g, '')).trim()
+      // Serie alfanumérica de sticker ("2H210000736"): el token completo y
+      // con al menos 4 dígitos — si no, es una palabra y no un radicado.
+      if (/[A-Za-z]/.test(limpio)) {
+        const mA = limpio.match(/^([0-9A-Za-z]{6,12})$/)
+        return mA && (mA[1].match(/\d/g) || []).length >= 4 ? mA[1] : ''
+      }
+      const match = limpio.match(/(\d{7,12})/)
+      return match ? match[1] : ''
     }
+
     const mRad =
-      texto.match(new RegExp(`\\bRad(?:[i1l]c[a4]d[o0])?(?:\\s+|\\s*[:.\\-]\\s*)(?:No\\.?\\s*|N[°º.]\\s*)*(?:[:.\\-]?\\s*)((?:${DIGITO_OCR}[\\- ]?){6,11}${DIGITO_OCR})\\b`, 'i')) ||
-      texto.match(new RegExp(`\\b(?:No\\.?|N[°º])\\s*[:.]?\\s*((?:2${DIGITO_OCR}[\\- ]?){5,9}${DIGITO_OCR})\\b`, 'i')) ||
+      // SIGOB: "RADICADO:" / "Sticker:" / "Rad. No." / "Radicado No.:"
+      texto.match(new RegExp(`\\b(?:Rad(?:[i1l]c[a4]d[o0])?|Sticker|Folio|Consecutivo)\\b(?:\\s+No\\.?\\s*|\\s*N[°º\.]\\s*)?\\s*[:.-]?\\s*((?:${DIGITO_OCR}[\\- ]?){6,11}${DIGITO_OCR})`, 'i')) ||
+      // Sticker con serie ALFANUMÉRICA ("Radicado No.: 2H210000736"):
+      // token pegado, sin espacios — la etiqueta da la certeza
+      texto.match(new RegExp(`\\b(?:Rad(?:[i1l]c[a4]d[o0])?|Sticker|Consecutivo)\\b(?:\\s+No\\.?\\s*|\\s*N[°º\.]\\s*)?\\s*[:.-]?\\s*([0-9A-Za-zOolI|]{6,12})`, 'i')) ||
+      // "No." / "N°" seguido de número con año (20xxxxxx / 26xxxxxx)
+      texto.match(new RegExp(`\\b(?:No\\.?|N[°º])\\s*[:.]?\\s*((?:[2][0-9OolI|][\\- ]?){5,9}${DIGITO_OCR})\\b`, 'i')) ||
+      // RAD-AAAA-NNNNN
+      texto.match(/\bRAD[-.]?(\d{4})[-.]?(\d{4,6})\b/i) ||
+      // Número suelto con forma de año al inicio (20xxxxxx / 26xxxxxx)
       texto.match(new RegExp(`\\b(2${DIGITO_OCR}{7,10})\\b`, 'i'))
-    if (mRad) resultado.numeroRadicadoPdf = probarRadicado(mRad[1].trim())
+    if (mRad) {
+      const crudo = mRad[2] ? `${mRad[1]}${mRad[2]}` : mRad[1].trim()
+      resultado.numeroRadicadoPdf = probarRadicado(crudo)
+    }
 
     // 2. FECHA DEL SELLO — etiqueta FECHA (con huecos de OCR) o primera fecha
     // válida del documento. La captura tolera O/0 y l/1 y se normaliza; una
@@ -322,15 +349,19 @@ export const RadicadosService = {
       return d >= 1 && d <= 31 && mes >= 1 && mes <= 12
     }
     const mFechaSello = texto.match(new RegExp(`F\\s*E\\s*C\\s*H\\s*A\\s*[:.\\-]?\\s*(${PATRON_FECHA})`, 'i'))
-    // "14/ago/2026": el mes viaja tal cual — la 'o' de "ago" no es un cero del OCR
+    // "14/ago/2026": el mes viaja tal cual — la 'o' de "ago" no es un cero del
+    // OCR. El ruido típico del mes ("age", "a9o", "0ct") se corrige con un
+    // mapa mínimo y un día imposible (>31) descarta la candidata.
+    const MES_OCR = { age: 'ago', ag0: 'ago', a9o: 'ago', '0ct': 'oct', n0v: 'nov', '3ne': 'ene', en3: 'ene', '3ep': 'sep', '5ep': 'sep', d1c: 'dic', '3ic': 'dic' }
     const mFechaTexto = texto.match(new RegExp(`(${DIGITO_OCR}{1,2})\\/([a-zA-Z0-9áéíóúÁÉÍÓÚ]{3,4})\\/(${DIGITO_OCR}{4})`, 'i'))
     const fSello = mFechaSello ? normalizarDigitos(mFechaSello[1]) : ''
     const fTexto = mFechaTexto
-      ? `${normalizarDigitos(mFechaTexto[1])}/${mFechaTexto[2]}/${normalizarDigitos(mFechaTexto[3])}`
+      ? `${normalizarDigitos(mFechaTexto[1])}/${MES_OCR[mFechaTexto[2].toLowerCase()] || mFechaTexto[2]}/${normalizarDigitos(mFechaTexto[3])}`
       : ''
+    const diaTexto = mFechaTexto ? parseInt(normalizarDigitos(mFechaTexto[1]), 10) : 0
     // El sello manda, pero una fecha imposible ("99/99/2026") jamás viaja:
     // cae a la primera fecha válida del documento.
-    resultado.fechaDocumento = fSello && esFechaPosible(fSello) ? fSello : fTexto
+    resultado.fechaDocumento = fSello && esFechaPosible(fSello) ? fSello : (diaTexto >= 1 && diaTexto <= 31 ? fTexto : '')
     if (!resultado.fechaDocumento) {
       for (const m of texto.matchAll(new RegExp(PATRON_FECHA, 'g'))) {
         const f = normalizarDigitos(m[0])
@@ -357,6 +388,15 @@ export const RadicadosService = {
         const dia = normalizarDigitos(mesPrimero ? mLetras[2] : mLetras[1]).replace(/(?:ro|º|°)$/, '')
         const mes = mesPrimero ? mLetras[1] : mLetras[2]
         resultado.fechaDocumento = `${dia} de ${mes} de ${normalizarDigitos(mLetras[3])}`
+      }
+    }
+    // Sticker: "14 ago. 2020" — día, mes abreviado (con o sin punto) y año
+    // SEPARADOS POR ESPACIO, sin la palabra "de". Viaja tal cual aparece.
+    if (!resultado.fechaDocumento) {
+      const mSticker = texto.match(new RegExp(`(?<![0-9OolI])(${DIA_LE})[ \\t]+(${MES_LE})[ \\t]+(${ANIO_LE})(?![0-9OolI])`, 'i'))
+      if (mSticker) {
+        const d = normalizarDigitos(mSticker[1]).replace(/(?:ro|º|°)$/, '')
+        resultado.fechaDocumento = `${d} ${mSticker[2]} ${normalizarDigitos(mSticker[3])}`
       }
     }
 
@@ -421,8 +461,15 @@ export const RadicadosService = {
     })()
 
     // 4. DEPENDENCIA / EMPRESA DESTINATARIA
-    if (/ACUASAN/i.test(texto) || /ACUEDUCTO/i.test(texto)) {
+    // Prioridad: ACUASAN detectado → nombre completo institucional.
+    // SIGOB/ORFEO tienen "DEPENDENCIA:" en el sello digital: se lee primero.
+    const mDepSello = texto.match(/\bDEPENDENCIA\s*[:：]\s*([^\n\r]{4,120})/i)
+    if (mDepSello && /ACUASAN|ACUEDUCTO/i.test(mDepSello[1])) {
       resultado.dependencia = 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.'
+    } else if (/ACUASAN/i.test(texto) || /ACUEDUCTO/i.test(texto)) {
+      resultado.dependencia = 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.'
+    } else if (mDepSello) {
+      resultado.dependencia = limpiar(mDepSello[1])
     } else if (bloqueSenores.length) {
       resultado.dependencia = bloqueSenores[0]
     } else {
@@ -431,43 +478,59 @@ export const RadicadosService = {
     }
 
     // 5. PETICIONARIO — etiqueta explícita o saludo "SEÑOR(A):" + nombre/cargo.
-    // Valor de etiqueta: primero en la MISMA línea; si la etiqueta queda sola,
-    // la siguiente línea — salvo que esa línea sea OTRA etiqueta (un "Asunto:"
-    // vacío jamás debe robar el "Remitente:" de debajo).
+    // Valor de etiqueta: detiene la captura si en la misma línea aparece otra etiqueta
+    // de sello (Remitente, Destinataria, Radicado, Folios, Anexos, Fecha, etc.)
     const valorEtiqueta = (etiqueta) => {
-      // El backtracking puede dejar ":" o " -" sueltos como valor: se pelan.
       const pelar = (v) => (v || '').replace(/^[ \t]*[:：;.,·\-]+[ \t]*/, '').trim()
-      const mismo = texto.match(new RegExp(`\\b${etiqueta}\\b[ \\t]*[:：]?[ \\t]*([^\\n\\r]+)`, 'i'))
-      if (mismo && pelar(mismo[1])) return pelar(mismo[1])
-      const siguiente = texto.match(new RegExp(`\\b${etiqueta}\\b[ \\t]*[:：][ \\t]*\\r?\\n[ \\t]*([^\\n\\r]+)`, 'i'))
+      const regMismo = new RegExp('\\b(?:' + etiqueta + ')\\b[ \\t]*[:：]?[ \\t]*([^\\n\\r]+)', 'i')
+      const mismo = texto.match(regMismo)
+      if (mismo && pelar(mismo[1])) {
+        let val = pelar(mismo[1])
+        const posProx = val.search(/\b(?:Remitente|Peticionario|Solicitante|Destinatari[oa]s?|Radicad[oa]|Folios?|Anexos?|Fecha|Hora|Asunto|Referencia)\b/i)
+        if (posProx > 0) val = val.substring(0, posProx).trim()
+        return val
+      }
+
+      const regSig = new RegExp('\\b(?:' + etiqueta + ')\\b[ \\t]*[:：][ \\t]*\\r?\\n[ \\t]*([^\\n\\r]+)', 'i')
+      const siguiente = texto.match(regSig)
+      
       if (siguiente) {
         const v = pelar(siguiente[1])
-        // La línea de abajo es OTRA etiqueta → esta quedó vacía de verdad
-        if (v && !/^(?:Remitente|Destinatario|Asunto|REFERENCIA|FECHA|Rad|RADICADO|Se[nñ]ores|Señor|C\.C|NIT)/i.test(v)) {
+        if (v && !/^(?:Remitente|Peticionario|Solicitante|Destinatari[oa]|Asunto|REFERENCIA|FECHA|Rad|RADICADO|Se[nñ]ores|Señor|C\.C|NIT)/i.test(v)) {
           return v
         }
       }
       return ''
     }
-    const remitenteCrudo = valorEtiqueta('Remitente')
+
+    const remitenteCrudo = valorEtiqueta('(?:Remitente|Peticionario|Solicitante)')
     const mRem = remitenteCrudo ? [null, remitenteCrudo] : null
-    const mDest = (() => { const v = valorEtiqueta('Destinatario'); return v ? [null, v] : null })()
-    if (mRem && !esFraseDeCuerpo(mRem[1])) {
-      resultado.peticionario = mRem[1].replace(/-\s*r\/l.*$/i, '').trim()
+    const mDest = (() => { const v = valorEtiqueta('Destinatari[oa]s?'); return v ? [null, v] : null })()
+
+    if (mRem && !esFraseDeCuerpo(mRem[1]) && esNombreValido(mRem[1])) {
+      resultado.peticionario = mRem[1].replace(/-\s*r\.?\s*\/?\s*l\.?\s.*$/i, '').trim()
     }
-    if (mDest && !esFraseDeCuerpo(mDest[1])) {
+    if (mDest && !esFraseDeCuerpo(mDest[1]) && esNombreValido(mDest[1])) {
       resultado.destinatario = mDest[1].trim()
+      // Sticker de radicación: "Destinataria: 950 - Oliveros Hernandez Ciro Alfonso" —
+      // el número delante del guion es un código de suscriptor/dependencia:
+      // viaja a referencia y el nombre queda limpio.
+      const mCodDest = resultado.destinatario.match(/^(\d{2,8})\s*[-–—]\s*(.{4,80})$/)
+      if (mCodDest && !/^\d+$/.test(mCodDest[2])) {
+        resultado.destinatario = mCodDest[2].trim()
+        if (!resultado.referencia) resultado.referencia = mCodDest[1]
+      }
     }
 
-    // La autoidentificación explícita ("Yo, X, identificad@") es la evidencia
+    // La autoidentificación explícita ("Yo, X, identificad@ / mayor de edad") es la evidencia
     // más fuerte: corre ANTES que el saludo para que un bloque SEÑORES con la
     // empresa debajo nunca la pise.
-    if (!resultado.peticionario || esFraseDeCuerpo(resultado.peticionario)) {
-      const mYo = texto.match(/Yo[,\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-zñáéíóú\s.]{5,40})[,\s]+identificad/i)
-      if (mYo) resultado.peticionario = mYo[1].trim()
+    if (!resultado.peticionario || !esNombreValido(resultado.peticionario) || esFraseDeCuerpo(resultado.peticionario)) {
+      const mYo = texto.match(/Yo[,\s]+([A-ZÁÉÍÓÚÑa-zñáéíóú\s.]{5,50})[,\s]+(?:identificad|mayor de edad|en mi calidad|actuando)/i)
+      if (mYo && !esFraseDeCuerpo(mYo[1]) && esNombreValido(mYo[1])) resultado.peticionario = mYo[1].trim()
     }
 
-    if (!resultado.peticionario || esFraseDeCuerpo(resultado.peticionario)) {
+    if (!resultado.peticionario || !esNombreValido(resultado.peticionario) || esFraseDeCuerpo(resultado.peticionario)) {
       for (let i = 0; i < lineas.length; i++) {
         if (!esLineaSaludo(lineas[i])) continue
         let nombre = ''
@@ -477,7 +540,7 @@ export const RadicadosService = {
           if (/REFERENCIA|ASUNTO|FECHA|RADICADO/i.test(l)) break
           if (new RegExp(`^(?:${MUNICIPIOS_ZONA})\\b`, 'i').test(l)) break
           // La empresa destinataria no es peticionaria ("SEÑORES:" + ACUASAN…)
-          if (/ACUASAN|ACUEDUCTO|E\.I\.C\.E|E\.S\.P/i.test(l)) break
+          if (/ACUASAN|ACUEDUCTO|E\.I\.CE|E\.S\.P/i.test(l)) break
           if (l.length <= 3 || /^\d+$/.test(l) || /@/i.test(l)) continue
           if (/Celular|C[eé]dula|C\.C\.|NIT/i.test(l)) continue
           // Nombre: 2-6 palabras capitalizadas (con conectores "de/la/y"…),
@@ -510,7 +573,7 @@ export const RadicadosService = {
     }
 
     // 5b. DESTINATARIO sin etiqueta — a quién va dirigida la carta, en orden
-    // de certeza: "A:"/"Atención:" al inicio de línea, el bloque bajo
+    // de certeza: "A:"/"Att:" al inicio de línea, el bloque bajo
     // "Señores:", el saludo SEÑOR(A) cuando el peticionario ya quedó
     // establecido por otra vía (carta respuesta: el saludo señala al
     // receptor), y de último la línea propia de la entidad (membrete).
@@ -540,9 +603,6 @@ export const RadicadosService = {
             cargo = l
           }
         }
-        // Mismo nombre EXACTO que el peticionario (mayúsculas y espacios
-        // fuera) no es destinatario; compartir solo el primer nombre sí lo
-        // es ("ANA MARIA RIOS" pet. ≠ "ANA MARIA TORRES" dest.).
         const igual = (a, b) => String(a).replace(/\s+/g, ' ').trim().toUpperCase() === String(b).replace(/\s+/g, ' ').trim().toUpperCase()
         if (nombre && !igual(nombre, String(resultado.peticionario).split(' - ')[0])) {
           resultado.destinatario = cargo ? `${nombre} - ${cargo}` : nombre
@@ -559,22 +619,41 @@ export const RadicadosService = {
     }
 
     // 6. REFERENCIA
-    const refCruda = valorEtiqueta('REFERENCIA')
+    // SIGOB / ORFEO incluyen etiqueta "CODIGO:", "Ref:", "REFERENCIA:" o "CÓDIGO DE DEPENDENCIA:" en el sello
+    const refCruda =
+      valorEtiqueta('REFERENCIA|REF') ||
+      valorEtiqueta('CODIGO') ||
+      valorEtiqueta('C[OÓ]DIGO DE DEPENDENCIA')
     const mRef = refCruda ? [null, refCruda] : texto.match(/(C[oó]digo de suscriptor[^\n\r]*)/i)
     if (mRef && !esFraseDeCuerpo(mRef[1])) {
       resultado.referencia = mRef[1].trim()
     }
 
-    // 7. ASUNTO — etiqueta, o la referencia, o la primera línea de solicitud
-    const asuntoCrudo = valorEtiqueta('Asunto')
+    // 7. ASUNTO — etiqueta (Asunto, Descripción, Motivo, Objeto), o la referencia, o solicitud / tutela
+    const asuntoCrudo = valorEtiqueta('Asunto|Descr(?:ipci[oó]n)?|Motivo|Objeto')
     if (asuntoCrudo && !esFraseDeCuerpo(asuntoCrudo)) {
       resultado.asunto = asuntoCrudo.trim()
-    } else if (resultado.referencia) {
+    } else if (resultado.referencia && !/^\d{1,6}$/.test(resultado.referencia)) {
+      // Un código pelado ("950" del Destinatario) no describe un asunto
       resultado.asunto = resultado.referencia
     } else {
-      const mSolicitud = texto.match(/(Solicitud[^\n\r]+)/i)
+      const mSolicitud = texto.match(/(Solicitud[^\n\r]+)/i) || texto.match(/(Acci[oó]n de Tutela[^\n\r]{5,100})/i)
       if (mSolicitud && !esFraseDeCuerpo(mSolicitud[1])) {
         resultado.asunto = mSolicitud[1].trim()
+      }
+    }
+
+    // SIGOB: "USUARIO:" / "FUNCIONARIO:" = destinatario del trámite interno
+    // (a quién se asignó en el sistema). Se lee SOLO si destinatario no se
+    // resolvió por los bloques de saludo (el bloque de saludo tiene mayor certeza).
+    if (!resultado.destinatario) {
+      const mUsuarioSigob = texto.match(/\b(?:USUARIO|FUNCIONARIO|ASIGNADO A)\s*[:：]\s*([^\n\r]{4,90})/i)
+      if (mUsuarioSigob) {
+        // Formato "940 - Ruiz Suarez Luz Marina": pelar código delante
+        let val = mUsuarioSigob[1].trim()
+        const mCod = val.match(/^(\d{2,8})\s*[-–—]\s*(.{4,80})$/)
+        if (mCod && !/^\d+$/.test(mCod[2])) val = mCod[2].trim()
+        if (esLineaEncabezado(val)) resultado.destinatario = val
       }
     }
 
@@ -595,16 +674,22 @@ export const RadicadosService = {
       /(?:En atenci[oó]n|Por medio|Me permito|Me dirijo|Yo,|Con el fin|Una vez|Respetados?[oa]?\b|Respetuosamente|Mediante|A trav[eé]s|Se solicita)[^\n\r]*[\s\S]{30,600}/i
     )
     if (!mClave) {
-      mClave = texto.match(/Solicit[^\n\r]*[\s\S]{30,600}/i)
+      // "Solicitante:" es etiqueta de sello, no apertura de carta: con el
+      // lookahead negativo no arrastra las líneas del sticker al contexto.
+      mClave = texto.match(/Solicit(?!ante\b)[^\n\r]*[\s\S]{30,600}/i)
     }
     let contexto = ''
     if (mClave && mClave[0]) {
       contexto = mClave[0]
     } else {
       const cuerpo = lineas.filter((l) => {
-        if (/^(?:REPUBLICA|DEPARTAMENTO|EMPRESA DE ACUEDUCTO|NIT|NUIR|SEÑOR|SEÑORA|REFERENCIA:|Rad\.|No\.|FECHA:)/i.test(l)) return false
+        if (/^(?:REPUBLICA|DEPARTAMENTO|EMPRESA DE ACUEDUCTO|NIT|NUIR|SEÑOR|SEÑORA|REFERENCIA:|Rad\.|Radicad[oa]|Sticker|Remitente|Peticionario|Solicitante|Destinatari|Folios?|Anexos?|No\.|FECHA|Hora|USUARIO|FUNCIONARIO)/i.test(l)) return false
         if (/^(?:San Gil|Pinchote),/i.test(l)) return false
-        if (/^[\s_.\-=*]+$/.test(l)) return false
+        // Líneas propias de un sello: fecha corta o con mes, y hora "4:06 PM"
+        if (/^[0-9OolI]{1,2}[\/\-][0-9OolA-Za-z]{1,4}[\/\-][0-9OolI]{4}\s*(?:[0-9]{1,2}:[0-9]{2}\s*(?:[AP]\.?M\.?)?)?\s*$/i.test(l)) return false
+        if (/^[0-9]{1,2}:[0-9]{2}\s*(?:[AP]\.?M\.?)?$/i.test(l)) return false
+        if (/^[0-9OolI]{1,2}[ \t]+de[ \t]+[a-záéíóú]+[ \t]+de[ \t]+[0-9OolI]{4}\s*$/i.test(l)) return false
+        if (/^[\s_.\-=*|I:]+$/.test(l)) return false
         // Un sello de una palabra ("RADICADO", "PETICION") no es párrafo
         if ((l.match(/\S+/g) || []).length < 2) return false
         if (l.length < 15 && !/[a-záéíóú]/i.test(l)) return false

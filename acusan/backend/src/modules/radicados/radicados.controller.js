@@ -109,6 +109,7 @@ export const RadicadosController = {
   /**
    * Recibe el texto extraído del PDF (OCR hecho en el navegador) y devuelve
    * los campos institucionales que se logran leer con certeza.
+   * ?debug=1 → devuelve también el texto OCR recibido para diagnóstico.
    */
   async extraerCampos(req, res) {
     try {
@@ -117,7 +118,16 @@ export const RadicadosController = {
         return res.status(400).json({ success: false, message: 'El campo texto es obligatorio' })
       }
       const campos = RadicadosService.extraerCampos(texto)
-      res.json({ success: true, data: campos })
+      const respuesta = { success: true, data: campos }
+      // Modo diagnóstico: muestra el texto OCR recibido y los campos extraídos
+      if (req.query.debug === '1') {
+        respuesta._debug = {
+          textoOCR: texto,
+          lineas: texto.split(/\r?\n/).filter(Boolean).length,
+          caracteres: texto.length
+        }
+      }
+      res.json(respuesta)
     } catch (error) {
       responderError(res, error, 'extraer campos de')
     }

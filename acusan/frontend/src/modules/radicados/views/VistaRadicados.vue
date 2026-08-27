@@ -138,7 +138,29 @@
           </template>
         </div>
 
+        <!-- Indicador de compresión del documento -->
+        <div v-if="compresionEstado" class="compresion-status" :class="'compresion-' + compresionEstado">
+          <template v-if="compresionEstado === 'comprimiendo'">
+            <div class="compresion-titulo"><span class="lectura-spinner"></span> Optimizando peso del documento…</div>
+            <p class="compresion-etapa">{{ compresionEtapa }}</p>
+            <div class="lectura-barra">
+              <div class="lectura-barra-fill compresion-fill" :style="{ width: Math.round(compresionProgreso * 100) + '%' }"></div>
+            </div>
+          </template>
+          <template v-else-if="compresionEstado === 'listo' && compresionMetricas">
+            <div class="compresion-titulo" v-if="compresionMetricas.comprimido">
+              🗜️ Documento optimizado — de <strong>{{ compresionMetricas.textoOrig }}</strong>
+              a <strong>{{ compresionMetricas.textoFinal }}</strong>
+              <span class="compresion-badge">-{{ compresionMetricas.ahorro }}%</span>
+            </div>
+            <div class="compresion-titulo compresion-ok" v-else>
+              ✅ Documento listo — {{ compresionMetricas.textoFinal }} (no requirió compresión)
+            </div>
+          </template>
+        </div>
+
       </div>
+
 
       <!-- ── COLUMNA DERECHA: Formulario de Registro ── -->
       <div class="card-panel form-panel">
@@ -750,6 +772,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
 import ocrRadicados from '../services/ocrRadicados.js'
+import compressorRadicados from '../services/compressorRadicados.js'
 import authService from '../../auth/services/authService.js'
 
 // Estado
@@ -767,6 +790,13 @@ const lecturaEtapa = ref('')
 const lecturaProgreso = ref(0)
 const lecturaError = ref('')
 const resumenLectura = ref(null) // { metodo, leidos: [], faltantes: [] }
+
+// Compresión del documento antes de guardar
+const compresionEstado = ref(null)  // null | 'comprimiendo' | 'listo'
+const compresionEtapa = ref('')
+const compresionProgreso = ref(0)
+const compresionMetricas = ref(null) // { textoOrig, textoFinal, ahorro, comprimido }
+
 let timerAutoRefresh = null
 
 const filtroBusqueda = ref('')
@@ -923,47 +953,71 @@ const proximosAVencer = computed(() => {
   }).sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento))
 })
 
-// OCR & PDF Upload — seleccionar → previsualizar → lectura automática
+// OCR & PDF Upload — seleccionar → comprimir → previsualizar → lectura automática
 const onFileSelected = async (event) => {
   const file = event.target.files[0]
   if (!file) return
   // Reset del input: sin esto, re-seleccionar el MISMO archivo no dispara change
   event.target.value = ''
 
-  // Revocar la URL anterior: sin esto, cada re-selección fuga un blob en RAM
+  // Revocar la URL anterior para no fugar blobs en RAM
   if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(pdfPreviewUrl.value)
   }
+  // Preview inmediato con el archivo original (fluido visualmente)
   pdfPreviewUrl.value = URL.createObjectURL(file)
   form.archivoNombre = file.name
 
-  // Aviso temprano: documentos muy pesados pueden exceder el límite de la nube
-  if (file.size > 4 * 1024 * 1024) {
-    mostrarAlertaBootstrap('Documento Pesado', 'El archivo supera 4 MB y podría no guardarse en la nube. Considere comprimirlo antes de radicar.', 'warning')
-  }
-
-  // Convertir a base64 para almacenar el documento PDF original en la BD.
-  // Se limpia ANTES de leer: si la lectura falla, jamás se guardaría el
-  // documento ANTERIOR bajo el nombre del nuevo.
+  // Limpiar estados previos
   form.archivoBase64 = ''
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    form.archivoBase64 = e.target.result
-  }
-  reader.onerror = () => {
-    form.archivoBase64 = ''
-    mostrarAlertaBootstrap('Documento no legible', 'No fue posible leer el archivo para adjuntarlo. Puede registrar los campos manualmente.', 'warning')
-  }
-  reader.readAsDataURL(file)
-
-  // Documento nuevo, formulario desde cero: los datos del documento anterior
-  // (o lo tecleado para él) no pueden terminar guardados con este documento.
+  compresionEstado.value = null
+  compresionMetricas.value = null
   tokenLectura++
   for (const [campo] of CAMPOS_LEIBLES) form[campo] = ''
   form.dependencia = DEPENDENCIA_POR_DEFECTO
   form.diasParaVencer = 10
 
-  // El documento se lee solo y los campos se llenan con lo que ahí aparece
+  // ── Comprimir y leer en paralelo ───────────────────────────────────────
+  // El OCR trabaja sobre el archivo ORIGINAL (máxima calidad para el texto).
+  // La compresión produce el Base64 que se guarda en MongoDB (menor peso).
+  // Ambos procesos son independientes y pueden correr sin bloquearse.
+  const tokenActual = tokenLectura
+
+  // Compresión en paralelo (no bloquea el OCR)
+  const comprimir = async () => {
+    try {
+      compresionEstado.value = 'comprimiendo'
+      const resultado = await compressorRadicados.comprimir(file, (etapa, p) => {
+        if (tokenLectura !== tokenActual) return
+        compresionEtapa.value = etapa
+        compresionProgreso.value = p
+      })
+      if (tokenLectura !== tokenActual) return
+      form.archivoBase64 = resultado.dataUrl
+      form.archivoNombre = resultado.nombre
+      compresionMetricas.value = resultado.metricas
+      compresionEstado.value = 'listo'
+    } catch (err) {
+      if (tokenLectura !== tokenActual) return
+      // Si la compresión falla, guardar el original sin comprimir
+      console.warn('Compresión fallida, usando original:', err.message)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        if (tokenLectura !== tokenActual) return
+        form.archivoBase64 = e.target.result
+        compresionEstado.value = 'listo'
+      }
+      reader.onerror = () => {
+        form.archivoBase64 = ''
+        compresionEstado.value = null
+        mostrarAlertaBootstrap('Documento no legible', 'No fue posible leer el archivo.', 'warning')
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // Lanzar compresión y OCR en paralelo
+  comprimir()
   leerDocumento(file)
 }
 
@@ -1506,6 +1560,60 @@ const getBadgeBootstrap = (rad) => {
 @keyframes lectura-girar {
   to { transform: rotate(360deg); }
 }
+
+/* Indicador de compresión del documento */
+.compresion-status {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  border: 1px solid #e0f2fe;
+  background: #f0f9ff;
+}
+
+.compresion-comprimiendo {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.compresion-listo {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+
+.compresion-titulo {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #0369a1;
+  flex-wrap: wrap;
+}
+
+.compresion-listo .compresion-titulo { color: #065f46; }
+.compresion-ok { color: #065f46 !important; }
+
+.compresion-etapa {
+  margin: 0.2rem 0 0.3rem;
+  color: #64748b;
+  font-size: 0.73rem;
+}
+
+.compresion-fill {
+  background: linear-gradient(90deg, #0ea5e9, #0284c7) !important;
+}
+
+.compresion-badge {
+  display: inline-block;
+  background: #059669;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+
 
 /* Visor de documento dentro del modal de detalle del radicado (patrón Permisos) */
 .modal-pdf-vista {
