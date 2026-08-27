@@ -3,8 +3,9 @@
  * ORQUESTADOR DE SINCRONIZACIÓN GLOBAL — ACUASAN E.S.P.
  * ============================================================================
  * Publica en la base de datos TODOS los registros guardados localmente sin
- * conexión (radicados, permisos, PQR y horas extras), sin esperar a que el
- * usuario abra la vista de cada módulo.
+ * conexión (permisos, PQR y horas extras), sin esperar a que el usuario abra
+ * la vista de cada módulo. Radicados quedó fuera: su módulo se rehace desde
+ * cero con CRUD directo a la base de datos, sin cola offline.
  *
  * Se dispara:
  *   - Al arrancar la app (si hay sesión)
@@ -16,19 +17,17 @@
  * ============================================================================
  */
 import authService from '../modules/auth/services/authService.js'
-import radicadosService from '../modules/radicados/services/radicadosService.js'
 import permisosService from '../modules/permisos/services/permisosService.js'
 import pqrService from '../modules/pqr/services/pqrService.js'
 import horasExtrasService from '../modules/horas-extras/services/horasExtrasService.js'
 import notificacionService from './notificacionService.js'
 
-const NOMBRE_LOCK = 'acuasan-sync-global'
+const NOMBRE_LOCK = 'acuusan-sync-global'
 
 let _enCurso = false
 
 const ejecutar = async () => {
   const resultados = await Promise.allSettled([
-    radicadosService.sincronizarPendientes(),
     permisosService.sincronizarPendientes(),
     pqrService.sincronizarPendientes(),
     horasExtrasService.sincronizarPendientes()

@@ -6,7 +6,7 @@
         <div class="title-icon">📊</div>
         <div>
           <h2>Control y Gestión de Radicados</h2>
-          <p class="subtitle">Módulo oficial de registro documental, visor OCR y control de vencimientos — Acuasan E.S.P.</p>
+          <p class="subtitle">Módulo oficial de registro documental y control de vencimientos — Acuasan E.S.P.</p>
         </div>
       </div>
       <div class="header-actions d-flex align-items-center gap-2">
@@ -97,11 +97,11 @@
         <div class="card-header flex-header">
           <div>
             <h3>📄 Visor de Documento PDF</h3>
-            <p>Carga el PDF para extraer los campos con OCR automáticamente</p>
+            <p>Se previsualiza y se lee automáticamente para llenar el formulario</p>
           </div>
           <input type="file" ref="fileInput" accept="application/pdf,image/*" style="display:none" @change="onFileSelected">
-          <button type="button" class="btn btn-primary btn-sm" @click="$refs.fileInput.click()" :disabled="cargandoOcr">
-            <span>{{ cargandoOcr ? '⏳ Procesando OCR...' : '📂 Cargar PDF / Archivo' }}</span>
+          <button type="button" class="btn btn-primary btn-sm" @click="$refs.fileInput.click()">
+            <span>📂 Cargar PDF / Archivo</span>
           </button>
         </div>
 
@@ -109,44 +109,42 @@
           <div v-if="!pdfPreviewUrl" class="pdf-empty-state">
             <div class="pdf-big-icon">📄</div>
             <h4>Sin documento cargado</h4>
-            <p>Haz clic en <strong>Cargar PDF / Archivo</strong> para previsualizar y extraer campos automáticamente.</p>
+            <p>Haz clic en <strong>Cargar PDF / Archivo</strong>: el documento se previsualiza aquí y sus datos se leen solos.</p>
           </div>
           <iframe v-else :src="pdfPreviewUrl" class="pdf-frame"></iframe>
         </div>
 
-        <!-- Banner de estado de OCR (Bootstrap Alert) -->
-        <div 
-          v-if="ocrMensaje" 
-          :class="['alert', ocrError ? 'alert-danger' : 'alert-success', 'alert-dismissible', 'fade', 'show', 'mt-3', 'mb-0']" 
-          role="alert"
-        >
-          <div class="d-flex align-items-center">
-            <span class="me-2 fs-5">{{ ocrError ? '⚠️' : '✅' }}</span>
-            <div class="fw-semibold">{{ ocrMensaje }}</div>
-          </div>
-          <button type="button" class="btn-close" @click="ocrMensaje = ''" aria-label="Close"></button>
+        <!-- Estado de la lectura automática del documento -->
+        <div v-if="lecturaEstado" class="lectura-status" :class="'lectura-' + lecturaEstado">
+          <template v-if="lecturaEstado === 'leyendo'">
+            <div class="lectura-titulo"><span class="lectura-spinner"></span> Leyendo el documento…</div>
+            <p class="lectura-etapa">{{ lecturaEtapa }}</p>
+            <div class="lectura-barra">
+              <div class="lectura-barra-fill" :style="{ width: Math.round(lecturaProgreso * 100) + '%' }"></div>
+            </div>
+          </template>
+          <template v-else-if="lecturaEstado === 'exito' && resumenLectura">
+            <div class="lectura-titulo">✅ Documento leído — {{ resumenLectura.metodo }}</div>
+            <p v-if="resumenLectura.leidos.length" class="lectura-detalle">
+              <strong>Campos llenados automáticamente:</strong> {{ resumenLectura.leidos.join(' · ') }}
+            </p>
+            <p v-if="resumenLectura.faltantes.length" class="lectura-detalle lectura-faltan">
+              <strong>Sin dato en el documento:</strong> {{ resumenLectura.faltantes.join(' · ') }} — complételos manualmente.
+            </p>
+          </template>
+          <template v-else-if="lecturaEstado === 'error'">
+            <div class="lectura-titulo">⚠️ La lectura automática no pudo completarse</div>
+            <p class="lectura-detalle">{{ lecturaError }} El documento queda adjunto igual: llene los campos manualmente y guarde.</p>
+          </template>
         </div>
 
-        <!-- Resumen de extracción de campos -->
-        <div v-if="resumenOcr" class="ocr-resumen-box mt-3">
-          <div class="resumen-title">
-            <span>📋 Lectura Inteligente de Documento</span>
-            <span class="badge bg-success">{{ resumenOcr.metodo }}</span>
-          </div>
-          <div class="resumen-grid">
-            <div><label>N° Radicado PDF:</label> <span>{{ form.numeroRadicadoPdf || '—' }}</span></div>
-            <div><label>Remitente:</label> <span>{{ form.peticionario || '—' }}</span></div>
-            <div><label>Destinatario:</label> <span>{{ form.destinatario || '—' }}</span></div>
-            <div><label>Asunto:</label> <span>{{ form.asunto || '—' }}</span></div>
-          </div>
-        </div>
       </div>
 
       <!-- ── COLUMNA DERECHA: Formulario de Registro ── -->
       <div class="card-panel form-panel">
         <div class="card-header">
           <h3>📝 Registrar Radicado</h3>
-          <p>Diligencie los campos manualmente o mediante la extracción del PDF</p>
+          <p>Diligencie los campos del radicado</p>
         </div>
 
         <form @submit.prevent="guardarRadicado" class="radicado-form">
@@ -212,11 +210,11 @@
             <div class="form-group">
               <label>Días para Vencer <span class="req">*</span></label>
               <select v-model="form.diasParaVencer" class="form-select form-select-sm" required>
-                <option value="3">🔴 3 Días (Crítico)</option>
-                <option value="5">🟠 5 Días (Urgente)</option>
-                <option value="10">🟡 10 Días (Atención)</option>
-                <option value="15">🔵 15 Días (Normal)</option>
-                <option value="30">🟢 30 Días (Holgado)</option>
+                <option :value="3">🔴 3 Días (Crítico)</option>
+                <option :value="5">🟠 5 Días (Urgente)</option>
+                <option :value="10">🟡 10 Días (Atención)</option>
+                <option :value="15">🔵 15 Días (Normal)</option>
+                <option :value="30">🟢 30 Días (Holgado)</option>
               </select>
             </div>
           </div>
@@ -276,22 +274,6 @@
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
             <span>Actualizar</span>
-          </button>
-
-          <!-- RESCATE: radicados atrapados en este navegador que Gerencia no ve -->
-          <button
-            v-if="radicadosAtrapados > 0"
-            class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 fw-semibold"
-            @click="reintentarSincronizacion"
-            :disabled="reintentandoSync"
-            title="Radicados guardados solo en este navegador que no han podido subirse a la base de datos. Reintentar ahora."
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" :class="{ 'spin-animate': reintentandoSync }">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-              <line x1="12" y1="9" x2="12" y2="13"></line>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-            <span>{{ reintentandoSync ? 'Sincronizando…' : `Reintentar sincronización (${radicadosAtrapados})` }}</span>
           </button>
         </div>
       </div>
@@ -482,16 +464,6 @@
               <td>
                 <div class="radicado-code-box">
                   <span class="radicado-badge">{{ rad.numeroRadicado }}</span>
-                  <span
-                    v-if="rad.sincronizado === false"
-                    :class="['badge ms-1', rad.errorSync ? 'bg-danger text-white' : 'bg-warning text-dark']"
-                    style="font-size: 0.6rem;"
-                    :title="rad.errorSync
-                      ? ('Error del servidor al subir este radicado: ' + (rad.ultimoErrorSync || 'desconocido') + '. Use «Reintentar sincronización» o elimínelo y regístrelo de nuevo.')
-                      : 'Guardado SOLO en este navegador: aún no está en la base de datos y Gerencia no lo ve. Se subirá automáticamente al reconectar.'"
-                  >
-                    {{ rad.errorSync ? '⚠ Error de subida' : '⏳ Pendiente de subir' }}
-                  </span>
                   <span v-if="rad.numeroRadicadoPdf" class="pdf-tag" :title="'N° Documento: ' + rad.numeroRadicadoPdf">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                     PDF: {{ rad.numeroRadicadoPdf }}
@@ -744,24 +716,20 @@
               <div v-else class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
                 <div style="font-size: 2rem;">📄</div>
                 <p class="text-white-50 mb-2" style="font-size: 0.8rem;">
-                  {{ esRadicadoLocalPendiente(modalRadicado)
-                    ? 'Radicado local pendiente de sincronizar: su documento no quedó guardado en este navegador.'
-                    : 'Este radicado no tiene documento adjunto en la base de datos.' }}
+                  Este radicado no tiene documento adjunto en la base de datos.
                 </p>
-                <template v-if="!esRadicadoLocalPendiente(modalRadicado)">
-                  <input ref="inputAdjuntarArchivo" type="file" accept=".pdf,image/*" class="d-none" @change="onAdjuntarArchivo" />
-                  <button
-                    class="btn btn-warning btn-sm px-3 fw-bold"
-                    style="font-size: 0.72rem;"
-                    :disabled="adjuntandoDoc"
-                    @click="inputAdjuntarArchivo && inputAdjuntarArchivo.click()"
-                  >
-                    {{ adjuntandoDoc ? '⏳ Adjuntando documento...' : '📎 Adjuntar documento original' }}
-                  </button>
-                  <small class="text-white-50 mt-1" style="font-size: 0.62rem;">
-                    Seleccione el PDF o imagen escaneada: quedará guardado en la base de datos.
-                  </small>
-                </template>
+                <input ref="inputAdjuntarArchivo" type="file" accept=".pdf,image/*" class="d-none" @change="onAdjuntarArchivo" />
+                <button
+                  class="btn btn-warning btn-sm px-3 fw-bold"
+                  style="font-size: 0.72rem;"
+                  :disabled="adjuntandoDoc"
+                  @click="inputAdjuntarArchivo && inputAdjuntarArchivo.click()"
+                >
+                  {{ adjuntandoDoc ? '⏳ Adjuntando documento...' : '📎 Adjuntar documento original' }}
+                </button>
+                <small class="text-white-50 mt-1" style="font-size: 0.62rem;">
+                  Seleccione el PDF o imagen escaneada: quedará guardado en la base de datos.
+                </small>
               </div>
             </div>
           </div>
@@ -781,21 +749,24 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
+import ocrRadicados from '../services/ocrRadicados.js'
 import authService from '../../auth/services/authService.js'
-import adjuntosOffline from '../../../services/adjuntosOffline.js'
 
 // Estado
 const listaRadicados = ref([])
 const cargandoTabla = ref(false)
 const guardando = ref(false)
-const cargandoOcr = ref(false)
 const verHistorial = ref(true)
 const mostrarAlertas = ref(false)
 const modalRadicado = ref(null)
 const pdfPreviewUrl = ref(null)
-const ocrMensaje = ref('')
-const ocrError = ref(false)
-const resumenOcr = ref(null)
+
+// Lectura automática del documento seleccionado
+const lecturaEstado = ref(null) // null | 'leyendo' | 'exito' | 'error'
+const lecturaEtapa = ref('')
+const lecturaProgreso = ref(0)
+const lecturaError = ref('')
+const resumenLectura = ref(null) // { metodo, leidos: [], faltantes: [] }
 let timerAutoRefresh = null
 
 const filtroBusqueda = ref('')
@@ -839,12 +810,14 @@ const mostrarAlertaBootstrap = (titulo, mensaje, tipo = 'success') => {
 
 const usuarioActual = authService.getUsuarioActual()
 
+const DEPENDENCIA_POR_DEFECTO = 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.'
+
 const form = reactive({
   numeroRadicadoPdf: '',
   fechaDocumento: '',
   lugarFecha: '',
   peticionario: '',
-  dependencia: 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.',
+  dependencia: DEPENDENCIA_POR_DEFECTO,
   destinatario: '',
   asunto: '',
   referencia: '',
@@ -855,8 +828,6 @@ const form = reactive({
   archivoBase64: ''
 })
 
-
-const excelUrl = computed(() => radicadosService.getDescargarExcelUrl())
 
 const CargarLista = async (silencioso = false) => {
   try {
@@ -873,78 +844,18 @@ const CargarLista = async (silencioso = false) => {
   }
 }
 
-const onStorageChange = (e) => {
-  if (e.key === 'acuasan_radicados_v2' || !e.key) {
-    CargarLista(true)
-  }
-}
-
-// Radicados atrapados en ESTE navegador (pendientes o con error de subida):
-// existen solo aquí — Gerencia no los ve. Botón de rescate visible al contador.
-const radicadosAtrapados = computed(() =>
-  (listaRadicados.value || []).filter(esRadicadoLocalPendiente).length
-)
-const reintentandoSync = ref(false)
-const reintentarSincronizacion = async () => {
-  if (reintentandoSync.value) return
-  reintentandoSync.value = true
-  try {
-    const { publicados, quedan, fallados } = await radicadosService.reintentarFallidos()
-    if (publicados > 0) {
-      mostrarAlertaBootstrap(
-        'Sincronización Nube',
-        `${publicados} radicado(s) se publicaron correctamente en la base de datos. Gerencia ya puede verlos.`,
-        'success'
-      )
-    }
-    if (quedan > 0) {
-      const detalle = (fallados || [])
-        .slice(0, 3)
-        .map((f) => `${f.numeroRadicado}: ${f.error}`)
-        .join(' | ')
-      mostrarAlertaBootstrap(
-        'Radicados que aún no suben',
-        `${quedan} radicado(s) siguen sin poder subirse. ${detalle ? `Motivo del servidor — ${detalle}. ` : ''}Si el motivo es un dato inválido, elimine ese radicado de la lista y regístrelo de nuevo; si es de conexión, verifique el servidor y vuelva a intentar.`,
-        'warning'
-      )
-    } else if (publicados === 0) {
-      mostrarAlertaBootstrap('Sincronización Nube', 'No había radicados pendientes por subir.', 'info')
-    }
-  } catch (e) {
-    mostrarAlertaBootstrap('Error de sincronización', e.message || 'No se pudo completar el reintento.', 'danger')
-  } finally {
-    reintentandoSync.value = false
-    CargarLista(true)
-  }
-}
 
 let desuscribirCambios = null
 
 onMounted(async () => {
-  // Reintentar publicar radicados guardados sin conexión (pendientes de sincronización)
-  try {
-    const sincronizados = await radicadosService.sincronizarPendientes()
-    if (sincronizados > 0) {
-      mostrarAlertaBootstrap('Sincronización Nube', `${sincronizados} radicado(s) pendiente(s) se publicaron correctamente en la base de datos.`, 'info')
-    }
-  } catch (e) { /* sin conexión */ }
   CargarLista()
   
-  // Suscripción a eventos en tiempo real (BroadcastChannel + CustomEvents + Storage)
+  // Aviso inmediato dentro de la pestaña cuando otra vista crea/edita/elimina;
+  // el sondeo cada 5s cubre el resto (otras pestañas y otros equipos)
   desuscribirCambios = radicadosService.suscribirCambios(() => {
     CargarLista(true)
   })
 
-  // Aviso honesto: si el intento dejó radicados sin subir, el usuario debe
-  // saberlo (antes quedaban atrapados en silencio hasta el próximo montaje)
-  const atrapados = (listaRadicados.value || []).filter(esRadicadoLocalPendiente).length
-  if (atrapados > 0) {
-    mostrarAlertaBootstrap(
-      'Radicados sin sincronizar',
-      `${atrapados} radicado(s) local(es) no han podido subirse a la base de datos — Gerencia NO los ve. Use el botón «Reintentar sincronización», verifique la conexión o cierre y reinicie sesión.`,
-      'warning'
-    )
-  }
   // Auto-actualización periódica silenciosa (respaldo)
   timerAutoRefresh = setInterval(() => {
     CargarLista(true)
@@ -1012,10 +923,12 @@ const proximosAVencer = computed(() => {
   }).sort((a, b) => new Date(a.fechaVencimiento) - new Date(b.fechaVencimiento))
 })
 
-// OCR & PDF Upload
+// OCR & PDF Upload — seleccionar → previsualizar → lectura automática
 const onFileSelected = async (event) => {
   const file = event.target.files[0]
   if (!file) return
+  // Reset del input: sin esto, re-seleccionar el MISMO archivo no dispara change
+  event.target.value = ''
 
   // Revocar la URL anterior: sin esto, cada re-selección fuga un blob en RAM
   if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
@@ -1029,45 +942,96 @@ const onFileSelected = async (event) => {
     mostrarAlertaBootstrap('Documento Pesado', 'El archivo supera 4 MB y podría no guardarse en la nube. Considere comprimirlo antes de radicar.', 'warning')
   }
 
-  // Convertir a base64 para almacenar el documento PDF original en la BD
+  // Convertir a base64 para almacenar el documento PDF original en la BD.
+  // Se limpia ANTES de leer: si la lectura falla, jamás se guardaría el
+  // documento ANTERIOR bajo el nombre del nuevo.
+  form.archivoBase64 = ''
   const reader = new FileReader()
   reader.onload = (e) => {
     form.archivoBase64 = e.target.result
   }
+  reader.onerror = () => {
+    form.archivoBase64 = ''
+    mostrarAlertaBootstrap('Documento no legible', 'No fue posible leer el archivo para adjuntarlo. Puede registrar los campos manualmente.', 'warning')
+  }
   reader.readAsDataURL(file)
 
+  // Documento nuevo, formulario desde cero: los datos del documento anterior
+  // (o lo tecleado para él) no pueden terminar guardados con este documento.
+  tokenLectura++
+  for (const [campo] of CAMPOS_LEIBLES) form[campo] = ''
+  form.dependencia = DEPENDENCIA_POR_DEFECTO
+  form.diasParaVencer = 10
 
+  // El documento se lee solo y los campos se llenan con lo que ahí aparece
+  leerDocumento(file)
+}
+
+// ── Lectura automática del documento (OCR en el navegador) ───────────────────
+
+const CAMPOS_LEIBLES = [
+  ['numeroRadicadoPdf', 'N° radicado del sello'],
+  ['fechaDocumento', 'fecha del sello'],
+  ['lugarFecha', 'lugar y fecha de la carta'],
+  ['peticionario', 'peticionario'],
+  ['dependencia', 'empresa destinataria'],
+  ['destinatario', 'destinatario'],
+  ['asunto', 'asunto'],
+  ['referencia', 'referencia'],
+  ['contexto', 'contexto']
+]
+
+// Generación de lectura: si el usuario cambia de documento o guarda mientras
+// una lectura lenta sigue en vuelo, su resultado tardío se descarta (no puede
+// pisar los campos del documento que ahora muestra la previsualización).
+let tokenLectura = 0
+
+const leerDocumento = async (file) => {
+  const token = ++tokenLectura
+  lecturaEstado.value = 'leyendo'
+  lecturaEtapa.value = 'Comenzando lectura del documento…'
+  lecturaProgreso.value = 0
+  lecturaError.value = ''
+  resumenLectura.value = null
   try {
-    cargandoOcr.value = true
-    ocrError.value = false
-    resumenOcr.value = null
-
-    const resultado = await radicadosService.extraerPdf(file, (mensaje) => {
-      ocrMensaje.value = `🔍 ${mensaje}`
+    const { texto, metodo } = await ocrRadicados.extraerTexto(file, (etapa, progreso) => {
+      if (token !== tokenLectura) return
+      lecturaEtapa.value = etapa
+      lecturaProgreso.value = progreso
     })
-
-    form.numeroRadicadoPdf = resultado.numeroRadicadoPdf || form.numeroRadicadoPdf
-    form.fechaDocumento = resultado.fechaDocumento || form.fechaDocumento
-    form.lugarFecha = resultado.lugarFecha || form.lugarFecha
-    form.peticionario = resultado.peticionario || form.peticionario
-    form.dependencia = resultado.dependencia || form.dependencia
-    form.destinatario = resultado.destinatario || form.destinatario
-    form.asunto = resultado.asunto || form.asunto
-    form.referencia = resultado.referencia || form.referencia
-    form.contexto = resultado.contexto || form.contexto
-    form.diasParaVencer = resultado.diasParaVencer || 10
-
-    resumenOcr.value = resultado
-    ocrMensaje.value = `Extracción completada exitosamente (${resultado.metodo})`
-    mostrarAlertaBootstrap('Lectura OCR Exitosa', `Se extrajeron los datos del archivo ${file.name}`, 'success')
+    if (token !== tokenLectura) return
+    lecturaEtapa.value = 'Interpretando los datos del documento…'
+    const campos = await radicadosService.extraerCampos(texto)
+    if (token !== tokenLectura) return
+    aplicarCamposExtraidos(campos, metodo)
+    lecturaEstado.value = 'exito'
   } catch (err) {
-    console.error(err)
-    ocrError.value = true
-    ocrMensaje.value = 'No se pudo realizar el OCR automático. Por favor complete los campos manualmente.'
-    mostrarAlertaBootstrap('Aviso OCR', 'Complete los campos manualmente.', 'warning')
-  } finally {
-    cargandoOcr.value = false
+    if (token !== tokenLectura) return
+    console.error('Lectura del radicado:', err)
+    lecturaError.value = err?.message || 'Error desconocido durante la lectura.'
+    lecturaEstado.value = 'error'
   }
+}
+
+// Solo se llenan los campos con dato real del documento: lo que no apareció
+// queda como estaba para que el usuario lo complete (nunca se inventa).
+const aplicarCamposExtraidos = (campos, metodo) => {
+  const leidos = []
+  const faltantes = []
+  for (const [campo, etiqueta] of CAMPOS_LEIBLES) {
+    const valor = (campos[campo] || '').toString().trim()
+    if (valor) {
+      form[campo] = valor
+      leidos.push(etiqueta)
+    } else {
+      faltantes.push(etiqueta)
+    }
+  }
+  const dias = Number(campos.diasParaVencer)
+  if (Number.isFinite(dias) && dias > 0) {
+    form.diasParaVencer = dias
+  }
+  resumenLectura.value = { metodo, leidos, faltantes }
 }
 
 // Guardar
@@ -1076,22 +1040,11 @@ const guardarRadicado = async () => {
     guardando.value = true
     const nuevoRad = await radicadosService.crear(form)
 
-    if (nuevoRad && nuevoRad.origen === 'LOCAL') {
-      const avisoArchivo = nuevoRad.archivoOmitido
-        ? ' ATENCIÓN: el documento adjunto no cupo en el almacenamiento local y NO se guardó; el radicado se publicará sin archivo.'
-        : ''
-      mostrarAlertaBootstrap(
-        'Guardado Local — Pendiente de Sincronización',
-        `Sin conexión con el servidor: el radicado ${nuevoRad.numeroRadicado} se guardó en este equipo y se publicará automáticamente en la nube cuando se restablezca la conexión.${avisoArchivo}`,
-        'warning'
-      )
-    } else {
-      mostrarAlertaBootstrap(
-        'Radicado Publicado en la Base de Datos',
-        `Se guardó exitosamente el radicado ${nuevoRad.numeroRadicado}. Gerencia lo verá al instante en su tablero.`,
-        'success'
-      )
-    }
+    mostrarAlertaBootstrap(
+      'Radicado Publicado en la Base de Datos',
+      `Se guardó exitosamente el radicado ${nuevoRad.numeroRadicado}. Gerencia lo verá al instante en su tablero.`,
+      'success'
+    )
 
     // Reset parcial del formulario
     form.numeroRadicadoPdf = ''
@@ -1105,13 +1058,16 @@ const guardarRadicado = async () => {
     form.archivoBase64 = ''
     form.archivoNombre = null
     form.registradoPor = authService.getUsuarioActual()?.nombre || 'Eliana'
+    lecturaEstado.value = null
+    lecturaEtapa.value = ''
+    lecturaProgreso.value = 0
+    lecturaError.value = ''
+    resumenLectura.value = null
+    tokenLectura++ // anula lecturas en vuelo: el formulario ya se reinició
     if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
       URL.revokeObjectURL(pdfPreviewUrl.value)
     }
     pdfPreviewUrl.value = null
-
-    resumenOcr.value = null
-    ocrMensaje.value = ''
 
     await CargarLista()
   } catch (err) {
@@ -1175,20 +1131,8 @@ const modalPdfMime = ref('')
 // vuelo, la promesa vieja ya no pisa el visor de la nueva (documento equivocado).
 let modalPdfToken = 0
 
-const mimeDesdeDataUrl = (dataUrl) => (String(dataUrl).match(/^data:([^;,]+)/) || [])[1] || ''
 
-// El visor inline acepta data URLs, pero el ancla "Abrir Archivo" (target=_blank)
-// no: los navegadores bloquean la navegación top-level a data:. Se convierte a
-// blob: cuando es posible; si falla, se degrada a la data URL cruda.
-const dataUrlABlobUrl = async (dataUrl) => {
-  try {
-    return URL.createObjectURL(await (await fetch(dataUrl)).blob())
-  } catch (e) {
-    return dataUrl
-  }
-}
-
-// Liberar el blob del visor (el Base64 del caché local no se revoca: no es blob)
+// Liberar el blob del visor
 const liberarModalPdfUrl = () => {
   if (modalPdfUrl.value && modalPdfUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(modalPdfUrl.value)
@@ -1205,34 +1149,13 @@ const abrirModal = async (rad) => {
 
   if (!rad) return
 
-  // Mismo orden de resolución que el visor de Permisos: el flag hasArchivo del
-  // caché NUNCA gatea la consulta — si el documento existe en la BD, se muestra.
+  // Mismo orden de resolución que el visor de Permisos: el documento se pide
+  // al servidor — si existe en la BD, se muestra.
   modalPdfCargando.value = true
   try {
-    // 1) Data URL del propio registro (solo si el caché la conserva)
-    if (typeof rad.archivoBase64 === 'string' && rad.archivoBase64.startsWith('data:')) {
-      const url = await dataUrlABlobUrl(rad.archivoBase64)
-      if (token !== modalPdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
-      modalPdfMime.value = mimeDesdeDataUrl(rad.archivoBase64)
-      modalPdfUrl.value = url
-      return
-    }
 
-    // 2) Adjunto resguardado en IndexedDB (pendiente local cuyo archivo no cupo en localStorage)
-    if (rad.sincronizado === false && rad.archivoEnIndexedDB) {
-      const adj = await adjuntosOffline.obtenerAdjunto(rad.idLocal)
-      if (token !== modalPdfToken) return
-      if (adj && adj.dataUrl) {
-        const url = await dataUrlABlobUrl(adj.dataUrl)
-        if (token !== modalPdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
-        modalPdfMime.value = mimeDesdeDataUrl(adj.dataUrl)
-        modalPdfUrl.value = url
-        return
-      }
-    }
-
-    // 3) Servidor — camino principal para todo radicado con id real
-    if (rad.id && !String(rad.id).startsWith('RAD-LOCAL')) {
+    // Servidor — camino principal para todo radicado con id real
+    if (rad.id) {
       const { url, mime } = await radicadosService.obtenerArchivoRadicado(rad.id)
       if (token !== modalPdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
       modalPdfUrl.value = url
@@ -1240,7 +1163,7 @@ const abrirModal = async (rad) => {
       return
     }
 
-    // 4) Sin documento: 404 real del servidor o provisional local que perdió su adjunto
+    // Sin documento: 404 real del servidor
   } catch (e) {
     if (token !== modalPdfToken) return
     // 404 = sin documento real: queda todo en null para que el template muestre
@@ -1258,13 +1181,10 @@ const cerrarModal = () => {
 }
 
 // ── Reparación: adjuntar el documento original a un radicado ya creado ──
-// Repara registros que llegaron a la BD sin archivo (p. ej. subidos sin
-// conexión cuyo adjunto no cupo en el almacenamiento local del navegador).
+// Repara registros que llegaron a la BD sin archivo.
 const inputAdjuntarArchivo = ref(null)
 const adjuntandoDoc = ref(false)
 
-const esRadicadoLocalPendiente = (rad) =>
-  Boolean(rad) && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
 
 const onAdjuntarArchivo = async (event) => {
   const file = event.target.files[0]
@@ -1519,34 +1439,80 @@ const getBadgeBootstrap = (rad) => {
   border: none;
 }
 
+/* Estado de la lectura automática (OCR) del documento cargado */
+.lectura-status {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.lectura-titulo {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #334155;
+}
+
+.lectura-leyendo .lectura-titulo { color: #1d4ed8; }
+.lectura-exito   { border-color: #bbf7d0; background: #f0fdf4; }
+.lectura-exito   .lectura-titulo { color: #15803d; }
+.lectura-error   { border-color: #fecaca; background: #fef2f2; }
+.lectura-error   .lectura-titulo { color: #b91c1c; }
+
+.lectura-etapa {
+  margin: 0.25rem 0 0.35rem;
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.lectura-barra {
+  height: 6px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.lectura-barra-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  transition: width 0.3s ease;
+}
+
+.lectura-detalle {
+  margin: 0.25rem 0 0;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.lectura-faltan {
+  color: #92400e;
+}
+
+.lectura-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: lectura-girar 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes lectura-girar {
+  to { transform: rotate(360deg); }
+}
+
 /* Visor de documento dentro del modal de detalle del radicado (patrón Permisos) */
 .modal-pdf-vista {
   display: flex;
   flex-direction: column;
 }
 
-.ocr-resumen-box {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
-}
-
-.resumen-title {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #334155;
-  margin-bottom: 0.35rem;
-}
-
-.resumen-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.3rem;
-  font-size: 0.73rem;
-}
 
 /* Formulario */
 .radicado-form {

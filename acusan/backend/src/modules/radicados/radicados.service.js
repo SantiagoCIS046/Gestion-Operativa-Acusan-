@@ -1,714 +1,666 @@
-import moment from "moment";
-import os from "os";
-import path from "path";
-import { fileURLToPath } from "url";
-import { createRequire } from "module";
-import { randomUUID } from "crypto";
-import Tesseract from "tesseract.js";
-import { createObjectCsvWriter } from "csv-writer";
-import prisma from "../../config/prisma.js";
+import prisma from '../../config/prisma.js'
 
-const require = createRequire(import.meta.url);
+/**
+ * ============================================================================
+ * RADICADOS — SERVICE — ACUASAN E.S.P.
+ * ============================================================================
+ * Fuente de verdad de los radicados: numeración, vencimientos y documento
+ * original viven en la base de datos. La extracción de texto del PDF se hace
+ * en el navegador (pdfjs-dist + tesseract.js); aquí solo se parsea ese texto
+ * a los campos institucionales. Regla de oro del producto: el dato sale del
+ * documento o el campo queda vacío — nunca se inventa.
+ * ============================================================================
+ */
 
-// pdf-parse se carga perezosamente: el build que Vercel empaqueta en la
-// función serverless referencia globals de navegador (DOMMatrix) durante su
-// inicialización y mataría el proceso completo si se require al importar el
-// módulo. Cargándolo bajo demanda, un entorno sin DOM degrada a la respuesta
-// vacía honesta (el navegador hace la extracción) en vez de tumbar el API.
-let _pdfParse = null;
-const getPdfParse = () => {
-  if (_pdfParse === null) {
-    const pdfParseModule = require("pdf-parse");
-    _pdfParse =
-      typeof pdfParseModule === "function"
-        ? pdfParseModule
-        : pdfParseModule.default || pdfParseModule;
-  }
-  return _pdfParse;
-};
+// ── Auxiliares de limpieza ───────────────────────────────────────────────────
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Auxiliares OCR & Limpieza
 const limpiar = (str) =>
-  (str || "")
-    .replace(/^[:\s\-]+/, "")
-    .replace(/[\r\n]+/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  (str || '')
+    .replace(/^[:\s-]+/, '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 
-const isBodySentence = (str) => {
-  if (!str) return false;
-  return /^(?:En atenci[oó]n|Una vez|Por medio|De acuerdo|En este sentido|deber[aá]|solicitar|mediante|que la|se evidencia|con el fin|respetuosamente|me permito|para la|jurisdicci[oó]n)/i.test(
+// El OCR de PDF escaneados confunde O/0, l/I/1 y | dentro de los números
+// ("2O2614523O"). La clase de abajo los acepta al capturar y se normalizan
+// enseguida: recuperar el dato real del documento, jamás inventarlo.
+const DIGITO_OCR = '[0-9OolI|]'
+const normalizarDigitos = (s) =>
+  (s || '').replace(/[Oo|]/g, '0').replace(/[lI]/g, '1')
+
+// Frases de cuerpo de carta: NO son nombres de personas ni asuntos (el OCR
+// las confunde con etiquetas "Remitente:" seguidas de prosa). Ojo con
+// "solicitud" (sustantivo legítimo en una referencia): solo se filtran las
+// formas verbales.
+const esFraseDeCuerpo = (str) => {
+  if (!str) return false
+  return /^(?:En atenci[oó]n|Una vez|Por medio|De acuerdo|En este sentido|deber[aá]|solicit(?:o|amos|e|en|ar[aá]?)\b|mediante|que la|se evidencia|con el fin|respetuosamente|me permito|me dirijo|estimad[oa]s?|agradezc|Yo[,\s]|para la|jurisdicci[oó]n)/i.test(
     str.trim()
-  );
-};
-
-// OCR de imágenes directamente con Tesseract.js (sin dependencias nativas ni disco).
-// Los PDF escaneados se procesan en el navegador (pdfjs-dist + tesseract.js)
-// y el texto extraído se envía al endpoint /extraer-campos para su parsing.
-async function extraerTextoImagenConOCR(buffer) {
-  try {
-    const res = await Tesseract.recognize(buffer, "spa");
-    return res?.data?.text || "";
-  } catch (errWorker) {
-    console.warn("⚠️ Error Tesseract OCR:", errWorker.message);
-    return "";
-  }
+  )
 }
 
-const extraerCamposPdf = (texto) => {
-  const resultado = {
-    numeroRadicadoPdf: "",
-    fechaDocumento: "",
-    lugarFecha: "",
-    peticionario: "",
-    dependencia: "",
-    destinatario: "",
-    asunto: "",
-    referencia: "",
-    contexto: "",
-  };
+// Cargos que acompañan al peticionario bajo el saludo "SEÑOR(A):".
+const CARGO_RE = /PRESIDENT[AE]|REPRESENTANTE(?: LEGAL)?|ALCALDES?A?|GERENTE|DIRECTOR[AE]?|SECRETARI[OA]|RECTOR[AE]?|PERSONER[OA]|GOBERNADOR[AE]?|TESORER[OA]|COORDINADOR|CONCEJAL|DIPUTAD|JAC|JUNTA|COMUNAL|VEREDAL/i
 
-  if (!texto || texto.trim().length === 0) return resultado;
+// ¿Es la línea de saludo "SEÑOR(A):"? El OCR tuerce la Ñ y los separadores
+// ("SE ORA:", "SENORA", "SR."), así que se normaliza (sin acentos, sin
+// espacios, mayúsculas) antes de comparar. Solo cuenta si es etiqueta corta
+// con puntuación final, o la palabra pelada: el nombre va en las líneas de abajo.
+const esLineaSaludo = (l) => {
+  const n = l.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '').toUpperCase()
+  if (n.length > 20) return false
+  if (!/^(?:SENORA|SEORA|SENOR|SEOR|SRA|SR|SENORES|SEORES)/.test(n)) return false
+  return /[.:(]$/.test(n) || n.length <= 7
+}
 
-  const rawLines = texto
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+const MUNICIPIOS_ZONA = 'San Gil|Pinchote|Socorro|Bucaramanga|Bogot[aá]|Charal[aá]|Curit[ií]|Oiba|Barichara|Villanueva|Piedecuesta|Floridablanca|Gir[oó]n'
 
-  // 1. NÚMERO DE RADICADO PDF
-  const mRad =
-    texto.match(/(?:Rad(?:icado)?|No\.?|RAD)\s*[:.-]?\s*([0-9]{7,12})/i) ||
-    texto.match(/\b(2[610]\d{7,9})\b/) ||
-    texto.match(/\b([0-9]{8,12})\b/);
-  if (mRad) resultado.numeroRadicadoPdf = mRad[1].trim();
+// Campos que viajan al cliente: el documento Base64 jamás viaja en listados
+// ni en respuestas de creación (pesa MBs; se sirve por /:id/archivo).
+const SELECT_PUBLICO = {
+  id: true,
+  numeroRadicado: true,
+  fechaRadicacion: true,
+  peticionario: true,
+  dependencia: true,
+  destinatario: true,
+  asunto: true,
+  referencia: true,
+  fechaDocumento: true,
+  lugarFecha: true,
+  numeroRadicadoPdf: true,
+  registradoPor: true,
+  contexto: true,
+  estado: true,
+  fechaVencimiento: true,
+  archivoNombre: true,
+  createdAt: true,
+  updatedAt: true
+}
 
-  // 2. FECHA / HORA SELLO
-  const mFechaSello = texto.match(
-    /(?:FECHA|Fecha)\s*[:.-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i
-  );
-  const mFechaHora = texto.match(
-    /(\d{1,2}\/[a-zA-ZáéíóúÁÉÍÓÚ]{3,4}\/\d{4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)?)/i
-  );
-  const mFechaStd = texto.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i);
+// Documento original: solo data URL de PDF o imagen, con tope (~10 MB de
+// binario) que deja margen holgado bajo el límite de 16 MB por documento BSON.
+const MAX_BASE64 = 14000000
+const PATRON_DATA_URL = /^data:(application\/pdf|image\/(?:png|jpe?g|webp|gif));base64,/i
 
-  if (mFechaSello) resultado.fechaDocumento = mFechaSello[1].trim();
-  else if (mFechaHora) resultado.fechaDocumento = mFechaHora[1].trim();
-  else if (mFechaStd) resultado.fechaDocumento = mFechaStd[1].trim();
-
-  // 3. LUGAR Y FECHA CARTA
-  const mLugarF =
-    texto.match(
-      /((?:San Gil|Pinchote|Socorro|Bucaramanga|Bogot[aá])[^,\n\r]*,\s*\d{1,2}\s+(?:de\s+)?[a-zA-ZáéíóúÁÉÍÓÚ]+\s+(?:de\s+)?\d{4})/i
-    ) ||
-    texto.match(
-      /([A-ZÁÉÍÓÚ][a-záéíóú]+,\s*\d{1,2}\s+de\s+[a-zA-Z]+\s+de\s+\d{4})/i
-    );
-  if (mLugarF) resultado.lugarFecha = mLugarF[1].trim();
-
-  // 4. EMPRESA DESTINATARIA
-  if (/ACUASAN/i.test(texto) || /ACUEDUCTO/i.test(texto)) {
-    resultado.dependencia =
-      "EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.";
-  } else {
-    const mEmp = texto.match(/Se[ñn]ores\s*:\s*([^\n\r]+)/i);
-    if (mEmp) resultado.dependencia = mEmp[1].trim();
-  }
-
-  // 5. PETICIONARIO & DESTINATARIO
-  const mRem = texto.match(/Remitente\s*[:：]?\s*([^\n\r]+)/i);
-  const mDest = texto.match(/Destinatario\s*[:：]?\s*([^\n\r]+)/i);
-
-  if (mRem && !isBodySentence(mRem[1])) {
-    resultado.peticionario = mRem[1].replace(/-\s*r\/l.*$/i, "").trim();
-  }
-  if (mDest && !isBodySentence(mDest[1])) {
-    resultado.destinatario = mDest[1].trim();
-  }
-
-  if (!resultado.peticionario || isBodySentence(resultado.peticionario)) {
-    for (let i = 0; i < rawLines.length; i++) {
-      const line = rawLines[i];
-      if (/^(?:SEÑORA|SEÑOR|SR|SRA)\s*:/i.test(line)) {
-        let nombre = "";
-        let cargo = "";
-        for (let j = i + 1; j < Math.min(i + 4, rawLines.length); j++) {
-          const nextL = rawLines[j];
-          if (/REFERENCIA|ASUNTO|FECHA|San Gil|Pinchote/i.test(nextL)) break;
-          if (
-            nextL.length > 3 &&
-            !/^\d+$/.test(nextL) &&
-            !/@/.test(nextL) &&
-            !/Celular/i.test(nextL)
-          ) {
-            if (!nombre && /^[A-ZÁÉÍÓÚ\s]+$/i.test(nextL) && nextL.length > 4) {
-              nombre = nextL;
-            } else if (
-              nombre &&
-              /PRESIDENTA|REPRESENTANTE|ALCALDE|GERENTE|JAC/i.test(nextL)
-            ) {
-              cargo = nextL;
-            }
-          }
-        }
-        if (nombre && !isBodySentence(nombre)) {
-          resultado.peticionario = cargo ? `${nombre} - ${cargo}` : nombre;
-          break;
-        }
-      }
-    }
-  }
-
-  if (!resultado.peticionario || isBodySentence(resultado.peticionario)) {
-    const mYo = texto.match(/Yo[,\s]+([A-ZÁÉÍÓÚ\s]{6,40})[,\s]+identificad/i);
-    if (mYo) resultado.peticionario = mYo[1].trim();
-  }
-
-  if (!resultado.destinatario || isBodySentence(resultado.destinatario)) {
-    resultado.destinatario = "ACUASAN E.I.C.E. - E.S.P.";
-  }
-
-  // 6. REFERENCIA
-  const mRef =
-    texto.match(/REFERENCIA\s*[:：]?\s*([^\n\r]+)/i) ||
-    texto.match(/Referencia\s*[:：]?\s*([^\n\r]+)/i) ||
-    texto.match(/(C[oó]digo de suscriptor[^\n\r]*)/i);
-
-  if (mRef && !isBodySentence(mRef[1])) {
-    resultado.referencia = mRef[1].trim();
-  }
-
-  // 7. ASUNTO
-  const mAsunto = texto.match(/Asunto\s*[:：]?\s*([^\n\r]+)/i);
-  if (mAsunto && !isBodySentence(mAsunto[1])) {
-    resultado.asunto = mAsunto[1].trim();
-  } else if (resultado.referencia) {
-    resultado.asunto = resultado.referencia;
-  } else {
-    const mSolicitud = texto.match(/(Solicitud[^\n\r]+)/i);
-    if (mSolicitud && !isBodySentence(mSolicitud[1]))
-      resultado.asunto = mSolicitud[1].trim();
-  }
-
-  // 8. CONTEXTO
-  const bodyLines = rawLines.filter((line) => {
-    if (
-      /^(?:REPUBLICA|DEPARTAMENTO|EMPRESA DE ACUEDUCTO|NIT|NUIR|San Gil,|Pinchote,|SEÑOR|SEÑORA|REFERENCIA:|E\s*950-|Rad\.|No\.|FECHA:)/i.test(
-        line
-      )
+const validarArchivoBase64 = (archivoBase64) => {
+  if (archivoBase64 == null) return null
+  if (typeof archivoBase64 !== 'string' || !PATRON_DATA_URL.test(archivoBase64)) {
+    throw Object.assign(
+      new Error('El documento debe ser un PDF o una imagen (PNG/JPG/WebP/GIF) codificado en base64.'),
+      { status: 400 }
     )
-      return false;
-    if (/^[\s_.\-\=\*]+$/.test(line)) return false;
-    if (line.length < 15 && !/[a-záéíóú]/i.test(line)) return false;
-    return true;
-  });
-
-  let contextoTexto = "";
-  const regexParrafoClave =
-    /(?:En atenci[oó]n|Por medio|Solicit|Se solicita|Mediante|Yo,|Con el fin|Una vez|Respetado)[^\n\r]*[\s\S]{30,600}/i;
-  const matchClave = texto.match(regexParrafoClave);
-
-  if (matchClave && matchClave[0]) {
-    contextoTexto = matchClave[0]
-      .replace(/[\r\n]+/g, " ")
-      .replace(/[\s._\-]{3,}/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-  } else if (bodyLines.length > 0) {
-    contextoTexto = bodyLines
-      .slice(0, 4)
-      .join(" ")
-      .replace(/[\r\n]+/g, " ")
-      .replace(/[\s._\-]{3,}/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .trim();
   }
-
-  if (contextoTexto.length > 450) {
-    let sub = contextoTexto.substring(0, 450);
-    const lastPeriod = sub.lastIndexOf(".");
-    if (lastPeriod > 200) sub = sub.substring(0, lastPeriod + 1);
-    else {
-      const lastSpace = sub.lastIndexOf(" ");
-      if (lastSpace > 200) sub = sub.substring(0, lastSpace) + "...";
-    }
-    contextoTexto = sub;
-  }
-
-  resultado.contexto = contextoTexto || "";
-
-  // 9. DÍAS PARA VENCER
-  let diasSugeridos = 10;
-  const mPlazoNum = texto.match(
-    /(?:plazo|t[eé]rmino|tiempo|vence|vencimiento|en|dentro de)\s*(?:un\s+t[eé]rmino\s+de\s*)?(?:de\s*)?\b([0-9]{1,2})\b\s*d[ií]as/i
-  );
-  if (mPlazoNum && mPlazoNum[1]) {
-    const num = parseInt(mPlazoNum[1], 10);
-    if ([3, 5, 10, 15, 30].includes(num)) diasSugeridos = num;
-    else if (num <= 4) diasSugeridos = 3;
-    else if (num <= 7) diasSugeridos = 5;
-    else if (num <= 12) diasSugeridos = 10;
-    else if (num <= 20) diasSugeridos = 15;
-    else diasSugeridos = 30;
-  } else {
-    if (
-      /tutela|urgente|inmediato|derecho de petici[oó]n prioritario/i.test(texto)
+  if (archivoBase64.length > MAX_BASE64) {
+    throw Object.assign(
+      new Error('El documento supera el tamaño máximo de 10 MB. Comprímalo antes de radicar.'),
+      { status: 413 }
     )
-      diasSugeridos = 3;
-    else if (/informaci[oó]n|copias|documentos/i.test(texto))
-      diasSugeridos = 10;
-    else if (
-      /consulta|viabilidad|disponibilidad|reclamo|queja|peticion/i.test(texto)
-    )
-      diasSugeridos = 15;
   }
+  return archivoBase64
+}
 
-  resultado.diasParaVencer = diasSugeridos;
-
-  if (isBodySentence(resultado.peticionario)) resultado.peticionario = "";
-  if (isBodySentence(resultado.destinatario))
-    resultado.destinatario = "ACUASAN E.I.C.E. - E.S.P.";
-  if (isBodySentence(resultado.asunto))
-    resultado.asunto = resultado.referencia || "";
-
-  return resultado;
-};
-
-// Respuesta vacía y honesta cuando no hay texto legible (sin datos inventados)
-const respuestaSinTexto = (metodo, originalname) => ({
-  mensaje:
-    "El documento no contiene texto legible. Complete los campos manualmente.",
-  metodo,
-  peticionario: "",
-  dependencia: "",
-  registradoPor: "Encargada",
-  contexto: "",
-  numeroRadicadoPdf: "",
-  fechaDocumento: "",
-  lugarFecha: "",
-  destinatario: "",
-  asunto: "",
-  referencia: "",
-  diasParaVencer: null,
-  nombreArchivo: originalname || "documento.pdf",
-});
-
-// Estados válidos de un radicado (el alta offline puede sincronizar un estado distinto de Pendiente)
-const ESTADOS_RADICADO_VALIDOS = ["Pendiente", "En Proceso", "Resuelto", "Contestado", "Anulado"];
+// MIME que el navegador puede mostrar embebido sin riesgo: cualquier otro
+// (p.ej. text/html inyectado en la data URL) se degrada a descarga.
+const MIMES_INLINE_SEGUROS = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 export const RadicadosService = {
   /**
-   * Lista todos los radicados SIN el archivo Base64 (peso).
-   * El documento original se sirve bajo demanda desde /:id/archivo.
+   * Lista todos los radicados (más reciente primero). El documento Base64 NO
+   * viaja en el listado: pesa megas y se sirve por endpoint propio.
    */
-  async obtenerTodos() {
-    try {
-      const dbRadicados = await prisma.radicado.findMany({
-        orderBy: { fechaRadicacion: "desc" },
-      });
-      return dbRadicados.map(({ archivoBase64, ...resto }) => ({
-        ...resto,
-        hasArchivo: Boolean(archivoBase64),
-        // Mime real del documento (viaja en el prefijo del data URL): permite
-        // al visor decidir <object>/<iframe> PDF vs <img> sin el binario
-        archivoMimeType: (String(archivoBase64 || "").match(/^data:([^;,]+)/) || [])[1] || null,
-      }));
-    } catch (e) {
-      // Error real de BD: se propaga (el cliente usa su caché local, nunca datos inventados)
-      throw new Error(`Base de datos no disponible: ${e.message}`);
-    }
+  async listar() {
+    return prisma.radicado.findMany({
+      orderBy: { fechaRadicacion: 'desc' },
+      select: SELECT_PUBLICO
+    })
   },
 
   /**
-   * Obtiene un radicado completo (incluye archivoBase64) por ID o numeroRadicado
+   * Crea un radicado. El backend es la fuente de verdad: asigna la
+   * numeración RAD-AAAA-##### y calcula el vencimiento con los días del
+   * término legal. El documento original (Base64) queda guardado en la BD.
    */
-  async obtenerPorId(id) {
-    try {
-      return await prisma.radicado.findUnique({ where: { id: String(id) } });
-    } catch (e) {
-      try {
-        // Reintento por numeroRadicado (el id recibido puede no ser ObjectId)
-        return await prisma.radicado.findFirst({
-          where: { numeroRadicado: String(id) },
-        });
-      } catch (err) {
-        // Ambos accesos fallaron (BD caída): propagar. Devolver null aquí
-        // convertiría el outage en un 404 "sin documento adjunto" mentiroso.
-        throw new Error(`Base de datos no disponible: ${err.message}`);
-      }
-    }
-  },
-
-  /**
-   * Genera el siguiente radicado secuencial real de la BD: RAD-<anio>-000X
-   * (máximo consecutivo + reintentos, sin colisiones por registros borrados)
-   */
-  async generarRadicadoUnico() {
-    const anio = new Date().getFullYear();
-    const prefijo = `RAD-${anio}-`;
-
-    const existentes = await prisma.radicado.findMany({
-      where: { numeroRadicado: { startsWith: prefijo } },
-      select: { numeroRadicado: true },
-    });
-
-    let maxSeq = 0;
-    for (const r of existentes) {
-      const m = r.numeroRadicado.match(new RegExp(`^${prefijo}(\\d+)$`));
-      if (m) {
-        const seq = parseInt(m[1], 10);
-        if (seq > maxSeq) maxSeq = seq;
-      }
-    }
-
-    for (let intento = 1; intento <= 5; intento++) {
-      const candidato = `${prefijo}${String(maxSeq + intento).padStart(4, "0")}`;
-      const yaExiste = await prisma.radicado.findFirst({
-        where: { numeroRadicado: candidato },
-      });
-      if (!yaExiste) return candidato;
-    }
-
-    // Último recurso: timestamp
-    return `${prefijo}${Date.now()}`;
-  },
-
-  async crear(payload) {
+  async crear(datos) {
     const {
-      peticionario,
-      dependencia,
-      correoDrive,
-      registradoPor,
-      contexto,
-      diasParaVencer,
-      archivoNombre,
-      destinatario,
-      asunto,
-      referencia,
-      fechaDocumento,
-      lugarFecha,
-      numeroRadicadoPdf,
-      archivoBase64,
-      archivoUrl,
-      idLocal,
-    } = payload;
+      peticionario, dependencia, destinatario, asunto, referencia,
+      fechaDocumento, lugarFecha, numeroRadicadoPdf, registradoPor,
+      contexto, diasParaVencer, archivoNombre, archivoBase64
+    } = datos
 
-    // IDEMPOTENCIA: si la sincronización offline ya creó este registro (la respuesta
-    // se perdió y el cliente reintentó), se devuelve el registro existente sin duplicar.
-    if (idLocal) {
-      const existente = await prisma.radicado.findFirst({ where: { idLocal: String(idLocal) } });
-      if (existente) {
-        console.warn(`Radicado idempotente: idLocal=${idLocal} ya existe como ${existente.numeroRadicado}`);
-        return existente;
-      }
-    }
+    const numeroRadicado = await this._generarNumeroRadicado()
+    const dias = Math.min(Math.max(parseInt(diasParaVencer, 10) || 10, 1), 365)
+    const fechaVencimiento = new Date(Date.now() + dias * 24 * 60 * 60 * 1000)
 
-    const fechaVencimiento = moment()
-      .add(parseInt(diasParaVencer) || 10, "days")
-      .toDate();
-
-    // El estado puede venir de un alta offline que ya cambió de estado (ej. Resuelto)
-    const estadoInicial = ESTADOS_RADICADO_VALIDOS.includes(payload.estado)
-      ? payload.estado
-      : "Pendiente";
-
-    // ⚠️ No enviar `id`: el schema define id como ObjectId autogenerado por MongoDB.
-    // Enviarlo causa error de validación y el radicado NUNCA se persistía en la BD.
-    const itemData = {
-      // Blindaje como el módulo de Permisos (que normaliza/rellena TODOS los
-      // campos obligatorios y por eso nunca revienta en validación): el OCR no
-      // inventa datos, así que un documento sin peticionario/dependencia
-      // legibles llegaba vacío y prisma.create lo rechazaba — el radicado
-      // quedaba atrapado como RAD-LOCAL y Gerencia jamás lo veía. El
-      // placeholder es explícito para no presentar un dato inventado como real.
-      peticionario: String(peticionario || "").trim() || "SIN PETICIONARIO",
-      dependencia: String(dependencia || "").trim() || "SIN DEPENDENCIA",
-      correoDrive: correoDrive || "encargada@acuasan.gov.co",
-      registradoPor: registradoPor || "Eliana",
-      contexto: contexto || "Registro documental de radicación.",
-      destinatario: destinatario || null,
-      asunto: asunto || null,
-      referencia: referencia || null,
-      fechaDocumento: fechaDocumento || null,
-      lugarFecha: lugarFecha || null,
-      numeroRadicadoPdf: numeroRadicadoPdf || null,
-      fechaRadicacion: new Date(),
-      fechaVencimiento,
-      estado: estadoInicial,
-      archivoNombre: archivoNombre || null,
-      archivoUrl: archivoUrl || null,
-      archivoBase64: archivoBase64 || null,
-      // NUNCA null: el índice único de MongoDB indexaría null como valor y solo
-      // cabría un documento sin idLocal en toda la colección (P2002 masivo).
-      idLocal: String(idLocal || randomUUID()),
-    };
-
-    // Radicado secuencial RAD-AAAA-0001 generado por el backend (fuente de verdad).
-    // Reintento real ante colisión concurrente (P2002 en numeroRadicado): se
-    // regenera el consecutivo; NUNCA se responde con un registro solo en memoria.
-    let ultimoError = null;
-    for (let intento = 1; intento <= 4; intento++) {
-      let numeroRadicado;
-      try {
-        numeroRadicado = await this.generarRadicadoUnico();
-      } catch (eCount) {
-        throw new Error(`No se pudo generar la numeración del radicado: ${eCount.message}`);
-      }
-
-      try {
-        return await prisma.radicado.create({
-          data: { ...itemData, numeroRadicado },
-        });
-      } catch (e) {
-        ultimoError = e;
-        const esColision = e.code === "P2002";
-        if (!esColision) break;
-        console.warn(
-          `Colisión de numeración (intento ${intento}/4), regenerando consecutivo: ${e.message}`
-        );
-      }
-    }
-
-    // Validación de Prisma (campo obligatorio ausente, tipo incorrecto…):
-    // NO es un fallo de BD. Si esto se reporta como 503 el cliente offline lo
-    // clasifica como "transitorio", lo encola como RAD-LOCAL y lo reintenta
-    // para siempre sin saber la causa real. Es un 400 con el campo implicado.
-    if (ultimoError?.name === "PrismaClientValidationError") {
-      const campo = ultimoError.message.match(/Argument `(\w+)`/)?.[1] || null;
-      const detalle = String(ultimoError.message)
-        .split("\n")
-        .map((l) => l.trim())
-        .find((l) => l.startsWith("+") || l.startsWith("Argument"));
-      const errorValidacion = new Error(
-        `Datos del radicado incompletos o inválidos${campo ? ` (campo: ${campo})` : ""}${detalle ? ` — ${detalle.replace(/^\+\s*/, "")}` : ""}`
-      );
-      errorValidacion.esValidacion = true;
-      throw errorValidacion;
-    }
-
-    throw new Error(
-      `No se pudo persistir el radicado en la base de datos: ${ultimoError?.message || "error desconocido"}`
-    );
-  },
-
-  async actualizarEstado(id, estado) {
-    try {
-      return await prisma.radicado.update({
-        where: { id: String(id) },
-        data: { estado },
-      });
-    } catch (e) {
-      // Si falla (ej. id no es un ObjectId válido), intentar localizar por numeroRadicado
-      try {
-        const porNumero = await prisma.radicado.findFirst({
-          where: { numeroRadicado: String(id) },
-        });
-        if (porNumero) {
-          return await prisma.radicado.update({
-            where: { id: porNumero.id },
-            data: { estado },
-          });
-        }
-        // No existe en la BD (posible provisional local aún sin sincronizar)
-        return null;
-      } catch (e2) {
-        throw new Error(`Base de datos no disponible: ${e2.message}`);
-      }
-    }
+    return prisma.radicado.create({
+      data: {
+        numeroRadicado,
+        peticionario: limpiar(peticionario),
+        dependencia: dependencia ? limpiar(dependencia) : 'ACUASAN E.S.P.',
+        destinatario: destinatario ? limpiar(destinatario) : null,
+        asunto: asunto ? limpiar(asunto) : null,
+        referencia: referencia ? limpiar(referencia) : null,
+        fechaDocumento: fechaDocumento ? limpiar(fechaDocumento) : null,
+        lugarFecha: lugarFecha ? limpiar(lugarFecha) : null,
+        numeroRadicadoPdf: numeroRadicadoPdf ? limpiar(numeroRadicadoPdf) : null,
+        registradoPor: registradoPor || null,
+        contexto: contexto ? limpiar(contexto) : null,
+        estado: 'Pendiente',
+        fechaVencimiento,
+        archivoNombre: archivoNombre || null,
+        archivoBase64: validarArchivoBase64(archivoBase64)
+      },
+      select: SELECT_PUBLICO
+    })
   },
 
   /**
-   * Adjunta o reemplaza el documento original (Base64) de un radicado existente.
-   * Repara registros que llegaron a la BD sin archivo — p. ej. creados sin
-   * conexión cuyo adjunto no cupo en el almacenamiento local del navegador.
+   * Numeración consecutiva por año: RAD-2026-00001. El unique del modelo es
+   * la red de seguridad ante una carrera entre dos radicaciones simultáneas.
    */
-  async adjuntarArchivo(id, { archivoBase64, archivoNombre }) {
-    const data = { archivoBase64: String(archivoBase64) };
-    if (archivoNombre) data.archivoNombre = String(archivoNombre);
-    try {
-      return await prisma.radicado.update({
-        where: { id: String(id) },
-        data,
-      });
-    } catch (e) {
-      // Id no es ObjectId válido o no existe: intentar por numeroRadicado
-      try {
-        const porNumero = await prisma.radicado.findFirst({
-          where: { numeroRadicado: String(id) },
-        });
-        if (porNumero) {
-          return await prisma.radicado.update({
-            where: { id: porNumero.id },
-            data,
-          });
-        }
-        return null;
-      } catch (e2) {
-        throw new Error(`Base de datos no disponible: ${e2.message}`);
-      }
+  async _generarNumeroRadicado() {
+    const anio = new Date().getFullYear()
+    const desde = new Date(`${anio}-01-01T00:00:00.000Z`)
+    for (let intento = 0; intento < 5; intento++) {
+      const count = await prisma.radicado.count({
+        where: { fechaRadicacion: { gte: desde } }
+      })
+      const consecutivo = String(count + 1 + intento).padStart(5, '0')
+      const candidato = `RAD-${anio}-${consecutivo}`
+      const existe = await prisma.radicado.findUnique({
+        where: { numeroRadicado: candidato },
+        select: { id: true }
+      })
+      if (!existe) return candidato
     }
+    throw new Error('No fue posible generar un número de radicado único. Intente de nuevo.')
   },
 
   /**
-   * Elimina un radicado por ID o numeroRadicado.
-   * Solo lo puede ejecutar la encargada de Radicados (controlado en ruta/middleware).
+   * Actualiza el estado de un radicado (Pendiente ↔ Resuelto).
+   */
+  async actualizarEstado(id, estado) {
+    if (!['Pendiente', 'Resuelto'].includes(estado)) {
+      throw Object.assign(new Error('Estado no válido: debe ser Pendiente o Resuelto'), { status: 400 })
+    }
+    return prisma.radicado.update({
+      where: { id },
+      data: { estado },
+      select: { id: true, numeroRadicado: true, estado: true, fechaVencimiento: true }
+    })
+  },
+
+  /**
+   * Elimina un radicado de la base de datos (incluido su documento).
    */
   async eliminar(id) {
-    try {
-      return await prisma.radicado.delete({
-        where: { id: String(id) },
-      });
-    } catch (e) {
-      // Intentar por numeroRadicado si el id no es un ObjectId válido
-      try {
-        const porNumero = await prisma.radicado.findFirst({
-          where: { numeroRadicado: String(id) },
-        });
-        if (porNumero) {
-          return await prisma.radicado.delete({
-            where: { id: porNumero.id },
-          });
-        }
-        return null;
-      } catch (e2) {
-        throw new Error(`Error al eliminar el radicado: ${e2.message}`);
-      }
-    }
-  },
-
-
-  async parsearTexto(texto, originalname) {
-    const campos = extraerCamposPdf(texto);
-    return {
-      mensaje: "Texto del documento analizado exitosamente",
-      metodo: "OCR navegador + parser servidor",
-      peticionario: campos.peticionario || "",
-      dependencia: campos.dependencia || "",
-      registradoPor: "Eliana",
-      contexto: campos.contexto || "",
-      numeroRadicadoPdf: campos.numeroRadicadoPdf || "",
-      fechaDocumento: campos.fechaDocumento || "",
-      lugarFecha: campos.lugarFecha || "",
-      destinatario: campos.destinatario || "",
-      asunto: campos.asunto || "",
-      referencia: campos.referencia || "",
-      diasParaVencer: campos.diasParaVencer || 10,
-      nombreArchivo: originalname || "documento.pdf",
-    };
+    return prisma.radicado.delete({ where: { id } })
   },
 
   /**
-   * Extracción desde el buffer del archivo (endpoint legado /extraer-pdf).
-   * PDFs vectoriales vía pdf-parse; imágenes vía Tesseract.js.
-   * Los PDFs escaneados (sin capa de texto) devuelven respuesta vacía honesta:
-   * el OCR de esos documentos lo realiza el navegador.
+   * Devuelve el documento original { buffer, mime, nombre } para que el
+   * controller lo sirva como binario. Acepta data URL o Base64 crudo.
    */
-  async extraerPdf(dataBuffer, mimeType, originalname) {
-    let texto = "";
-    let metodo = "";
+  async obtenerArchivo(id) {
+    const rad = await prisma.radicado.findUnique({
+      where: { id },
+      select: { archivoBase64: true, archivoNombre: true }
+    })
+    if (!rad || !rad.archivoBase64) return null
 
-    if (mimeType === "application/pdf" || !mimeType) {
-      try {
-        const data = await getPdfParse()(dataBuffer);
-        texto = (data.text || "").trim();
-        if (texto.length > 40) {
-          metodo = "pdf-parse";
-        } else {
-          texto = "";
-        }
-      } catch (errPdf) {
-        console.warn(
-          "pdf-parse no extrajo texto suficiente — el documento escaneado debe procesarse desde el navegador"
-        );
-        texto = "";
-      }
-    } else if (mimeType && mimeType.startsWith("image/")) {
-      try {
-        texto = await extraerTextoImagenConOCR(dataBuffer);
-        metodo = "OCR (Tesseract.js)";
-      } catch (errOCR) {
-        console.error("Error en OCR:", errOCR.message);
-        texto = "";
-      }
+    let mime = 'application/pdf'
+    let base64 = rad.archivoBase64
+    const m = /^data:([^;,]+);base64,(.*)$/s.exec(base64)
+    if (m) {
+      mime = m[1].toLowerCase()
+      base64 = m[2]
     }
-
-    if (!texto) {
-      return respuestaSinTexto("documento-escaneado-sin-texto", originalname);
-    }
-
-    const campos = extraerCamposPdf(texto);
-
+    // MIME fuera de la lista segura (inyectado en la data URL): se sirve como
+    // descarga neutra, nunca renderizado inline en el origen de la app.
+    if (!MIMES_INLINE_SEGUROS.has(mime)) mime = 'application/octet-stream'
     return {
-      mensaje: `Documento procesado exitosamente (método: ${metodo})`,
-      metodo,
-      peticionario: campos.peticionario || "",
-      dependencia: campos.dependencia || "",
-      registradoPor: "Eliana",
-      contexto: campos.contexto || "",
-      numeroRadicadoPdf: campos.numeroRadicadoPdf || "",
-      fechaDocumento: campos.fechaDocumento || "",
-      lugarFecha: campos.lugarFecha || "",
-      destinatario: campos.destinatario || "",
-      asunto: campos.asunto || "",
-      referencia: campos.referencia || "",
-      diasParaVencer: campos.diasParaVencer || 10,
-      nombreArchivo: originalname || "documento.pdf",
-    };
+      buffer: Buffer.from(base64, 'base64'),
+      mime,
+      nombre: rad.archivoNombre || 'radicado.pdf'
+    }
   },
 
-  async generarExcel() {
-    const radicados = await prisma.radicado.findMany({
-      orderBy: { fechaRadicacion: "desc" },
-    });
-    const fileName = `Historial_Radicados_${moment().format("YYYY-MM-DD")}.csv`;
-    // Escribir en /tmp (único directorio escribible en entornos serverless).
-    // Path ÚNICO por descarga: dos requests concurrentes no deben compartir
-    // archivo (la 2ª lo trunca mientras la 1ª aún lo streamea, o lo borra).
-    const filePath = path.join(
-      os.tmpdir(),
-      `Historial_Radicados_${moment().format("YYYY-MM-DD")}_${randomUUID()}.csv`
-    );
-
-    const csvWriter = createObjectCsvWriter({
-      path: filePath,
-      header: [
-        { id: "numeroRadicado", title: "CODIGO RADICADO SISTEMA" },
-        { id: "numeroRadicadoPdf", title: "NUMERO RADICADO PDF" },
-        { id: "fechaRadicacion", title: "FECHA REGISTRO" },
-        { id: "fechaDocumento", title: "FECHA/HORA DOCUMENTO" },
-        { id: "lugarFecha", title: "LUGAR Y FECHA CARTA" },
-        { id: "peticionario", title: "REMITENTE / PETICIONARIO" },
-        { id: "dependencia", title: "EMPRESA DESTINATARIA" },
-        { id: "destinatario", title: "DESTINATARIO (FUNCIONARIO)" },
-        { id: "asunto", title: "ASUNTO" },
-        { id: "referencia", title: "REFERENCIA" },
-        { id: "registradoPor", title: "REGISTRADO POR" },
-        { id: "estado", title: "ESTADO" },
-        { id: "fechaVencimiento", title: "FECHA VENCIMIENTO" },
-        { id: "contexto", title: "CONTEXTO DE PETICION" },
-      ],
-    });
-
-    const recordsFormatted = radicados.map((r) => ({
-      numeroRadicado: r.numeroRadicado,
-      numeroRadicadoPdf: r.numeroRadicadoPdf || "N/A",
-      fechaRadicacion: moment(r.fechaRadicacion).format("YYYY-MM-DD HH:mm"),
-      fechaDocumento: r.fechaDocumento || "N/A",
-      lugarFecha: r.lugarFecha || "N/A",
-      peticionario: r.peticionario,
-      dependencia: r.dependencia,
-      destinatario: r.destinatario || "N/A",
-      asunto: r.asunto || "N/A",
-      referencia: r.referencia || "N/A",
-      registradoPor: r.registradoPor || r.peticionario || "Encargada",
-      estado: r.estado,
-      fechaVencimiento: moment(r.fechaVencimiento).format("YYYY-MM-DD"),
-      contexto: (r.contexto || "").replace(/\n/g, " "),
-    }));
-
-    await csvWriter.writeRecords(recordsFormatted);
-    return { filePath, fileName };
+  /**
+   * Adjunta (o reemplaza) el documento original de un radicado ya creado.
+   */
+  async adjuntarArchivo(id, { archivoBase64, archivoNombre }) {
+    return prisma.radicado.update({
+      where: { id },
+      data: { archivoBase64: validarArchivoBase64(archivoBase64), archivoNombre: archivoNombre || null },
+      select: { id: true, numeroRadicado: true, archivoNombre: true }
+    })
   },
-};
+
+  /**
+   * Genera el reporte en CSV (con BOM: Excel lo abre directo).
+   */
+  async generarCsv() {
+    const lista = await this.listar()
+    const columnas = [
+      ['numeroRadicado', 'N° Radicado'],
+      ['fechaRadicacion', 'Fecha Radicación'],
+      ['peticionario', 'Peticionario'],
+      ['dependencia', 'Dependencia'],
+      ['destinatario', 'Destinatario'],
+      ['asunto', 'Asunto'],
+      ['referencia', 'Referencia'],
+      ['fechaDocumento', 'Fecha Documento'],
+      ['numeroRadicadoPdf', 'N° Radicado PDF'],
+      ['estado', 'Estado'],
+      ['fechaVencimiento', 'Vencimiento'],
+      ['registradoPor', 'Registrado Por']
+    ]
+    const celda = (v) => {
+      let s = String(v ?? '')
+      // Neutraliza celdas que Excel interpretaría como fórmula (=, +, -, @, tab)
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
+      return `"${s.replace(/"/g, '""')}"`
+    }
+    const filas = [
+      columnas.map(([, titulo]) => celda(titulo)).join(';'),
+      ...lista.map((r) => columnas.map(([campo]) => celda(r[campo])).join(';'))
+    ]
+    return `﻿${filas.join('\r\n')}`
+  },
+
+  /**
+   * ============================================================================
+   * PARSING DE CAMPOS INSTITUCIONALES
+   * ============================================================================
+   * Recibe el texto EXTRAÍDO DEL DOCUMENTO (OCR en el navegador) y devuelve
+   * los campos que logra leer con certeza. Sin dato → campo vacío: jamás se
+   * rellena con supuestos.
+   * ============================================================================
+   */
+  extraerCampos(texto) {
+    const resultado = {
+      numeroRadicadoPdf: '',
+      fechaDocumento: '',
+      lugarFecha: '',
+      peticionario: '',
+      dependencia: '',
+      destinatario: '',
+      asunto: '',
+      referencia: '',
+      contexto: '',
+      diasParaVencer: null
+    }
+
+    if (!texto || !texto.trim()) return resultado
+
+    const lineas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+
+    // 1. N° RADICADO DEL SELLO — la etiqueta "Radicado" (cualquier grafía)
+    // habilita cualquier número; "No."/"N°" solo habilitan valores con forma
+    // de año (2xxx…), y un número suelto solo cuenta con esa misma forma: así
+    // una cédula, un NIT o un teléfono NUNCA llenan este campo. Sin sello
+    // legible el campo queda vacío.
+    const probarRadicado = (crudo) => {
+      // El OCR parte el número con espacios o guiones ("2026 14523",
+      // "RAD-2026-00123"): se retiran antes de normalizar O/0 y l/1.
+      const limpio = normalizarDigitos(String(crudo).replace(/[\- ]/g, '')).trim()
+      const digitosReales = (String(crudo).match(/[0-9]/g) || []).length
+      return /^\d{7,12}$/.test(limpio) && digitosReales >= 4 ? limpio : ''
+    }
+    const mRad =
+      texto.match(new RegExp(`\\bRad(?:[i1l]c[a4]d[o0])?(?:\\s+|\\s*[:.\\-]\\s*)(?:No\\.?\\s*|N[°º.]\\s*)*(?:[:.\\-]?\\s*)((?:${DIGITO_OCR}[\\- ]?){6,11}${DIGITO_OCR})\\b`, 'i')) ||
+      texto.match(new RegExp(`\\b(?:No\\.?|N[°º])\\s*[:.]?\\s*((?:2${DIGITO_OCR}[\\- ]?){5,9}${DIGITO_OCR})\\b`, 'i')) ||
+      texto.match(new RegExp(`\\b(2${DIGITO_OCR}{7,10})\\b`, 'i'))
+    if (mRad) resultado.numeroRadicadoPdf = probarRadicado(mRad[1].trim())
+
+    // 2. FECHA DEL SELLO — etiqueta FECHA (con huecos de OCR) o primera fecha
+    // válida del documento. La captura tolera O/0 y l/1 y se normaliza; una
+    // candidata sin etiqueta se valida (día ≤ 31, mes ≤ 12) antes de aceptarse.
+    const PATRON_FECHA = `${DIGITO_OCR}{1,2}[/\\-]${DIGITO_OCR}{1,2}[/\\-]${DIGITO_OCR}{4}`
+    const esFechaPosible = (f) => {
+      const [d, mes] = f.split(/[/\-]/).map(Number)
+      return d >= 1 && d <= 31 && mes >= 1 && mes <= 12
+    }
+    const mFechaSello = texto.match(new RegExp(`F\\s*E\\s*C\\s*H\\s*A\\s*[:.\\-]?\\s*(${PATRON_FECHA})`, 'i'))
+    // "14/ago/2026": el mes viaja tal cual — la 'o' de "ago" no es un cero del OCR
+    const mFechaTexto = texto.match(new RegExp(`(${DIGITO_OCR}{1,2})\\/([a-zA-Z0-9áéíóúÁÉÍÓÚ]{3,4})\\/(${DIGITO_OCR}{4})`, 'i'))
+    const fSello = mFechaSello ? normalizarDigitos(mFechaSello[1]) : ''
+    const fTexto = mFechaTexto
+      ? `${normalizarDigitos(mFechaTexto[1])}/${mFechaTexto[2]}/${normalizarDigitos(mFechaTexto[3])}`
+      : ''
+    // El sello manda, pero una fecha imposible ("99/99/2026") jamás viaja:
+    // cae a la primera fecha válida del documento.
+    resultado.fechaDocumento = fSello && esFechaPosible(fSello) ? fSello : fTexto
+    if (!resultado.fechaDocumento) {
+      for (const m of texto.matchAll(new RegExp(PATRON_FECHA, 'g'))) {
+        const f = normalizarDigitos(m[0])
+        if (esFechaPosible(f)) { resultado.fechaDocumento = f; break }
+      }
+    }
+    // Último recurso: la fecha solo está en letras ("12 de agosto de 2026",
+    // "agosto 12 de 2026"). Día y año toleran ruido OCR (O/0, l/1) y se
+    // normalizan; el mes viaja tal cual. El día se valida (1-31) y el mes es
+    // de calendario: "45 de febrero" o "Acuerdo 15 de 2019" no son fecha.
+    const DIA_LE = '(?:[0-9OolI]|[12][0-9OolI]|3[01])(?:ro|º|°)?'
+    const MES_LE = '(?:ene\\.?|feb\\.?|mar\\.?|abr\\.?|may\\.?|jun\\.?|jul\\.?|ag[o0]\\.?|se[pt]\\.?|set\\.?|oct\\.?|nov\\.?|dic\\.?|enero|febrero|marzo|abril|mayo|junio|julio|ag[o0]st[o0]|se[pt]tiembre|setiembre|octubre|noviembre|diciembre)'
+    const ANIO_LE = '[0-9OolI]{4}'
+    // Conector mes→año: "de", "del" o "del año" — un "de" literal aparte se
+    // comería la "l" de "del" y rompería "septiembre 3 del año 2026".
+    const ENTRE = `(?:del?(?:[ \t]+a[nñ]o)?|de)?[ \t]*`
+    if (!resultado.fechaDocumento) {
+      // El día no puede salir de mitad de otro número ("factura 45" → "5")
+      const mLetras =
+        texto.match(new RegExp(`(?<![0-9OolI])(${DIA_LE})[ \\t]+de[ \\t]+(${MES_LE})[ \\t]*${ENTRE}(${ANIO_LE})(?![0-9OolI])`, 'i')) ||
+        texto.match(new RegExp(`(?<![0-9OolI])(${MES_LE})[ \\t]+(${DIA_LE})[ \\t]*${ENTRE}(${ANIO_LE})(?![0-9OolI])`, 'i'))
+      if (mLetras) {
+        const mesPrimero = new RegExp(`^${MES_LE}$`, 'i').test(mLetras[1])
+        const dia = normalizarDigitos(mesPrimero ? mLetras[2] : mLetras[1]).replace(/(?:ro|º|°)$/, '')
+        const mes = mesPrimero ? mLetras[1] : mLetras[2]
+        resultado.fechaDocumento = `${dia} de ${mes} de ${normalizarDigitos(mLetras[3])}`
+      }
+    }
+
+    // 3. LUGAR Y FECHA DE LA CARTA — "San Gil, 12 de agosto de 2026" y las
+    // variantes colombianas: mes primero ("agosto 12 de 2026"), con
+    // departamento o D.C. ("San Gil, Santander, 12 de…", "Bogotá, D.C., …"),
+    // formal ("San Gil a 12 de…", "…del año 2026"), mes abreviado ("12 ago
+    // 2026"), fecha corta tras el municipio y, a falta de lugar, la fecha en
+    // letras tal como aparece. Las alternativas con lugar van ANCLADAS a
+    // inicio de línea — una fecha en mitad del cuerpo no es el lugar de la
+    // carta — y la genérica exige palabras con inicial mayúscula SIN flag
+    // /i: la insensibilidad dejaba colar prefijos minúsculos de la línea
+    // superior. Día, mes y año toleran el ruido O/0 y l/1 del OCR.
+    const FECHA_LARGA = `${DIA_LE}[ \\t]+de[ \\t]+${MES_LE}[ \\t]*${ENTRE}${ANIO_LE}|${MES_LE}[ \\t]+${DIA_LE}[ \\t]*${ENTRE}${ANIO_LE}|${DIA_LE}[ \\t]+${MES_LE}[ \\t]+${ANIO_LE}`
+    const FECHA_CORTA = `[0-9OolI]{1,2}[\\/\\-][0-9OolI]{1,2}[\\/\\-][0-9OolI]{4}`
+    const mLugarF =
+      texto.match(new RegExp(`^[ \\t]*((?:${MUNICIPIOS_ZONA})[ \\t]*,?[ \\t]*(?:${FECHA_LARGA}|${FECHA_CORTA}))`, 'im')) ||
+      texto.match(new RegExp(`^[ \\t]*((?:${MUNICIPIOS_ZONA}),[^,\\n\\r]{2,32},[ \\t]*(?:${FECHA_LARGA}))`, 'im')) ||
+      texto.match(new RegExp(`^[ \\t]*((?:${MUNICIPIOS_ZONA})[ \\t]+a[ \\t]+(?:${FECHA_LARGA}))`, 'im')) ||
+      texto.match(new RegExp(`^[ \\t]*([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ.]*(?:[ \\t]+[A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ.]*){0,2}[ \\t]*,[ \\t]*(?:${FECHA_LARGA}))`, 'm')) ||
+      texto.match(new RegExp(`^[ \\t]*(${FECHA_LARGA})[ \\t]*$`, 'im'))
+    if (mLugarF) resultado.lugarFecha = mLugarF[1].replace(/\s+/g, ' ').trim()
+
+    // Bloque bajo "Señores:" (plural): la entidad o cargo A QUIÉN va dirigida
+    // la carta, en la MISMA línea ("Señores: ALCALDÍA…", "Señores ACUASAN…")
+    // o en las siguientes. "Señores" también llega manglado del OCR ("Seores",
+    // "SE ORES"). Una línea de cuerpo jamás entra: se exige apariencia de
+    // encabezado (sin verbos de carta, sin años, sin NIT ni contactos) y la
+    // segunda línea solo aporta si es un cargo.
+    const esLineaEncabezado = (l) => {
+      if (!l || l.length <= 3 || l.length > 90) return false
+      if (esFraseDeCuerpo(l)) return false
+      if (/\b(?:solicito|solicitamos|solicitar|manifiesto|informo|dirijo|presente|atenta|favor|seg[uú]n|respuesta|lleva|existe|reclam|escribo|peticion|comunicaci[oó]n|usted|fin)\b/i.test(l)) return false
+      if (l.split(/\s+/).length > 15) return false
+      return true
+    }
+    const esLineaContacto = (l) => /N\.?\s?I\.?\s?T\.?|Celular|C[eé]dula|C\.C\.|NIT/i.test(l)
+    const bloqueSenores = (() => {
+      const limpiar = (s) => (s || '').replace(/[,;:]\s*$/, '').trim()
+      for (let i = 0; i < lineas.length; i++) {
+        const mLinea = lineas[i].match(/^Se\s*[nñ]?\s*o?res\b[ \t]*[:：]?[ \t]*(.*)$/i)
+        if (!mLinea) continue
+        const partes = []
+        const resto = limpiar(mLinea[1])
+        if (resto && esLineaEncabezado(resto)) partes.push(resto)
+        for (let j = i + 1; j < Math.min(i + 3, lineas.length); j++) {
+          const l = lineas[j]
+          if (/REFERENCIA|ASUNTO|FECHA|RADICADO/i.test(l)) break
+          // Anclado: la línea de lugar EMPIEZA por el municipio ("San Gil,
+          // 12 de…") — la razón social contiene el pueblo y también es válida
+          if (new RegExp(`^(?:${MUNICIPIOS_ZONA})\\b`, 'i').test(l)) break
+          if (esLineaSaludo(l)) break
+          if (esLineaContacto(l) || /@/.test(l) || /\d{4}/.test(l)) continue
+          if (!esLineaEncabezado(l)) break
+          if (!partes.length && !/^[A-ZÁÉÍÓÚÑ]/.test(l)) break
+          partes.push(l)
+          if (partes.length === 2) break
+        }
+        if (partes.length) return partes
+      }
+      return []
+    })()
+
+    // 4. DEPENDENCIA / EMPRESA DESTINATARIA
+    if (/ACUASAN/i.test(texto) || /ACUEDUCTO/i.test(texto)) {
+      resultado.dependencia = 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.'
+    } else if (bloqueSenores.length) {
+      resultado.dependencia = bloqueSenores[0]
+    } else {
+      const mEmp = texto.match(/Se\s*[nñ]?\s*o?res\s*:\s*([^\n\r]+)/i)
+      if (mEmp && esLineaEncabezado(mEmp[1])) resultado.dependencia = mEmp[1].trim()
+    }
+
+    // 5. PETICIONARIO — etiqueta explícita o saludo "SEÑOR(A):" + nombre/cargo.
+    // Valor de etiqueta: primero en la MISMA línea; si la etiqueta queda sola,
+    // la siguiente línea — salvo que esa línea sea OTRA etiqueta (un "Asunto:"
+    // vacío jamás debe robar el "Remitente:" de debajo).
+    const valorEtiqueta = (etiqueta) => {
+      // El backtracking puede dejar ":" o " -" sueltos como valor: se pelan.
+      const pelar = (v) => (v || '').replace(/^[ \t]*[:：;.,·\-]+[ \t]*/, '').trim()
+      const mismo = texto.match(new RegExp(`\\b${etiqueta}\\b[ \\t]*[:：]?[ \\t]*([^\\n\\r]+)`, 'i'))
+      if (mismo && pelar(mismo[1])) return pelar(mismo[1])
+      const siguiente = texto.match(new RegExp(`\\b${etiqueta}\\b[ \\t]*[:：][ \\t]*\\r?\\n[ \\t]*([^\\n\\r]+)`, 'i'))
+      if (siguiente) {
+        const v = pelar(siguiente[1])
+        // La línea de abajo es OTRA etiqueta → esta quedó vacía de verdad
+        if (v && !/^(?:Remitente|Destinatario|Asunto|REFERENCIA|FECHA|Rad|RADICADO|Se[nñ]ores|Señor|C\.C|NIT)/i.test(v)) {
+          return v
+        }
+      }
+      return ''
+    }
+    const remitenteCrudo = valorEtiqueta('Remitente')
+    const mRem = remitenteCrudo ? [null, remitenteCrudo] : null
+    const mDest = (() => { const v = valorEtiqueta('Destinatario'); return v ? [null, v] : null })()
+    if (mRem && !esFraseDeCuerpo(mRem[1])) {
+      resultado.peticionario = mRem[1].replace(/-\s*r\/l.*$/i, '').trim()
+    }
+    if (mDest && !esFraseDeCuerpo(mDest[1])) {
+      resultado.destinatario = mDest[1].trim()
+    }
+
+    // La autoidentificación explícita ("Yo, X, identificad@") es la evidencia
+    // más fuerte: corre ANTES que el saludo para que un bloque SEÑORES con la
+    // empresa debajo nunca la pise.
+    if (!resultado.peticionario || esFraseDeCuerpo(resultado.peticionario)) {
+      const mYo = texto.match(/Yo[,\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-zñáéíóú\s.]{5,40})[,\s]+identificad/i)
+      if (mYo) resultado.peticionario = mYo[1].trim()
+    }
+
+    if (!resultado.peticionario || esFraseDeCuerpo(resultado.peticionario)) {
+      for (let i = 0; i < lineas.length; i++) {
+        if (!esLineaSaludo(lineas[i])) continue
+        let nombre = ''
+        let cargo = ''
+        for (let j = i + 1; j < Math.min(i + 4, lineas.length); j++) {
+          const l = lineas[j]
+          if (/REFERENCIA|ASUNTO|FECHA|RADICADO/i.test(l)) break
+          if (new RegExp(`^(?:${MUNICIPIOS_ZONA})\\b`, 'i').test(l)) break
+          // La empresa destinataria no es peticionaria ("SEÑORES:" + ACUASAN…)
+          if (/ACUASAN|ACUEDUCTO|E\.I\.C\.E|E\.S\.P/i.test(l)) break
+          if (l.length <= 3 || /^\d+$/.test(l) || /@/i.test(l)) continue
+          if (/Celular|C[eé]dula|C\.C\.|NIT/i.test(l)) continue
+          // Nombre: 2-6 palabras capitalizadas (con conectores "de/la/y"…),
+          // empieza en mayúscula, no es cargo, sin años ni correo. Tolerar
+          // hasta 2 dígitos sueltos: el OCR escribe "M0RALES".
+          if (!nombre && /^[A-ZÁÉÍÓÚÑ]/.test(l) && !CARGO_RE.test(l) && !/19\d\d|20\d\d/.test(l) && (l.match(/\d/g) || []).length <= 2 && l.length > 4 && l.length <= 60) {
+            const palabras = l.split(/\s+/)
+            const esConector = (w) => /^(?:de|del|la|las|los|y|e|van|von|mac)$/i.test(w)
+            const capitalizadas = palabras.filter((w) => esConector(w) || /^[A-ZÁÉÍÓÚÑ]/.test(w)).length
+            if (palabras.length >= 2 && palabras.length <= 6 && capitalizadas === palabras.length && !esFraseDeCuerpo(l)) nombre = l
+          } else if (nombre && CARGO_RE.test(l)) {
+            cargo = l
+          }
+        }
+        if (nombre && !esFraseDeCuerpo(nombre)) {
+          resultado.peticionario = cargo ? `${nombre} - ${cargo}` : nombre
+          break
+        }
+      }
+    }
+
+    // Saludo abreviado y nombre en la MISMA línea — como encabezado
+    // ("SRA. ANA MARIA RIOS") o como firma con dos puntos al final
+    // ("SRA. ANA MARIA RIOS:" tras el "Atentamente,")
+    if (!resultado.peticionario || esFraseDeCuerpo(resultado.peticionario)) {
+      const mInline = texto.match(
+        /^[ \t]*(?:SEÑOR\(A\)|SEÑORA|SEÑOR|SENORA|SENOR|SE ORA|SE OR|SRA|SR)\.?[ \t]*[:.]?[ \t]*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-zñáéíóú']{2,}(?:[ \t]+[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-zñáéíóú']{1,}){1,5})(?:[ \t]*[:.])?[ \t]*$/im
+      )
+      if (mInline && !esFraseDeCuerpo(mInline[1])) resultado.peticionario = mInline[1].trim()
+    }
+
+    // 5b. DESTINATARIO sin etiqueta — a quién va dirigida la carta, en orden
+    // de certeza: "A:"/"Atención:" al inicio de línea, el bloque bajo
+    // "Señores:", el saludo SEÑOR(A) cuando el peticionario ya quedó
+    // establecido por otra vía (carta respuesta: el saludo señala al
+    // receptor), y de último la línea propia de la entidad (membrete).
+    if (!resultado.destinatario) {
+      const mAtt = texto.match(/^[ \t]*(?:A|ATT|Atenci[oó]n)\.?[ \t]*[:：][ \t]*([^\n\r]{4,90})[ \t]*$/im)
+      if (mAtt && esLineaEncabezado(mAtt[1])) resultado.destinatario = mAtt[1].trim()
+    }
+    if (!resultado.destinatario && bloqueSenores.length) {
+      resultado.destinatario = bloqueSenores.slice(0, 2).join(' - ')
+    }
+    if (!resultado.destinatario && resultado.peticionario && !esFraseDeCuerpo(resultado.peticionario)) {
+      for (let i = 0; i < lineas.length; i++) {
+        if (!esLineaSaludo(lineas[i]) || /^Se\s*[nñ]?\s*o?res\b/i.test(lineas[i])) continue
+        let nombre = ''
+        let cargo = ''
+        for (let j = i + 1; j < Math.min(i + 4, lineas.length); j++) {
+          const l = lineas[j]
+          if (/REFERENCIA|ASUNTO|FECHA|RADICADO/i.test(l)) break
+          if (new RegExp(`^(?:${MUNICIPIOS_ZONA})\\b`, 'i').test(l)) break
+          if (esFraseDeCuerpo(l) || !esLineaEncabezado(l)) break
+          if (esLineaContacto(l) || /^\d+$/.test(l) || /@/.test(l)) continue
+          if (l.length <= 3) continue
+          if (!nombre && /^[A-ZÁÉÍÓÚÑ]/.test(l) && !CARGO_RE.test(l) && !/19\d\d|20\d\d/.test(l) && (l.match(/\d/g) || []).length <= 2 && l.length > 4 && l.length <= 60) {
+            const palabras = l.split(/\s+/).length
+            if (palabras >= 2 && palabras <= 6) nombre = l
+          } else if (nombre && CARGO_RE.test(l)) {
+            cargo = l
+          }
+        }
+        // Mismo nombre EXACTO que el peticionario (mayúsculas y espacios
+        // fuera) no es destinatario; compartir solo el primer nombre sí lo
+        // es ("ANA MARIA RIOS" pet. ≠ "ANA MARIA TORRES" dest.).
+        const igual = (a, b) => String(a).replace(/\s+/g, ' ').trim().toUpperCase() === String(b).replace(/\s+/g, ' ').trim().toUpperCase()
+        if (nombre && !igual(nombre, String(resultado.peticionario).split(' - ')[0])) {
+          resultado.destinatario = cargo ? `${nombre} - ${cargo}` : nombre
+          break
+        }
+      }
+    }
+    if (!resultado.destinatario) {
+      const lEntidad = lineas.find((l) =>
+        /^(?:EMPRESA|ACUASAN|ACUEDUCTO|GERENTE|GERENCIA|PRESIDENT|REPRESENTANTE|DIRECTOR|SECRETARI)/i.test(l) &&
+        /ACUASAN|ACUEDUCTO|E\.?\s?I\.?\s?C\.?\s?E|E\.?\s?S\.?\s?P/i.test(l) &&
+        l.length <= 90 && esLineaEncabezado(l))
+      if (lEntidad) resultado.destinatario = lEntidad.trim()
+    }
+
+    // 6. REFERENCIA
+    const refCruda = valorEtiqueta('REFERENCIA')
+    const mRef = refCruda ? [null, refCruda] : texto.match(/(C[oó]digo de suscriptor[^\n\r]*)/i)
+    if (mRef && !esFraseDeCuerpo(mRef[1])) {
+      resultado.referencia = mRef[1].trim()
+    }
+
+    // 7. ASUNTO — etiqueta, o la referencia, o la primera línea de solicitud
+    const asuntoCrudo = valorEtiqueta('Asunto')
+    if (asuntoCrudo && !esFraseDeCuerpo(asuntoCrudo)) {
+      resultado.asunto = asuntoCrudo.trim()
+    } else if (resultado.referencia) {
+      resultado.asunto = resultado.referencia
+    } else {
+      const mSolicitud = texto.match(/(Solicitud[^\n\r]+)/i)
+      if (mSolicitud && !esFraseDeCuerpo(mSolicitud[1])) {
+        resultado.asunto = mSolicitud[1].trim()
+      }
+    }
+
+    // 8. CONTEXTO — el párrafo sustantivo de la carta (recortado a 450 cars)
+    resultado.contexto = this._extraerContexto(texto, lineas)
+
+    // 9. DÍAS DE TÉRMINO LEGAL según lo que pide la carta
+    resultado.diasParaVencer = this._inferirDias(texto)
+
+    return resultado
+  },
+
+  _extraerContexto(texto, lineas) {
+    // Dos niveles: las aperturas de cuerpo de carta (En atención, Por medio…)
+    // describen el asunto real; "Solicit…" también aparece en etiquetas como
+    // REFERENCIA/Asunto, así que solo se usa si no hay apertura de cuerpo.
+    let mClave = texto.match(
+      /(?:En atenci[oó]n|Por medio|Me permito|Me dirijo|Yo,|Con el fin|Una vez|Respetados?[oa]?\b|Respetuosamente|Mediante|A trav[eé]s|Se solicita)[^\n\r]*[\s\S]{30,600}/i
+    )
+    if (!mClave) {
+      mClave = texto.match(/Solicit[^\n\r]*[\s\S]{30,600}/i)
+    }
+    let contexto = ''
+    if (mClave && mClave[0]) {
+      contexto = mClave[0]
+    } else {
+      const cuerpo = lineas.filter((l) => {
+        if (/^(?:REPUBLICA|DEPARTAMENTO|EMPRESA DE ACUEDUCTO|NIT|NUIR|SEÑOR|SEÑORA|REFERENCIA:|Rad\.|No\.|FECHA:)/i.test(l)) return false
+        if (/^(?:San Gil|Pinchote),/i.test(l)) return false
+        if (/^[\s_.\-=*]+$/.test(l)) return false
+        // Un sello de una palabra ("RADICADO", "PETICION") no es párrafo
+        if ((l.match(/\S+/g) || []).length < 2) return false
+        if (l.length < 15 && !/[a-záéíóú]/i.test(l)) return false
+        return true
+      })
+      contexto = cuerpo.slice(0, 4).join(' ')
+    }
+
+    contexto = contexto
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/[\s._\-]{3,}/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      // Las líneas de contacto/firma que cierran la carta no aportan al
+      // resumen — pero un "C.C." dentro de una frase de identificación se
+      // queda (es parte del texto sustantivo).
+      .replace(/\s+(?:C[eé]dula|Celular|Tel[eé]fono|Atentamente)[\s\S]*$/i, '')
+      .trim()
+
+    if (contexto.length > 450) {
+      let sub = contexto.substring(0, 450)
+      const ultimoPunto = sub.lastIndexOf('.')
+      if (ultimoPunto > 200) sub = sub.substring(0, ultimoPunto + 1)
+      else {
+        const ultimoEspacio = sub.lastIndexOf(' ')
+        if (ultimoEspacio > 200) sub = `${sub.substring(0, ultimoEspacio)}...`
+      }
+      contexto = sub
+    }
+    return contexto
+  },
+
+  /**
+   * Término legal en días: SOLO cuando el documento lo declara expresamente
+   * ("dentro de los 15 días…"), o cuando es tutela (término fijo de 3 días por
+   * la ley 1755/2015 y el decreto 2591). Sin plazo explícito devuelve null:
+   * el operador conserva el término que eligió — no se adivina del contenido.
+   */
+  _inferirDias(texto) {
+    // Acepta el número con palabra y paréntesis ("quince (15) días"), el
+    // singular ("un (1) día") y dígitos torcidos por el OCR; el ancla final
+    // \bd[ií]as?\b evita falsos positivos tipo "acuerdo 014".
+    const mPlazo = texto.match(
+      new RegExp(`(?:plazo|t[eé]rmino|tiempo|vence|vencimiento|dentro de)\\s*(?:un\\s+t[eé]rmino\\s+de\\s*)?(?:de\\s+)?(?:el\\s+|los\\s+|las\\s+|un\\s+|una\\s+)?(?:[a-záéíúó]+\\s+)?\\(?(${DIGITO_OCR}{1,2})\\)?\\s*d[ií]as?\\b`, 'i')
+    )
+    if (mPlazo) {
+      const num = parseInt(normalizarDigitos(mPlazo[1]), 10)
+      if ([3, 5, 10, 15, 30].includes(num)) return num
+      if (num <= 4) return 3
+      if (num <= 7) return 5
+      if (num <= 12) return 10
+      if (num <= 20) return 15
+      return 30
+    }
+    if (/\btutela\b/i.test(texto)) return 3
+    return null
+  }
+}
+
+export default RadicadosService

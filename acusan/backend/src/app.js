@@ -48,7 +48,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/permisos',     verificarToken, permisosRoutes)
 app.use('/api/horas-extras', verificarToken, horasExtrasRoutes)
 app.use('/api/pqr',          verificarToken, pqrRoutes)
-app.use('/api/radicados',    radicadosRoutes)
+app.use('/api/radicados',    verificarToken, radicadosRoutes)
 
 // ─── Rutas exclusivas ADMIN (doble protección: token + rol) ───────────────────
 app.use('/api/admin', verificarToken, verificarRol('ADMIN'), adminRoutes)

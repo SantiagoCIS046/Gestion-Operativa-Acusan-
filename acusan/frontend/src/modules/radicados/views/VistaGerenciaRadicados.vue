@@ -27,22 +27,24 @@
 
       <!-- BOTONES DE ACCIÓN DEL HEADER -->
       <div class="header-right d-flex align-items-center gap-2 flex-wrap">
-        <!-- ESTADO DEL SONDEO EN VIVO: confirma que el tablero se actualiza solo -->
+        <!-- ESTADO DEL SONDEO EN VIVO: verde solo si el último sondeo llegó al
+             servidor; si falló, gris "Sin conexión" para no vender un tablero
+             vacío como si estuviera vivo -->
         <span
-          v-if="sinConexion"
-          class="badge bg-danger text-white px-2 py-1"
-          style="font-size: 0.72rem;"
-          title="No hay conexión con el servidor: se muestra la última información guardada en este navegador. Los radicados nuevos aparecerán al restablecerse la conexión."
-        >
-          ⚠ Sin conexión — datos locales
-        </span>
-        <span
-          v-else-if="ultimaActualizacion"
+          v-if="ultimaActualizacion && origenDatos === 'servidor'"
           class="badge bg-success text-white px-2 py-1"
           style="font-size: 0.72rem;"
           title="Este tablero se actualiza automáticamente cada 5 segundos desde que la encargada guarda un radicado"
         >
           ● En vivo · {{ horaUltimaActualizacion }}
+        </span>
+        <span
+          v-else-if="ultimaActualizacion"
+          class="badge bg-secondary text-white px-2 py-1"
+          style="font-size: 0.72rem;"
+          title="El último sondeo no pudo conectar con el servidor: los datos en pantalla pueden estar desactualizados"
+        >
+          ● Sin conexión · {{ horaUltimaActualizacion }}
         </span>
 
         <!-- BOTÓN PRINCIPAL DE ALERTAS DE RADICACIONES SUBIDAS -->
@@ -61,44 +63,9 @@
           </span>
           <span class="btn-text">Alertas de Subidas</span>
         </button>
-
-        <button 
-          type="button" 
-          class="btn-refresh-gerencia" 
-          @click="cargarDatos(false)" 
-          :disabled="cargando"
-          title="Recargar datos del servidor"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" :class="{ 'spin-anim': cargando }">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          <span>Sincronizar</span>
-        </button>
       </div>
     </div>
 
-    <!-- ═══════════════ RADICADOS DE ESTE NAVEGADOR SIN SUBIR ═══════════════ -->
-    <div
-      v-if="radicadosAtrapados > 0"
-      class="alert alert-warning d-flex align-items-center justify-content-between gap-2 mb-3 py-2"
-      role="alert"
-    >
-      <div style="font-size: 0.85rem;">
-        <strong>⚠ {{ radicadosAtrapados }} radicado(s) de este navegador no están en la base de datos.</strong>
-        <span class="text-muted">
-          Se guardaron solo en este equipo (falló la subida) y por eso no aparecen en el tablero. {{ mensajeReintento }}
-        </span>
-      </div>
-      <button
-        class="btn btn-sm btn-warning fw-semibold text-nowrap"
-        @click="reintentarSincronizacion"
-        :disabled="reintentandoSync"
-      >
-        {{ reintentandoSync ? 'Sincronizando…' : 'Reintentar subida' }}
-      </button>
-    </div>
 
     <!-- ═══════════════ KPIS DE CONTROL GERENCIAL ═══════════════ -->
     <div class="row g-2 mb-3">
@@ -599,9 +566,7 @@
               <div v-else class="d-flex flex-column align-items-center justify-content-center text-center p-4" style="min-height: 300px;">
                 <div style="font-size: 2rem;">📄</div>
                 <p class="text-white-50 mb-0" style="font-size: 0.8rem;">
-                  {{ esRadicadoLocalPendiente(radicadoSeleccionado)
-                    ? 'Radicado local pendiente de sincronizar: su documento no quedó guardado en este navegador.'
-                    : 'Este radicado no tiene documento adjunto en la base de datos.' }}
+                  Este radicado no tiene documento adjunto en la base de datos.
                 </p>
               </div>
             </div>
@@ -619,7 +584,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
-import adjuntosOffline from '../../../services/adjuntosOffline.js'
 
 // Estado
 const listaRadicados = ref([])
@@ -637,43 +601,17 @@ const detallePdfCargando = ref(false)
 const detallePdfError = ref(null)
 const detallePdfMime = ref('')
 let timerAutoRefresh = null
-// Estado de conexión con el servidor: obtenerTodos nunca rechaza (cae al
-// espejo local), así que el origen lo revela radicadosService.ultimoOrigen.
-const sinConexion = ref(false)
 const ultimaActualizacion = ref(null)
+// Origen del último sondeo ('servidor' | null): obtenerTodos devuelve [] al
+// fallar sin lanzar error, así que el badge "En vivo" no puede confiar en el
+// catch — pregunta al servicio de dónde vino lo último que se mostró.
+const origenDatos = ref(null)
 const horaUltimaActualizacion = computed(() =>
   ultimaActualizacion.value
     ? ultimaActualizacion.value.toLocaleTimeString('es-CO', { hour12: false })
     : ''
 )
 let cargaEnCurso = false
-// Radicados creados en ESTE navegador que no lograron subir (RAD-LOCAL):
-// existen solo aquí y por eso no salen en el tablero. Banner con reintento.
-const radicadosAtrapados = computed(
-  () => (listaRadicados.value || []).filter((r) => r && r.sincronizado === false).length
-)
-const reintentandoSync = ref(false)
-const mensajeReintento = ref('')
-const reintentarSincronizacion = async () => {
-  if (reintentandoSync.value) return
-  reintentandoSync.value = true
-  mensajeReintento.value = ''
-  try {
-    const { publicados, quedan, fallados } = await radicadosService.reintentarFallidos()
-    if (publicados > 0) {
-      mensajeReintento.value = `✓ ${publicados} radicado(s) recién publicados en la base de datos.`
-    }
-    if (quedan > 0) {
-      const detalle = (fallados || []).slice(0, 3).map((f) => `${f.numeroRadicado}: ${f.error}`).join(' | ')
-      mensajeReintento.value = `${quedan} siguen sin subir${detalle ? ` — motivo: ${detalle}` : ''}. Si el motivo es un dato inválido, elimine ese radicado desde el módulo de Radicados y regístrelo de nuevo.`
-    }
-  } catch (e) {
-    mensajeReintento.value = `No se pudo completar el reintento: ${e.message || 'error de conexión'}.`
-  } finally {
-    reintentandoSync.value = false
-    cargarDatos(true)
-  }
-}
 
 // Cargar datos
 const cargarDatos = async (silencioso = false) => {
@@ -685,25 +623,17 @@ const cargarDatos = async (silencioso = false) => {
     if (!silencioso) cargando.value = true
     const datos = await radicadosService.obtenerTodos()
     listaRadicados.value = datos || []
-    if (radicadosService.ultimoOrigen === 'servidor') {
-      sinConexion.value = false
-      ultimaActualizacion.value = new Date()
-    } else {
-      sinConexion.value = true
-    }
+    ultimaActualizacion.value = new Date()
+    origenDatos.value = radicadosService.ultimoOrigen
   } catch (err) {
     console.error('Error al cargar radicados en gerencia:', err)
+    origenDatos.value = null
   } finally {
     cargaEnCurso = false
     if (!silencioso) cargando.value = false
   }
 }
 
-const onStorageChange = (e) => {
-  if (e.key === 'acuasan_radicados_v2' || !e.key) {
-    cargarDatos(true)
-  }
-}
 
 // Una pestaña de fondo ve su intervalo congelado por el navegador (1 disparo
 // por minuto o menos): al volver a mirar el tablero se refresca al instante
@@ -715,24 +645,16 @@ const onVisibilidadCambio = () => {
 let desuscribirCambios = null
 
 onMounted(() => {
-  // Recuperación en este navegador: publicar pendientes creados aquí
-  // (p. ej. creados como Encargado y revisados luego como Gerencia).
-  // Si el token expiró, la propia sincronización redirige al login.
-  radicadosService
-    .sincronizarPendientes()
-    .then((sincronizados) => {
-      if (sincronizados > 0) cargarDatos(true)
-    })
-    .catch(() => { /* sin conexión: el listado cae al espejo local */ })
   cargarDatos()
   
-  // Suscripción a eventos en tiempo real (BroadcastChannel + CustomEvents + Storage)
+  // Aviso inmediato dentro de la pestaña cuando la vista de Radicados crea o
+  // elimina; el sondeo cada 5s cubre el resto (otras pestañas y otros equipos)
   desuscribirCambios = radicadosService.suscribirCambios(() => {
     cargarDatos(true)
   })
 
   document.addEventListener('visibilitychange', onVisibilidadCambio)
-  // Actualización periódica silenciosa desde la base local reactiva (respaldo)
+  // Sondeo periódico directo al servidor
   timerAutoRefresh = setInterval(() => {
     cargarDatos(true)
   }, 5000)
@@ -925,23 +847,9 @@ const abrirDetalleDesdeAlerta = (rad) => {
 }
 
 // El documento original se muestra DENTRO del modal (visor object/iframe), no en
-// pestaña nueva. Mismo orden de resolución que Permisos: data URL del registro →
-// IndexedDB (pendiente local) → servidor. El flag hasArchivo del caché NUNCA gatea
-// la consulta: si el documento existe en la BD, se muestra.
-const mimeDesdeDataUrl = (dataUrl) => (String(dataUrl).match(/^data:([^;,]+)/) || [])[1] || ''
+// pestaña nueva: se pide al servidor — si existe en la BD, se muestra.
 
-// El visor inline acepta data URLs, pero el ancla "Abrir Archivo" (target=_blank)
-// no: los navegadores bloquean la navegación top-level a data:. Se convierte a
-// blob: cuando es posible; si falla, se degrada a la data URL cruda.
-const dataUrlABlobUrl = async (dataUrl) => {
-  try {
-    return URL.createObjectURL(await (await fetch(dataUrl)).blob())
-  } catch (e) {
-    return dataUrl
-  }
-}
-
-// Liberar el blob del visor (el Base64 del caché local no se revoca: no es blob)
+// Liberar el blob del visor
 const liberarDetallePdfUrl = () => {
   if (detallePdfUrl.value && detallePdfUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(detallePdfUrl.value)
@@ -953,8 +861,6 @@ const liberarDetallePdfUrl = () => {
 // vuelo, la promesa vieja ya no pisa el visor de la nueva (documento equivocado).
 let detallePdfToken = 0
 
-const esRadicadoLocalPendiente = (rad) =>
-  Boolean(rad) && (rad.sincronizado === false || String(rad.id).startsWith('RAD-LOCAL'))
 
 const cargarPdfDetalle = async (rad) => {
   const token = ++detallePdfToken
@@ -966,30 +872,9 @@ const cargarPdfDetalle = async (rad) => {
 
   detallePdfCargando.value = true
   try {
-    // 1) Data URL del propio registro (solo si el caché la conserva)
-    if (typeof rad.archivoBase64 === 'string' && rad.archivoBase64.startsWith('data:')) {
-      const url = await dataUrlABlobUrl(rad.archivoBase64)
-      if (token !== detallePdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
-      detallePdfMime.value = mimeDesdeDataUrl(rad.archivoBase64)
-      detallePdfUrl.value = url
-      return
-    }
 
-    // 2) Adjunto resguardado en IndexedDB (pendiente local cuyo archivo no cupo en localStorage)
-    if (rad.sincronizado === false && rad.archivoEnIndexedDB) {
-      const adj = await adjuntosOffline.obtenerAdjunto(rad.idLocal)
-      if (token !== detallePdfToken) return
-      if (adj && adj.dataUrl) {
-        const url = await dataUrlABlobUrl(adj.dataUrl)
-        if (token !== detallePdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
-        detallePdfMime.value = mimeDesdeDataUrl(adj.dataUrl)
-        detallePdfUrl.value = url
-        return
-      }
-    }
-
-    // 3) Servidor — camino principal para todo radicado con id real
-    if (rad.id && !String(rad.id).startsWith('RAD-LOCAL')) {
+    // Servidor — camino principal para todo radicado con id real
+    if (rad.id) {
       const { url, mime } = await radicadosService.obtenerArchivoRadicado(rad.id)
       if (token !== detallePdfToken) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return }
       detallePdfUrl.value = url
