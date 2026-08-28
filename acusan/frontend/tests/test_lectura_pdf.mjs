@@ -113,7 +113,7 @@ const CASOS = {
 
 // ── Ejecutar ─────────────────────────────────────────────────────────────────
 const { RadicadosService } = await import(
-  'file:///c:/Escritorio/Codigo%20Aquasan/acusan/backend/src/modules/radicados/radicados.service.js'
+  '../../backend/src/modules/radicados/radicados.service.js'
 )
 
 let fallos = 0

@@ -1,8 +1,9 @@
 // Reproduce EXACTLY the ocrRadicados.js line 148 logic with the installed pdfjs-dist 6.2.108
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const file = process.argv[2] || '_test_lineas.pdf'
+const file = process.argv[2] || join(import.meta.dirname, '_test_lineas.pdf')
 const buffer = new Uint8Array(readFileSync(file))
 const doc = await getDocument({ data: buffer, useSystemFonts: true }).promise
 
