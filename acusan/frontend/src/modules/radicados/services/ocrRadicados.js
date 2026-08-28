@@ -307,12 +307,22 @@ export const ocrRadicados = {
         }
         const charsDigital = textoDigital.replace(/\s/g, "").length;
 
-        // ── INTENTO 1: PDF con texto digital → OCR de sello Pág. 1 + Texto Digital ──
+        // ── INTENTO 1: PDF con texto digital → Lectura instantánea u OCR de encabezado ──
         if (charsDigital >= 40) {
-          reportar("Escaneando sello en página 1…", 0.35);
+          const tieneRadicadoODetalle = /RADICADO/i.test(textoDigital) || /\b202\d{7,}\b/.test(textoDigital) || charsDigital >= 120;
+
+          if (tieneRadicadoODetalle) {
+            reportar("Lectura digital completada", 1);
+            return {
+              texto: textoDigital.trim(),
+              metodo: "Lectura digital directa (Instantánea)",
+            };
+          }
+
+          reportar("Escaneando sello en encabezado de página 1…", 0.35);
           try {
             const page1 = await doc.getPage(1);
-            const canvas1 = await renderizarPaginaACanvas(page1);
+            const canvas1 = await renderizarEncabezadoACanvas(page1);
             const proc1 = preprocesarCanvasParaOCR(canvas1);
             canvas1.width = 0;
             const textoOcrP1 = await ocrMultimodo(proc1, (etapa, p) =>
@@ -325,7 +335,7 @@ export const ocrRadicados = {
             reportar("Lectura completa", 1);
             return {
               texto: textoCombinado,
-              metodo: "Lectura digital + OCR de sello (Pág. 1)",
+              metodo: "Lectura digital + OCR de encabezado (Pág. 1)",
             };
           } catch (eOcrP1) {
             console.warn("⚠️ No se pudo hacer OCR a Pág 1:", eOcrP1.message);

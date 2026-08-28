@@ -195,8 +195,8 @@ model RegistroAcceso {
 model Radicado {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   numeroRadicado    String   @unique
-  // Identificador del cliente para idempotencia de la sincronización offline
-  idLocal           String?  @unique
+  // Identificador opcional del cliente
+  idLocal           String?
   fechaRadicacion   DateTime @default(now())
 
   // Campos del documento PDF / OCR

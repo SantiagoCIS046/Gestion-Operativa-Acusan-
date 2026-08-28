@@ -1216,13 +1216,40 @@ const esImagenDocumento = (rad) => {
 
 /* Tabla */
 .table-responsive-wrapper {
+  width: 100%;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
+  scrollbar-width: thin;
+  scrollbar-color: #107c41 #e2e8f0;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar {
+  height: 9px;
+  width: 9px;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+  border: 2px solid #f1f5f9;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #107c41;
 }
 
 .gerencia-table {
   width: 100%;
+  min-width: 1220px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.78rem;

@@ -972,7 +972,8 @@ const onFileSelected = async (event) => {
   form.archivoBase64 = ''
   compresionEstado.value = null
   compresionMetricas.value = null
-  tokenLectura++
+  tokenLectura++    // invalida lecturas OCR anteriores
+  tokenCompresion++ // invalida compresiones anteriores (contador propio)
   for (const [campo] of CAMPOS_LEIBLES) form[campo] = ''
   form.dependencia = DEPENDENCIA_POR_DEFECTO
   form.diasParaVencer = 10
@@ -980,30 +981,32 @@ const onFileSelected = async (event) => {
   // ── Comprimir y leer en paralelo ───────────────────────────────────────
   // El OCR trabaja sobre el archivo ORIGINAL (máxima calidad para el texto).
   // La compresión produce el Base64 que se guarda en MongoDB (menor peso).
-  // Ambos procesos son independientes y pueden correr sin bloquearse.
-  const tokenActual = tokenLectura
+  // Ambos procesos son independientes y pueden correr sin bloquearse, por lo
+  // que usan tokens SEPARADOS: si compartieran contador, el ++ de leerDocumento
+  // vencería el token de la compresión y su resultado se descartaría siempre.
+  const tokenActual = tokenCompresion
 
   // Compresión en paralelo (no bloquea el OCR)
   const comprimir = async () => {
     try {
       compresionEstado.value = 'comprimiendo'
       const resultado = await compressorRadicados.comprimir(file, (etapa, p) => {
-        if (tokenLectura !== tokenActual) return
+        if (tokenCompresion !== tokenActual) return
         compresionEtapa.value = etapa
         compresionProgreso.value = p
       })
-      if (tokenLectura !== tokenActual) return
+      if (tokenCompresion !== tokenActual) return
       form.archivoBase64 = resultado.dataUrl
       form.archivoNombre = resultado.nombre
       compresionMetricas.value = resultado.metricas
       compresionEstado.value = 'listo'
     } catch (err) {
-      if (tokenLectura !== tokenActual) return
+      if (tokenCompresion !== tokenActual) return
       // Si la compresión falla, guardar el original sin comprimir
       console.warn('Compresión fallida, usando original:', err.message)
       const reader = new FileReader()
       reader.onload = (e) => {
-        if (tokenLectura !== tokenActual) return
+        if (tokenCompresion !== tokenActual) return
         form.archivoBase64 = e.target.result
         compresionEstado.value = 'listo'
       }
@@ -1039,6 +1042,10 @@ const CAMPOS_LEIBLES = [
 // una lectura lenta sigue en vuelo, su resultado tardío se descarta (no puede
 // pisar los campos del documento que ahora muestra la previsualización).
 let tokenLectura = 0
+// Token análogo pero SOLO para la compresión: compresión y OCR corren en
+// paralelo sobre el mismo archivo, así que cada uno necesita su propio contador
+// (uno compartido haría que el que arranque segundo venciese al primero).
+let tokenCompresion = 0
 
 const leerDocumento = async (file) => {
   const token = ++tokenLectura
@@ -1090,6 +1097,16 @@ const aplicarCamposExtraidos = (campos, metodo) => {
 
 // Guardar
 const guardarRadicado = async () => {
+  // Si la compresión del documento sigue en vuelo, el Base64 aún no está listo:
+  // guardar ahora crearía un radicado SIN documento (pérdida silenciosa).
+  if (compresionEstado.value === 'comprimiendo') {
+    mostrarAlertaBootstrap(
+      'Documento en optimización',
+      'El documento aún se está optimizando. Espere unos segundos a que termine y vuelva a guardar.',
+      'warning'
+    )
+    return
+  }
   try {
     guardando.value = true
     const nuevoRad = await radicadosService.crear(form)
@@ -2421,5 +2438,50 @@ const getBadgeBootstrap = (rad) => {
 }
 
 .row-even td { background: #f8fafc; }
+
+/* ── CONTENEDOR CON SCROLL HORIZONTAL Y VERTICAL ESTILO EXCEL ── */
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
+  border-top: 1px solid #cbd5e1;
+  scrollbar-width: thin;
+  scrollbar-color: #107c41 #e2e8f0;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar {
+  height: 9px;
+  width: 9px;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+  border: 2px solid #f1f5f9;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #107c41;
+}
+
+.excel-table {
+  width: 100%;
+  min-width: 1220px;
+  border-collapse: collapse;
+}
+
+.excel-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f1f5f9;
+}
 </style>
 

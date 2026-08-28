@@ -146,6 +146,7 @@ export const RadicadosService = {
     return prisma.radicado.create({
       data: {
         numeroRadicado,
+        idLocal: datos.idLocal || `rad_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         peticionario: limpiar(peticionario),
         dependencia: dependencia ? limpiar(dependencia) : 'ACUASAN E.S.P.',
         destinatario: destinatario ? limpiar(destinatario) : null,
