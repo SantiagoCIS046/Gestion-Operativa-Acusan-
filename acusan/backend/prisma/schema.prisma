@@ -145,11 +145,13 @@ model PQR {
 // MÓDULO: AUTENTICACIÓN DE USUARIOS
 // -------------------------------------------------------------
 enum RolUsuario {
+  ADMIN
+  ADMINISTRADOR
   ENCARGADO
   GERENCIA
   OPERATIVO
-  ADMIN
   RADICADOS
+  CLIENTE
 }
 
 

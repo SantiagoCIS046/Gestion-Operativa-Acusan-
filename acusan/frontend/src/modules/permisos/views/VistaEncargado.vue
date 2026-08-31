@@ -1969,29 +1969,78 @@ const aplicarCampos = (campos) => {
   formData.motivoManuscrito = campos.motivo || ''
 }
 
-// Inicializar pdf.js worker (singleton resiliente con fallback a CDN oficial)
-let _pdfWorkerInit = false
-const initPdfWorker = async () => {
-  if (_pdfWorkerInit) return
-  try {
-    const pdfjsLib = await import('pdfjs-dist')
-    const v = pdfjsLib.version || '4.10.38'
+// Singleton de pdfjs para lectura de permisos
+let pdfjsCacheEncargado = null
+const getPdfjsEncargado = async () => {
+  if (pdfjsCacheEncargado) return pdfjsCacheEncargado
+  const pdfjs = await import('pdfjs-dist')
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
     try {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
-    } catch (e) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${v}/build/pdf.worker.min.mjs`
+      const m = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+      pdfjs.GlobalWorkerOptions.workerSrc = m.default
+    } catch {
+      pdfjs.GlobalWorkerOptions.workerSrc =
+        `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
     }
-    _pdfWorkerInit = true
-  } catch (err) {
-    console.warn('[PDF Worker Init Warning]', err)
   }
+  pdfjsCacheEncargado = pdfjs
+  return pdfjs
+}
+
+// Extracción espacial estructurada de texto respetando líneas y columnas
+const extraerTextoPaginaEncargado = async (page) => {
+  const content = await page.getTextContent({ includeMarkedContent: false })
+  const viewport = page.getViewport({ scale: 1 })
+  const altoPagina = viewport.height
+
+  const items = content.items
+    .filter((it) => it.str && it.str.trim())
+    .map((it) => ({
+      str: it.str,
+      x: it.transform[4],
+      y: altoPagina - it.transform[5],
+      ancho: it.width || 0,
+    }))
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+
+  if (!items.length) return ''
+
+  const lineas = []
+  let lineaActual = [items[0]]
+  let yRef = items[0].y
+
+  for (let i = 1; i < items.length; i++) {
+    const it = items[i]
+    if (Math.abs(it.y - yRef) <= 4) {
+      lineaActual.push(it)
+    } else {
+      lineas.push(lineaActual.sort((a, b) => a.x - b.x))
+      lineaActual = [it]
+      yRef = it.y
+    }
+  }
+  if (lineaActual.length) lineas.push(lineaActual.sort((a, b) => a.x - b.x))
+
+  return lineas
+    .map((linea) => {
+      let resultado = ''
+      for (let i = 0; i < linea.length; i++) {
+        if (i === 0) {
+          resultado = linea[i].str
+        } else {
+          const prev = linea[i - 1]
+          const gap = linea[i].x - (prev.x + prev.ancho)
+          resultado += (gap > 8 ? '  ' : ' ') + linea[i].str
+        }
+      }
+      return resultado.trimEnd()
+    })
+    .filter((l) => l.trim())
+    .join('\n')
 }
 
 // Worker de Tesseract persistente: se crea una sola vez por sesión y se
-// reutiliza en todas las páginas y documentos. En tesseract.js v7 los
-// parámetros de Tesseract (tessedit_*) SOLO se aplican vía setParameters —
-// pasarlos dentro de recognize() no tiene efecto y el OCR corría con la
-// configuración por defecto.
+// reutiliza en todas las páginas y documentos.
 let _ocrWorkerTesseract = null
 const obtenerWorkerOCR = async () => {
   if (_ocrWorkerTesseract) return _ocrWorkerTesseract
@@ -2012,10 +2061,7 @@ const terminarWorkerOCR = async () => {
   }
 }
 
-// Ejecutar Tesseract sobre un canvas. Timeout de 60s: los escaneos borrosos o
-// con letra irregular a escala 2.5 tardan bastante más de los 5s que había
-// antes — con 5s el OCR devolvía texto vacío en silencio y el parser terminaba
-// inventando datos ajenos al documento.
+// Ejecutar Tesseract sobre un canvas con timeout seguro de 40s
 const ejecutarOCR = async (canvas) => {
   try {
     const canvasMejorado = mejorarImagenParaOCR(canvas)
@@ -2023,21 +2069,20 @@ const ejecutarOCR = async (canvas) => {
 
     const ocrTask = worker.recognize(canvasMejorado)
     const timeoutTask = new Promise((resolve) =>
-      setTimeout(() => resolve({ agotado: true }), 60000)
+      setTimeout(() => resolve({ agotado: true }), 40000)
     )
 
     const res = await Promise.race([ocrTask, timeoutTask])
     if (res && res.agotado) {
-      console.warn('[OCR] Tiempo agotado (60s) para esta página')
+      console.warn('[OCR] Tiempo agotado para esta página')
       return { texto: '', confianza: 0, agotado: true }
     }
     const texto = (res && res.data && res.data.text) ? res.data.text : ''
     const confianza = (res && res.data && typeof res.data.confidence === 'number') ? res.data.confidence : null
-    console.info(`[OCR Resultado] ${texto.length} caracteres reconocidos (confianza Tesseract: ${confianza ?? 'n/d'})`)
+    console.info(`[OCR Resultado] ${texto.length} caracteres reconocidos (confianza: ${confianza ?? 'n/d'})`)
     return { texto, confianza, agotado: false }
   } catch (e) {
     console.warn('[OCR Bypass]', e)
-    // Worker corrupto: se descarta para que el próximo intento lo reconstruya
     await terminarWorkerOCR()
     return { texto: '', confianza: 0, agotado: false }
   }
@@ -2079,44 +2124,52 @@ const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
     }
   } else if (isPdf) {
     try {
-      await initPdfWorker()
-      const { getDocument } = await import('pdfjs-dist')
+      const pdfjs = await getPdfjsEncargado()
       ocrStepMessage.value = 'Abriendo documento PDF...'
       ocrProgress.value = 20
 
-      const pdfDoc = await getDocument({ data: base64ToUint8(dataUrl) }).promise
+      const loadingTask = pdfjs.getDocument({ data: base64ToUint8(dataUrl), useSystemFonts: true })
+      const pdfDoc = await loadingTask.promise
       const totalPaginas = pdfDoc.numPages
       console.info(`[PDF] Páginas detectadas: ${totalPaginas}`)
 
       for (let pNum = 1; pNum <= totalPaginas; pNum++) {
-        ocrStepMessage.value = `Digitalizando página ${pNum} de ${totalPaginas}...`
+        ocrStepMessage.value = `Procesando página ${pNum} de ${totalPaginas}...`
         ocrProgress.value = Math.round(25 + (pNum / totalPaginas) * 60)
 
         const page = await pdfDoc.getPage(pNum)
 
         let textoPag = ''
         try {
-          const textContent = await page.getTextContent()
-          const str = textContent.items.map(item => item.str).join(' ')
-          if (str.trim().length > 15) {
-            textoPag += str + '\n'
-          }
-        } catch (e) {}
-
-        try {
-          const viewport = page.getViewport({ scale: 2.5 })
-          const canvas = document.createElement('canvas')
-          canvas.width = viewport.width
-          canvas.height = viewport.height
-          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-
-          ocrStepMessage.value = `Extrayendo datos de página ${pNum}...`
-          const ocrPag = await ejecutarOCR(canvas)
-          textoPag += ocrPag.texto
-          if (ocrPag.agotado) paginasOCRAgotadas++
-        } catch (renderErr) {
-          console.warn(`[Page ${pNum} Render Warn]`, renderErr)
+          textoPag = await extraerTextoPaginaEncargado(page)
+        } catch (e) {
+          console.warn(`[Page ${pNum} Text Extract Warn]`, e)
         }
+
+        // Si la página tiene poco o ningún texto digital (< 25 caracteres), hacemos OCR con Tesseract
+        if (textoPag.replace(/\s/g, '').length < 25) {
+          try {
+            const viewport = page.getViewport({ scale: 2.6 })
+            const canvas = document.createElement('canvas')
+            canvas.width = viewport.width
+            canvas.height = viewport.height
+            const ctx = canvas.getContext('2d')
+            ctx.fillStyle = '#ffffff'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            await page.render({ canvas, viewport }).promise
+
+            ocrStepMessage.value = `Extrayendo datos de página ${pNum} (OCR)...`
+            const ocrPag = await ejecutarOCR(canvas)
+            if (ocrPag.texto && ocrPag.texto.trim()) {
+              textoPag = ocrPag.texto
+            }
+            if (ocrPag.agotado) paginasOCRAgotadas++
+          } catch (renderErr) {
+            console.warn(`[Page ${pNum} Render Warn]`, renderErr)
+          }
+        }
+
+        try { page.cleanup() } catch (_) {}
 
         if (pNum === 1) {
           textoPagina1 = textoPag
@@ -2124,9 +2177,6 @@ const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
         textoCompleto += `\n--- PÁGINA ${pNum} ---\n` + textoPag
       }
     } catch (pdfErr) {
-      // PDF ilegible/dañado: NO se usa el nombre de archivo como si fuera el
-      // texto del documento (el parser "inventaría" datos de él). Se informa
-      // honestamente y los campos quedan para diligenciamiento manual.
       console.warn('[PDF Process Warning — documento no legible]', pdfErr)
       ocrDocumentoIlegible = true
       textoCompleto = ''

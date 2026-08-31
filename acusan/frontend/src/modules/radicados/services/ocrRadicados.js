@@ -309,9 +309,9 @@ export const ocrRadicados = {
 
         // ── INTENTO 1: PDF con texto digital → Lectura instantánea u OCR de encabezado ──
         if (charsDigital >= 40) {
-          const tieneRadicadoODetalle = /RADICADO/i.test(textoDigital) || /\b202\d{7,}\b/.test(textoDigital) || charsDigital >= 120;
+          const tieneRadicadoClaro = /RADICADO/i.test(textoDigital) && (/\b202\d{6,}\b/.test(textoDigital) || /\b\d{6,12}\b/.test(textoDigital));
 
-          if (tieneRadicadoODetalle) {
+          if (tieneRadicadoClaro) {
             reportar("Lectura digital completada", 1);
             return {
               texto: textoDigital.trim(),

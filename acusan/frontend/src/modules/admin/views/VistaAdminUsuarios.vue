@@ -509,6 +509,22 @@ import notificacionService from '../../../services/notificacionService.js'
 
 const API_BASE = '/api/admin'
 
+// ─── Helpers de red ──────────────────────────────────────────────────────
+// Un backend caído llega aquí como respuesta vacía o no-JSON (el proxy de
+// Vite/Vercel responde 500 sin cuerpo) y `res.json()` revienta con
+// "Unexpected end of JSON input". Se traduce a un mensaje accionable.
+const leerJson = async (res) => {
+  const texto = await res.text().catch(() => '')
+  if (!texto) {
+    throw new Error(`El servidor respondió vacío (HTTP ${res.status}). Verifique que el backend esté en línea.`)
+  }
+  try { return JSON.parse(texto) } catch {
+    throw new Error('El servidor respondió en un formato inesperado (no es JSON válido).')
+  }
+}
+const esErrorDeRed = (msg) =>
+  /failed to fetch|networkerror|load failed|err_connection/i.test(msg || '')
+
 // ─── Estado ──────────────────────────────────────────────────────────────
 const usuarios              = ref([])
 const cargando              = ref(true)
@@ -568,11 +584,13 @@ async function cargarUsuarios() {
   cargando.value = true; errorMsg.value = ''
   try {
     const res  = await fetch(`${API_BASE}/usuarios`, { headers: authService.getAuthHeader() })
-    const data = await res.json()
-    if (!res.ok || !data.success) throw new Error(data.message)
+    const data = await leerJson(res)
+    if (!res.ok || !data.success) throw new Error(data.message || `Error HTTP ${res.status}`)
     usuarios.value = data.data
   } catch (e) {
-    errorMsg.value = e.message || 'No se pudo conectar con el servidor'
+    errorMsg.value = esErrorDeRed(e.message)
+      ? 'No hay conexión con el servidor. Verifique que el backend esté en línea y presione «Reintentar conexión».'
+      : (e.message || 'No se pudo conectar con el servidor')
   } finally {
     cargando.value = false
   }
@@ -618,12 +636,14 @@ async function guardarUsuario() {
         body: JSON.stringify(body)
       })
     }
-    const data = await res.json()
-    if (!res.ok || !data.success) throw new Error(data.message)
+    const data = await leerJson(res)
+    if (!res.ok || !data.success) throw new Error(data.message || `Error HTTP ${res.status}`)
     notificacionService.exito(modoCrear.value ? 'Usuario creado exitosamente' : 'Usuario actualizado correctamente')
     cerrarModal(); await cargarUsuarios()
   } catch (e) {
-    modalError.value = e.message || 'Error al guardar el usuario'
+    modalError.value = esErrorDeRed(e.message)
+      ? 'No hay conexión con el servidor. Verifique que el backend esté en línea.'
+      : (e.message || 'Error al guardar el usuario')
   } finally {
     guardando.value = false
   }
@@ -636,8 +656,8 @@ async function toggleActivo(u) {
       headers: { 'Content-Type': 'application/json', ...authService.getAuthHeader() },
       body: JSON.stringify({ activo: !u.activo })
     })
-    const data = await res.json()
-    if (!res.ok || !data.success) throw new Error(data.message)
+    const data = await leerJson(res)
+    if (!res.ok || !data.success) throw new Error(data.message || `Error HTTP ${res.status}`)
     u.activo = !u.activo
     notificacionService.exito(`Cuenta ${u.activo ? 'activada' : 'desactivada'} — ${u.nombre}`)
   } catch (e) {
@@ -650,8 +670,8 @@ async function ejecutarEliminar() {
   guardando.value = true
   try {
     const res = await fetch(`${API_BASE}/usuarios/${usuarioAEliminar.value.id}`, { method: 'DELETE', headers: authService.getAuthHeader() })
-    const data = await res.json()
-    if (!res.ok || !data.success) throw new Error(data.message)
+    const data = await leerJson(res)
+    if (!res.ok || !data.success) throw new Error(data.message || `Error HTTP ${res.status}`)
     notificacionService.exito(`"${usuarioAEliminar.value.nombre}" eliminado del sistema`)
     modalEliminarVisible.value = false; usuarioAEliminar.value = null
     await cargarUsuarios()
