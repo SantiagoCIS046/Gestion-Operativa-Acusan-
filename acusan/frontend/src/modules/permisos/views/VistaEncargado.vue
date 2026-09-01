@@ -613,13 +613,22 @@
                     </div>
 
                     <!-- Footer acciones del cronograma -->
-                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
-                      <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small text-primary fw-bold" @click="seleccionarTodoElMes">
-                        Ver mes completo
+                    <div class="d-flex flex-column gap-2 pt-2 border-top">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-success w-100 py-1 small fw-bold"
+                        @click="mesNumSeleccionado = null; diaSeleccionado = null; mostrarCalendario = false"
+                      >
+                        📋 Ver Todos los Meses (Historial Completo)
                       </button>
-                      <button type="button" class="btn btn-sm btn-primary py-1 px-3 fw-bold rounded-2" @click="mostrarCalendario = false">
-                        Listo
-                      </button>
+                      <div class="d-flex justify-content-between align-items-center">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none small text-primary fw-bold" @click="seleccionarTodoElMes">
+                          Ver mes completo
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary py-1 px-3 fw-bold rounded-2" @click="mostrarCalendario = false">
+                          Listo
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </transition>
@@ -1106,6 +1115,9 @@ const mesActualInfo = computed(() => {
 })
 
 const etiquetaCronograma = computed(() => {
+  if (mesNumSeleccionado.value === null) {
+    return 'Todos los Meses'
+  }
   if (diaSeleccionado.value !== null) {
     return `${diaSeleccionado.value} de ${mesActualInfo.value.nombre}, ${anioSeleccionado.value}`
   }
@@ -1456,8 +1468,8 @@ const historialFiltrado = computed(() => {
       return coincideTexto
     }
 
-    const coincideAnio = item.anio === anioSeleccionado.value
-    const coincideMes = item.mesNum === mesNumSeleccionado.value
+    const coincideAnio = anioSeleccionado.value === null || item.anio === anioSeleccionado.value
+    const coincideMes = mesNumSeleccionado.value === null || item.mesNum === mesNumSeleccionado.value
     const coincideDia = diaSeleccionado.value === null || item.dia === diaSeleccionado.value
 
     const coincideEstado = filtroEstadoHistorial.value === '' ||
@@ -2446,6 +2458,22 @@ const cargarHistorialDesdeBackend = async () => {
   try {
     const lista = await permisosService.obtenerHistorialPermisos()
     historialRemisiones.value = Array.isArray(lista) ? lista : []
+
+    // Si el mes actualmente seleccionado no tiene registros pero hay registros en otros periodos,
+    // ajustar automáticamente al mes con registros para que la tabla muestre los datos de inmediato
+    if (historialRemisiones.value.length > 0 && mesNumSeleccionado.value !== null) {
+      const itemsNormalizados = historialRemisiones.value.map(normalizarItem).filter(Boolean)
+      const hayEnMesActual = itemsNormalizados.some(
+        it => (anioSeleccionado.value === null || it.anio === anioSeleccionado.value) && it.mesNum === mesNumSeleccionado.value
+      )
+      if (!hayEnMesActual) {
+        const primerItem = itemsNormalizados[0]
+        if (primerItem && primerItem.mesNum) {
+          anioSeleccionado.value = primerItem.anio || anioActual
+          mesNumSeleccionado.value = primerItem.mesNum
+        }
+      }
+    }
   } catch (error) {
     historialRemisiones.value = []
   } finally {
