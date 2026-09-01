@@ -42,20 +42,58 @@ archivos que aparezcan dentro):
   # 2. Regenerar la foto (requiere la llave explícita):
   PERMISOS_DESBLOQUEAR=1 node scripts/proteccion/verificar-permisos.mjs --generar
   # (PowerShell: $env:PERMISOS_DESBLOQUEAR='1'; node scripts/proteccion/verificar-permisos.mjs --generar)
-  # 3. Commitar juntos el cambio + el lock actualizado → nueva foto estable
+  # 3. Commitar juntos el cambio + el lock actualizado, con la llave AÚN ACTIVA
+  #    (PowerShell: mantener $env:PERMISOS_DESBLOQUEAR='1' durante el commit)
   ```
+
+## Diseño de confianza (tras revisión adversarial 2026-09-01)
+
+- El modo `--staged` toma el lock de **HEAD** (`git show HEAD:...`), nunca del
+  disco: editar el hash dentro del lock a mano **no legitima** un cambio.
+- El modo disco reporta un lock local que difiera del de HEAD como
+  **LOCK MANIPULADO**.
+- Los hooks ejecutan el verificador **extraído de HEAD**, no el del disco:
+  manipular `scripts/proteccion/` en disco no ciega la puerta del commit.
+- `--staged` compara el conjunto completo del index (`git ls-files -z`)
+  contra el lock: inmune a renombrados (`git mv`) y a paths con ñ/acentos.
+- Ante cualquier fallo de git el verificador aborta con exit 1 (fail-closed):
+  nunca imprime "íntegro" sin haber comparado.
+
+## Qué puerta bloquea qué
+
+| Operación | Puerta | Estado |
+|---|---|---|
+| `git commit` que toca Permisos o `scripts/proteccion/` | pre-commit | ✅ bloquea |
+| `git merge` / `git pull` (con merge) | pre-merge-commit | ✅ bloquea |
+| `git push` con deriva local | pre-push | ⚠️ avisa |
+| `npm run dev` con deriva | cartel de arranque | ⚠️ avisa |
+| `git cherry-pick` / `git rebase` | — | ❌ sin puerta (el disco lo detecta después) |
+| `git commit --no-verify` | — | ❌ salta todo — **no usar** |
+| Otro clon / GitHub web | hooks son locales | ❌ reinstalar hooks + el disco avisa |
+
+## Puntos de contacto externos (NO congelados; editarlos cambia Permisos)
+
+- `acusan/backend/src/app.js` — montaje de `/api/permisos` y middlewares
+- `acusan/backend/src/middlewares/*` — auth y auditoría que lo envuelven
+- `acusan/backend/src/config/prisma.js` y `logger.js` — cliente BD y logs que
+  el módulo importa en runtime
+- `acusan/backend/prisma/schema.prisma` — modelos Permiso/EstadoPermiso
+- `acusan/frontend/src/modules/auth/services/authService.js` — contrato
+  `getAuthHeader()`/`logout()` que permisosService usa en cada request
+- `acusan/frontend/src/services/sincronizacionService.js` — **IMPORTA**
+  permisosService y dispara `sincronizarPendientes()` al arrancar/login/online
+- `acusan/frontend/src/components/PageHeader.vue` — componente compartido por
+  ambas vistas congeladas
+- Router y menús del frontend (rutas hacia las vistas de Permisos)
+- `acusan/frontend/src/services/*` compartidos que Permisos importa
 
 ## Límites honestos de la protección
 
-- `git commit --no-verify` salta el hook (queda el aviso de `npm run dev`
-  y el lock como detector). **No usen --no-verify** en este repo.
-- Archivos FUERA de los dos directorios no están congelados. El módulo
-  Permisos depende de estos puntos de contacto externos (editarlos puede
-  cambiar el comportamiento de Permisos igualmente):
-  - `acusan/backend/src/app.js` — montaje de `/api/permisos` y middlewares
-  - `acusan/backend/src/middlewares/*` — auth y auditoría que lo envuelven
-  - `acusan/backend/prisma/schema.prisma` — modelos Permiso/EstadoPermiso
-  - Router y menús del frontend (rutas hacia las vistas de Permisos)
-  - `acusan/frontend/src/services/*` compartidos que Permisos importa
+- Los hooks viven en `.git/hooks/` → **locales a esta máquina**. Un clon nuevo
+  u otra máquina debe reinstalarlos (este archivo es la referencia; también
+  `git config core.hooksPath` los anula: no tocar).
+- Un atacante determinado con derechos locales siempre puede desactivar la
+  protección (borrar hooks, `--no-verify`). El objetivo es frenar ediciones
+  accidentales y cambios no coordinados, no defenderse del dueño.
 - Un despliegue de Vercel construye desde git: mientras nadie commitar cambios
   en los directorios protegidos, producción queda intacta.
