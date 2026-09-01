@@ -20,11 +20,18 @@
             {{ proximosAVencer.length }}
           </span>
         </button>
-        <button 
-          class="btn btn-sm btn-secondary d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold shadow-sm" 
+        <button
+          class="btn btn-sm btn-secondary d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold shadow-sm"
           @click="toggleHistorial"
         >
           <span>📜 {{ verHistorial ? 'Ocultar Historial' : 'Ver Historial' }}</span>
+        </button>
+        <button
+          class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2 px-3 py-2 fw-semibold shadow-sm"
+          @click="verRespuestas = !verRespuestas"
+          title="Archivo de oficios de respuesta de todos los radicados"
+        >
+          <span>📨 {{ verRespuestas ? 'Ocultar Respuestas' : 'Respuestas' }}</span>
         </button>
       </div>
 
@@ -164,12 +171,41 @@
 
       <!-- ── COLUMNA DERECHA: Formulario de Registro ── -->
       <div class="card-panel form-panel">
-        <div class="card-header">
-          <h3>📝 Registrar Radicado</h3>
-          <p>Diligencie los campos del radicado</p>
+        <div class="card-header pb-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h3 class="m-0">{{ tipoDocSeleccionado === 'RESPUESTA' ? '📤 Registrar Oficio de Respuesta' : '📝 Registrar Radicado de Entrada' }}</h3>
+              <p class="m-0 text-muted" style="font-size: 0.76rem;">{{ tipoDocSeleccionado === 'RESPUESTA' ? 'Archivar oficio de salida vinculado a un radicado' : 'Diligencie los campos de la correspondencia recibida' }}</p>
+            </div>
+            <span v-if="tipoDetectadoOcr" class="badge" :class="tipoDetectadoOcr === 'RESPUESTA' ? 'bg-success' : 'bg-primary'" style="font-size: 0.65rem;">
+              OCR: {{ tipoDetectadoOcr === 'RESPUESTA' ? 'Oficio Respuesta' : 'Radicado Inicial' }}
+            </span>
+          </div>
+
+          <!-- 🔘 SELECTOR DE RECTIFICACIÓN / CLASIFICACIÓN DOCUMENTAL -->
+          <div class="mt-2 pt-2 border-top">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-bold text-secondary text-uppercase mb-0" style="font-size: 0.68rem;">
+                🔄 Rectificar Clasificación Documental:
+              </label>
+              <small class="text-muted" style="font-size: 0.65rem;">(Haga clic para cambiar si difiere)</small>
+            </div>
+            <div class="btn-group w-100 shadow-sm" role="group">
+              <input type="radio" class="btn-check" name="tipoDocSelector" id="tipoRadicado" value="RADICADO" v-model="tipoDocSeleccionado" @change="alCambiarTipoDoc('RADICADO')">
+              <label :class="['btn btn-sm py-1.5 fw-bold', tipoDocSeleccionado === 'RADICADO' ? 'btn-primary' : 'btn-outline-primary']" for="tipoRadicado">
+                📥 1. Radicado Inicial (Entrada)
+              </label>
+
+              <input type="radio" class="btn-check" name="tipoDocSelector" id="tipoRespuesta" value="RESPUESTA" v-model="tipoDocSeleccionado" @change="alCambiarTipoDoc('RESPUESTA')">
+              <label :class="['btn btn-sm py-1.5 fw-bold', tipoDocSeleccionado === 'RESPUESTA' ? 'btn-success text-white' : 'btn-outline-success']" for="tipoRespuesta">
+                📤 2. Oficio de Respuesta (Salida)
+              </label>
+            </div>
+          </div>
         </div>
 
-        <form @submit.prevent="guardarRadicado" class="radicado-form">
+        <!-- 🟢 FORMULARIO 1: RADICADO INICIAL / ENTRADA -->
+        <form v-if="tipoDocSeleccionado === 'RADICADO'" @submit.prevent="guardarRadicado" class="radicado-form animate-fade-in">
           <!-- Sección 1: Datos del Sello -->
           <div class="form-section-label">📌 Datos del sello / PDF</div>
           <div class="form-row">
@@ -242,7 +278,79 @@
           </div>
 
           <button type="submit" class="btn btn-primary btn-guardar mt-2" :disabled="guardando">
-            <span>{{ guardando ? '⏳ Guardando...' : '➕ Registrar Radicado' }}</span>
+            <span>{{ guardando ? '⏳ Guardando...' : '➕ Registrar Radicado (Entrada)' }}</span>
+          </button>
+        </form>
+
+        <!-- 🔵 FORMULARIO 2: OFICIO DE RESPUESTA A RADICADO -->
+        <form v-else @submit.prevent="guardarRespuesta" class="radicado-form animate-fade-in">
+          <!-- Sección 1: Radicado al que se Responde -->
+          <div class="form-section-label">🔗 Radicado al que Responde</div>
+          <div class="form-group mb-2">
+            <label>Seleccionar Radicado Padre <span class="req">*</span></label>
+            <select v-model="formRespuesta.radicadoId" class="form-select form-select-sm" required>
+              <option value="" disabled>-- Seleccione el Radicado que se responde --</option>
+              <option v-for="r in listaRadicados" :key="r.id" :value="r.id">
+                {{ r.numeroRadicado }} — {{ r.peticionario }} ({{ r.estado }})
+              </option>
+            </select>
+          </div>
+
+          <div v-if="radicadoPadreSeleccionado" class="alert alert-info py-1 px-2 mb-2" style="font-size: 0.72rem; line-height: 1.3;">
+            <div class="fw-bold text-dark mb-0">📌 Radicado Seleccionado: {{ radicadoPadreSeleccionado.numeroRadicado }}</div>
+            <div class="text-truncate"><strong>Peticionario:</strong> {{ radicadoPadreSeleccionado.peticionario }}</div>
+            <div class="text-truncate"><strong>Asunto:</strong> {{ radicadoPadreSeleccionado.asunto || 'Sin asunto' }}</div>
+            <div><strong>Estado Actual:</strong> <span class="badge" :class="radicadoPadreSeleccionado.estado === 'Resuelto' ? 'bg-success' : 'bg-warning text-dark'">{{ radicadoPadreSeleccionado.estado }}</span></div>
+          </div>
+
+          <!-- Sección 2: Datos del Oficio -->
+          <div class="form-section-label">📌 Datos del Oficio de Respuesta</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>N° de Oficio de Salida <span class="req">*</span></label>
+              <input type="text" v-model="formRespuesta.numeroOficio" class="form-control form-control-sm" placeholder="Ej: OF-2026-104" required>
+            </div>
+            <div class="form-group">
+              <label>Fecha del Oficio</label>
+              <input type="text" v-model="formRespuesta.fechaDocumento" class="form-control form-control-sm" placeholder="Fecha del oficio">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Lugar y Fecha de Emisión</label>
+            <input type="text" v-model="formRespuesta.lugarFecha" class="form-control form-control-sm" placeholder="Ej: San Gil, 1 de Septiembre de 2026">
+          </div>
+
+          <!-- Sección 3: Destinatario y Asunto -->
+          <div class="form-section-label">👥 Destinatario y Asunto de la Respuesta</div>
+          <div class="form-group">
+            <label>Destinatario (Peticionario / Ciudadano)</label>
+            <input type="text" v-model="formRespuesta.destinatario" class="form-control form-control-sm" placeholder="Nombre de la persona o entidad que recibe">
+          </div>
+
+          <div class="form-group">
+            <label>Asunto de la Respuesta</label>
+            <input type="text" v-model="formRespuesta.asunto" class="form-control form-control-sm" placeholder="Asunto o síntesis del oficio de salida">
+          </div>
+
+          <div class="form-group">
+            <label>Observaciones / Síntesis</label>
+            <textarea v-model="formRespuesta.observaciones" class="form-control form-control-sm" rows="2" placeholder="Detalle o resumen de la respuesta emitida..."></textarea>
+          </div>
+
+          <!-- Sección 4: Datos Operacionales -->
+          <div class="form-section-label">⚙️ Datos operacionales</div>
+          <div class="form-group">
+            <label>Registrado Por <span class="req">*</span></label>
+            <input type="text" v-model="formRespuesta.registradoPor" class="form-control form-control-sm" placeholder="Responsable" required>
+          </div>
+
+          <div class="alert alert-success-subtle border border-success-subtle py-1 px-2 mb-2" style="font-size: 0.72rem;">
+            ✔ Al archivar esta respuesta, el radicado padre quedará automáticamente en estado <strong>Resuelto</strong>.
+          </div>
+
+          <button type="submit" class="btn btn-success text-white fw-bold btn-guardar mt-2" :disabled="guardando">
+            <span>{{ guardando ? '⏳ Guardando Respuesta...' : '💾 Guardar y Archivar Oficio de Respuesta' }}</span>
           </button>
         </form>
       </div>
@@ -595,6 +703,11 @@
     </div>
   </div>
 
+    <!-- ═══════════════ PANEL ARCHIVO DE RESPUESTAS (TODAS) ═══════════════ -->
+    <div v-if="verRespuestas" class="animate-fade-in mb-3">
+      <PanelRespuestas :radicado="null" :editable="esEncargadaRadicados" />
+    </div>
+
     <!-- ═══════════════ MODAL CONFIRMAR ELIMINACIÓN ═══════════════ -->
     <div v-if="modalEliminar.visible" class="modal-overlay" @click.self="modalEliminar.visible = false">
       <div class="modal-card animate-zoom-in" style="max-width: 420px; width: 90%;">
@@ -616,7 +729,7 @@
               </svg>
             </div>
             <h6 class="fw-bold text-dark mb-1">¿Eliminar este radicado?</h6>
-            <p class="text-muted mb-2" style="font-size: 0.82rem;">Esta acción es <strong>permanente</strong> y no se puede deshacer.</p>
+            <p class="text-muted mb-2" style="font-size: 0.82rem;">Esta acción es <strong>permanente</strong> y no se puede deshacer.<br>Se eliminan también los oficios de respuesta archivados de este radicado.</p>
             <div class="alert alert-warning py-1 px-2 mb-0" style="font-size: 0.8rem;">
               <strong>{{ modalEliminar.radicado?.numeroRadicado }}</strong><br>
               <span class="text-muted" style="font-size: 0.74rem;">{{ modalEliminar.radicado?.peticionario }}</span>
@@ -756,6 +869,11 @@
             </div>
           </div>
 
+          <!-- 📨 OFICIOS DE RESPUESTA ARCHIVADOS de este radicado -->
+          <div class="mt-2">
+            <PanelRespuestas :radicado="modalRadicado" :editable="esEncargadaRadicados" @cambiaron="CargarLista" />
+          </div>
+
         </div>
 
         <div class="modal-footer bg-light p-1 pe-2 border-top">
@@ -774,12 +892,14 @@ import radicadosService from '../services/radicadosService.js'
 import ocrRadicados from '../services/ocrRadicados.js'
 import compressorRadicados from '../services/compressorRadicados.js'
 import authService from '../../auth/services/authService.js'
+import PanelRespuestas from '../components/PanelRespuestas.vue'
 
 // Estado
 const listaRadicados = ref([])
 const cargandoTabla = ref(false)
 const guardando = ref(false)
 const verHistorial = ref(true)
+const verRespuestas = ref(false)
 const mostrarAlertas = ref(false)
 const modalRadicado = ref(null)
 const pdfPreviewUrl = ref(null)
@@ -842,6 +962,11 @@ const usuarioActual = authService.getUsuarioActual()
 
 const DEPENDENCIA_POR_DEFECTO = 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO Y ASEO DE SAN GIL - ACUASAN E.I.C.E. - E.S.P.'
 
+// Clasificación y Rectificación del Documento
+const tipoDocSeleccionado = ref('RADICADO') // 'RADICADO' | 'RESPUESTA'
+const tipoDetectadoOcr = ref(null) // null | 'RADICADO' | 'RESPUESTA'
+let ultimoTextoOcr = ''
+
 const form = reactive({
   numeroRadicadoPdf: '',
   fechaDocumento: '',
@@ -858,12 +983,56 @@ const form = reactive({
   archivoBase64: ''
 })
 
+const formRespuesta = reactive({
+  radicadoId: '',
+  numeroOficio: '',
+  fechaDocumento: '',
+  lugarFecha: '',
+  destinatario: '',
+  asunto: '',
+  observaciones: '',
+  registradoPor: usuarioActual?.nombre || 'Eliana'
+})
+
+const radicadoPadreSeleccionado = computed(() => {
+  if (!formRespuesta.radicadoId) return null
+  return listaRadicados.value.find(r => r.id === formRespuesta.radicadoId) || null
+})
+
+const alCambiarTipoDoc = async (nuevoTipo) => {
+  tipoDocSeleccionado.value = nuevoTipo
+  if (!ultimoTextoOcr) return
+
+  if (nuevoTipo === 'RESPUESTA' && !formRespuesta.numeroOficio) {
+    try {
+      const camposResp = await radicadosService.extraerCamposRespuesta(ultimoTextoOcr)
+      aplicarCamposRespuestaExtraidos(camposResp, 'Rectificación Manual', ultimoTextoOcr)
+    } catch (e) {
+      console.warn('Error al interpretar oficio:', e)
+    }
+  } else if (nuevoTipo === 'RADICADO' && !form.peticionario) {
+    try {
+      const campos = await radicadosService.extraerCampos(ultimoTextoOcr)
+      aplicarCamposExtraidos(campos, 'Rectificación Manual')
+    } catch (e) {
+      console.warn('Error al interpretar radicado:', e)
+    }
+  }
+}
+
 
 const CargarLista = async (silencioso = false) => {
   try {
     if (!silencioso) cargandoTabla.value = true
     const datos = await radicadosService.obtenerTodos()
     listaRadicados.value = datos
+    // El modal abierto guarda una instantánea del radicado: al recargar se
+    // resincroniza (archivar una respuesta lo deja Resuelto y el header del
+    // modal debe mostrarlo sin cerrar y reabrir).
+    if (modalRadicado.value) {
+      const fresco = datos.find((r) => r.id === modalRadicado.value.id)
+      if (fresco) modalRadicado.value = fresco
+    }
   } catch (err) {
     if (!silencioso) {
       console.error(err)
@@ -977,13 +1146,16 @@ const onFileSelected = async (event) => {
   for (const [campo] of CAMPOS_LEIBLES) form[campo] = ''
   form.dependencia = DEPENDENCIA_POR_DEFECTO
   form.diasParaVencer = 10
+  formRespuesta.radicadoId = ''
+  formRespuesta.numeroOficio = ''
+  formRespuesta.fechaDocumento = ''
+  formRespuesta.lugarFecha = ''
+  formRespuesta.destinatario = ''
+  formRespuesta.asunto = ''
+  formRespuesta.observaciones = ''
+  tipoDetectadoOcr.value = null
 
   // ── Comprimir y leer en paralelo ───────────────────────────────────────
-  // El OCR trabaja sobre el archivo ORIGINAL (máxima calidad para el texto).
-  // La compresión produce el Base64 que se guarda en MongoDB (menor peso).
-  // Ambos procesos son independientes y pueden correr sin bloquearse, por lo
-  // que usan tokens SEPARADOS: si compartieran contador, el ++ de leerDocumento
-  // vencería el token de la compresión y su resultado se descartaría siempre.
   const tokenActual = tokenCompresion
 
   // Compresión en paralelo (no bloquea el OCR)
@@ -1002,7 +1174,6 @@ const onFileSelected = async (event) => {
       compresionEstado.value = 'listo'
     } catch (err) {
       if (tokenCompresion !== tokenActual) return
-      // Si la compresión falla, guardar el original sin comprimir
       console.warn('Compresión fallida, usando original:', err.message)
       const reader = new FileReader()
       reader.onload = (e) => {
@@ -1038,13 +1209,7 @@ const CAMPOS_LEIBLES = [
   ['contexto', 'contexto']
 ]
 
-// Generación de lectura: si el usuario cambia de documento o guarda mientras
-// una lectura lenta sigue en vuelo, su resultado tardío se descarta (no puede
-// pisar los campos del documento que ahora muestra la previsualización).
 let tokenLectura = 0
-// Token análogo pero SOLO para la compresión: compresión y OCR corren en
-// paralelo sobre el mismo archivo, así que cada uno necesita su propio contador
-// (uno compartido haría que el que arranque segundo venciese al primero).
 let tokenCompresion = 0
 
 const leerDocumento = async (file) => {
@@ -1061,11 +1226,29 @@ const leerDocumento = async (file) => {
       lecturaProgreso.value = progreso
     })
     if (token !== tokenLectura) return
-    lecturaEtapa.value = 'Interpretando los datos del documento…'
-    const campos = await radicadosService.extraerCampos(texto)
-    if (token !== tokenLectura) return
-    aplicarCamposExtraidos(campos, metodo)
-    lecturaEstado.value = 'exito'
+
+    ultimoTextoOcr = texto || ''
+
+    // 🔍 Detección Inteligente de Tipo de Trámite: ¿Respuesta u Oficio de Entrada?
+    const esRespuestaDetectada = /\b(?:ofici[o0]s?|dando respuesta|en respuesta|en atenci[oó]n|respuesta al radicado|oficio de salida|comunicaci[oó]n oficial de respuesta)\b/i.test(ultimoTextoOcr)
+
+    if (esRespuestaDetectada) {
+      tipoDetectadoOcr.value = 'RESPUESTA'
+      tipoDocSeleccionado.value = 'RESPUESTA'
+      lecturaEtapa.value = 'Interpretando oficio de respuesta…'
+      const camposResp = await radicadosService.extraerCamposRespuesta(ultimoTextoOcr)
+      if (token !== tokenLectura) return
+      aplicarCamposRespuestaExtraidos(camposResp, metodo, ultimoTextoOcr)
+      lecturaEstado.value = 'exito'
+    } else {
+      tipoDetectadoOcr.value = 'RADICADO'
+      tipoDocSeleccionado.value = 'RADICADO'
+      lecturaEtapa.value = 'Interpretando los datos del radicado…'
+      const campos = await radicadosService.extraerCampos(ultimoTextoOcr)
+      if (token !== tokenLectura) return
+      aplicarCamposExtraidos(campos, metodo)
+      lecturaEstado.value = 'exito'
+    }
   } catch (err) {
     if (token !== tokenLectura) return
     console.error('Lectura del radicado:', err)
@@ -1074,8 +1257,7 @@ const leerDocumento = async (file) => {
   }
 }
 
-// Solo se llenan los campos con dato real del documento: lo que no apareció
-// queda como estaba para que el usuario lo complete (nunca se inventa).
+// Llenar campos de radicado de entrada
 const aplicarCamposExtraidos = (campos, metodo) => {
   const leidos = []
   const faltantes = []
@@ -1092,13 +1274,64 @@ const aplicarCamposExtraidos = (campos, metodo) => {
   if (Number.isFinite(dias) && dias > 0) {
     form.diasParaVencer = dias
   }
-  resumenLectura.value = { metodo, leidos, faltantes }
+  resumenLectura.value = { metodo: `Radicado Inicial (${metodo})`, leidos, faltantes }
 }
 
-// Guardar
+// Llenar campos de oficio de respuesta
+const aplicarCamposRespuestaExtraidos = (campos, metodo, textoCompleto = '') => {
+  const leidos = []
+  const faltantes = []
+
+  if (campos.numeroOficio) {
+    formRespuesta.numeroOficio = campos.numeroOficio
+    leidos.push('N° de oficio')
+  } else {
+    faltantes.push('N° de oficio')
+  }
+
+  if (campos.fechaDocumento) {
+    formRespuesta.fechaDocumento = campos.fechaDocumento
+    leidos.push('fecha del oficio')
+  } else {
+    faltantes.push('fecha del oficio')
+  }
+
+  if (campos.lugarFecha) {
+    formRespuesta.lugarFecha = campos.lugarFecha
+    leidos.push('lugar y fecha')
+  }
+
+  if (campos.destinatario) {
+    formRespuesta.destinatario = campos.destinatario
+    leidos.push('destinatario')
+  } else {
+    faltantes.push('destinatario')
+  }
+
+  if (campos.asunto) {
+    formRespuesta.asunto = campos.asunto
+    leidos.push('asunto')
+  } else {
+    faltantes.push('asunto')
+  }
+
+  // Búsqueda inteligente de radicado padre en el texto
+  if (textoCompleto && listaRadicados.value.length) {
+    for (const r of listaRadicados.value) {
+      const numSimple = r.numeroRadicado.replace(/[^0-9]/g, '')
+      if (numSimple && numSimple.length >= 4 && textoCompleto.includes(numSimple)) {
+        formRespuesta.radicadoId = r.id
+        leidos.push(`radicado vinculado #${r.numeroRadicado}`)
+        break
+      }
+    }
+  }
+
+  resumenLectura.value = { metodo: `Oficio de Respuesta (${metodo})`, leidos, faltantes }
+}
+
+// Guardar Radicado Inicial
 const guardarRadicado = async () => {
-  // Si la compresión del documento sigue en vuelo, el Base64 aún no está listo:
-  // guardar ahora crearía un radicado SIN documento (pérdida silenciosa).
   if (compresionEstado.value === 'comprimiendo') {
     mostrarAlertaBootstrap(
       'Documento en optimización',
@@ -1134,7 +1367,7 @@ const guardarRadicado = async () => {
     lecturaProgreso.value = 0
     lecturaError.value = ''
     resumenLectura.value = null
-    tokenLectura++ // anula lecturas en vuelo: el formulario ya se reinició
+    tokenLectura++
     if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
       URL.revokeObjectURL(pdfPreviewUrl.value)
     }
@@ -1143,6 +1376,77 @@ const guardarRadicado = async () => {
     await CargarLista()
   } catch (err) {
     mostrarAlertaBootstrap('Error al Guardar', err.message || 'No se pudo registrar el radicado.', 'danger')
+  } finally {
+    guardando.value = false
+  }
+}
+
+// Guardar Oficio de Respuesta
+const guardarRespuesta = async () => {
+  if (compresionEstado.value === 'comprimiendo') {
+    mostrarAlertaBootstrap(
+      'Documento en optimización',
+      'El documento aún se está optimizando. Espere unos segundos a que termine y vuelva a guardar.',
+      'warning'
+    )
+    return
+  }
+
+  if (!formRespuesta.radicadoId) {
+    mostrarAlertaBootstrap('Radicado no seleccionado', 'Debe seleccionar el radicado al cual corresponde esta respuesta.', 'warning')
+    return
+  }
+
+  try {
+    guardando.value = true
+    const payload = {
+      radicadoId: formRespuesta.radicadoId,
+      numeroOficio: formRespuesta.numeroOficio,
+      fechaDocumento: formRespuesta.fechaDocumento,
+      lugarFecha: formRespuesta.lugarFecha,
+      destinatario: formRespuesta.destinatario,
+      asunto: formRespuesta.asunto,
+      observaciones: formRespuesta.observaciones,
+      registradoPor: formRespuesta.registradoPor || form.registradoPor,
+      archivoNombre: form.archivoNombre,
+      archivoBase64: form.archivoBase64
+    }
+
+    const resp = await radicadosService.crearRespuesta(payload)
+
+    const radPadre = listaRadicados.value.find(r => r.id === formRespuesta.radicadoId)
+    const numRad = radPadre ? radPadre.numeroRadicado : ''
+
+    mostrarAlertaBootstrap(
+      'Oficio de Respuesta Archivado',
+      `Se archivó exitosamente el oficio de respuesta para el radicado ${numRad}. El radicado ha sido marcado como RESUELTO.`,
+      'success'
+    )
+
+    // Reset formulario de respuesta
+    formRespuesta.radicadoId = ''
+    formRespuesta.numeroOficio = ''
+    formRespuesta.fechaDocumento = ''
+    formRespuesta.lugarFecha = ''
+    formRespuesta.destinatario = ''
+    formRespuesta.asunto = ''
+    formRespuesta.observaciones = ''
+    form.archivoBase64 = ''
+    form.archivoNombre = null
+    lecturaEstado.value = null
+    lecturaEtapa.value = ''
+    lecturaProgreso.value = 0
+    lecturaError.value = ''
+    resumenLectura.value = null
+    tokenLectura++
+    if (pdfPreviewUrl.value && pdfPreviewUrl.value.startsWith('blob:')) {
+      URL.revokeObjectURL(pdfPreviewUrl.value)
+    }
+    pdfPreviewUrl.value = null
+
+    await CargarLista()
+  } catch (err) {
+    mostrarAlertaBootstrap('Error al Guardar Respuesta', err.message || 'No se pudo guardar la respuesta.', 'danger')
   } finally {
     guardando.value = false
   }

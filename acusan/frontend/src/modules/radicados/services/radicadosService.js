@@ -249,6 +249,65 @@ export const radicadosService = {
       return { success: true, message: mensaje }
     }
     await exigirRespuestaOk(res, 'No se pudo eliminar el radicado.')
+  },
+
+  /**
+   * Traduce el texto OCR de un oficio de respuesta en los campos del formulario.
+   */
+  async extraerCamposRespuesta(texto) {
+    const res = await fetch(`${API_BASE}/extraer-campos-respuesta`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ texto })
+    })
+    if (!res.ok) await exigirRespuestaOk(res, 'No fue posible interpretar el oficio de respuesta.')
+    const data = await res.json()
+    if (data && data.success && data.data) return data.data
+    throw new Error('Respuesta inesperada del servidor al interpretar el oficio.')
+  },
+
+  /**
+   * Crea y archiva un oficio de respuesta vinculado a un radicado padre.
+   */
+  async crearRespuesta(datos) {
+    const res = await fetch(`${API_BASE}/respuestas`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(datos)
+    })
+    if (!res.ok) await exigirRespuestaOk(res, 'No se pudo archivar el oficio de respuesta.')
+    const data = await res.json()
+    if (data && data.success && data.data) {
+      notificarCambio('CREAR_RESPUESTA', data.data)
+      return data.data
+    }
+    throw new Error('Respuesta inesperada del servidor al archivar el oficio.')
+  },
+
+  /**
+   * Lista las respuestas archivadas (todas o por radicado).
+   */
+  async listarRespuestas(radicadoId = null) {
+    const url = radicadoId ? `${API_BASE}/respuestas?radicadoId=${radicadoId}` : `${API_BASE}/respuestas`
+    const res = await fetch(url, { headers: getHeaders() })
+    if (!res.ok) await exigirRespuestaOk(res, 'No se pudieron consultar las respuestas archivadas.')
+    const data = await res.json()
+    return data && data.success && Array.isArray(data.data) ? data.data : []
+  },
+
+  /**
+   * Elimina una respuesta archivada por ID.
+   */
+  async eliminarRespuesta(id) {
+    const res = await fetch(`${API_BASE}/respuestas/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    })
+    if (res.ok || res.status === 404) {
+      notificarCambio('ELIMINAR_RESPUESTA', { id })
+      return true
+    }
+    await exigirRespuestaOk(res, 'No se pudo eliminar el oficio de respuesta.')
   }
 }
 
