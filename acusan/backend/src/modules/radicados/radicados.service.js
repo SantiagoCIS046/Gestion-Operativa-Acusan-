@@ -573,6 +573,21 @@ export const RadicadosService = {
       if (mInline && !esFraseDeCuerpo(mInline[1])) resultado.peticionario = mInline[1].trim()
     }
 
+    // Formularios de solicitud / permisos / constancias oficiales:
+    // "NOMBRE: Angelica Sandrit Morales Rojas" o "HACE CONSTAR QUE MORALES ROJAS ANGELICA SANDRIT..."
+    if (!resultado.peticionario || !esNombreValido(resultado.peticionario) || esFraseDeCuerpo(resultado.peticionario)) {
+      const mFormNombre = texto.match(/\b(?:NOMBRE|FUNCIONARIO|SOLICITANTE|PETICIONARIO|EMPLEADO)\s*[:.-]?\s*([A-ZÁÉÍÓÚÑa-zñáéíóú\s.]{5,60})(?=\s*CARGO|\s*CEDULA|\s*FECHA|\s*HORA|\n|$)/i)
+      if (mFormNombre && esNombreValido(mFormNombre[1])) {
+        resultado.peticionario = mFormNombre[1].trim()
+      }
+    }
+    if (!resultado.peticionario || !esNombreValido(resultado.peticionario) || esFraseDeCuerpo(resultado.peticionario)) {
+      const mConstancia = texto.match(/(?:HACE[N]?\s*CONSTAR\s*[:\s]*QUE|QUE\s+EL\s+SEÑOR|QUE\s+LA\s+SEÑORA|QUE)\s+([A-ZÁÉÍÓÚÑa-zñáéíóú\s.]{6,60})(?=\s+identificad|\s+con\s+documento|\s+prest[oó]|\s+en\s+calidad)/i)
+      if (mConstancia && esNombreValido(mConstancia[1])) {
+        resultado.peticionario = mConstancia[1].trim()
+      }
+    }
+
     // 5b. DESTINATARIO sin etiqueta — a quién va dirigida la carta, en orden
     // de certeza: "A:"/"Att:" al inicio de línea, el bloque bajo
     // "Señores:", el saludo SEÑOR(A) cuando el peticionario ya quedó
@@ -626,21 +641,31 @@ export const RadicadosService = {
       valorEtiqueta('CODIGO') ||
       valorEtiqueta('C[OÓ]DIGO DE DEPENDENCIA')
     const mRef = refCruda ? [null, refCruda] : texto.match(/(C[oó]digo de suscriptor[^\n\r]*)/i)
-    if (mRef && !esFraseDeCuerpo(mRef[1])) {
-      resultado.referencia = mRef[1].trim()
+    if (!resultado.referencia) {
+      const mDoc = texto.match(/\b(?:documento|c[eé]dula|C\.?C\.?)\s*(?:No\.?|#)?\s*[:.-]?\s*([0-9]{6,12})\b/i)
+      if (mDoc) {
+        resultado.referencia = `C.C. ${mDoc[1]}`
+      }
     }
 
     // 7. ASUNTO — etiqueta (Asunto, Descripción, Motivo, Objeto), o la referencia, o solicitud / tutela
     const asuntoCrudo = valorEtiqueta('Asunto|Descr(?:ipci[oó]n)?|Motivo|Objeto')
     if (asuntoCrudo && !esFraseDeCuerpo(asuntoCrudo)) {
       resultado.asunto = asuntoCrudo.trim()
-    } else if (resultado.referencia && !/^\d{1,6}$/.test(resultado.referencia)) {
+    } else if (resultado.referencia && !/^\d{1,6}$/.test(resultado.referencia) && !/^C\.C\./i.test(resultado.referencia)) {
       // Un código pelado ("950" del Destinatario) no describe un asunto
       resultado.asunto = resultado.referencia
     } else {
       const mSolicitud = texto.match(/(Solicitud[^\n\r]+)/i) || texto.match(/(Acci[oó]n de Tutela[^\n\r]{5,100})/i)
       if (mSolicitud && !esFraseDeCuerpo(mSolicitud[1])) {
         resultado.asunto = mSolicitud[1].trim()
+      } else if (/SOLICITUD\s+DE\s+PERMISO|PERMISO\s+LABORAL/i.test(texto)) {
+        resultado.asunto = 'Solicitud de Permiso Laboral'
+        if (/Compensatorio/i.test(texto)) resultado.asunto += ' - Compensatorio'
+        else if (/M[eé]dico/i.test(texto)) resultado.asunto += ' - Cita Médica'
+        else if (/Personal/i.test(texto)) resultado.asunto += ' - Personal'
+      } else if (/FORMULARIO\s+E-?18|JURADO\s+DE\s+VOTACI[OÓ]N|REGISTRADUR/i.test(texto)) {
+        resultado.asunto = 'Certificado de Función Electoral - Formulario E-18'
       }
     }
 

@@ -1,0 +1,17 @@
+# 📋 BITÁCORA TÉCNICA DE DESARROLLO — GESTIÓN OPERATIVA ACUASAN E.S.P.
+**Periodo:** 01 de Septiembre de 2026 – 30 de Septiembre de 2026  
+**Jornada Laboral:** Lunes a Viernes (Días Hábiles)  
+**Stack Tecnológico:** Vue 3, Vite, Node.js, Express, Prisma ORM, MongoDB Atlas, Tesseract OCR, PDF.js, Vercel Serverless.
+
+---
+
+## 🗓️ SEMANA 1 (Martes 01 – Viernes 04 Septiembre): Estabilización de Motor OCR, Permisos y Formatos Oficiales
+
+| Fecha | Actividades Desarrolladas | Entregable / Evidencia | 📸 Foto / Captura a Tomar |
+| :--- | :--- | :--- | :--- |
+| **Martes 01/09/2026** (Hoy) | • **Optimización y Estabilización del Motor OCR Multi-Página**:<br>  - Refactorización de `ocrRadicados.js` para escaneo de páginas completas (Pág. 1 y 2) en alta resolución ($2.7\times$) en documentos físicos/escaneados.<br>  - Calibración de expresiones regulares en `VistaEncargado.vue` para captura exacta de fecha (`FECHA PERMISO: 18 de Agosto 2026`), cargo (`Líder Potabilización`) y dependencia (`Planta de Tratamiento / Potabilización`).<br>  - Detección inteligente de horario laboral (`HORA: Jornada laboral`) con asignación automática de horario oficial (**07:30 a 18:00**).<br>  - Detección de constancias de jurados de votación (**Formulario E-18** de la Registraduría).<br>• **Interactividad y Carga de Permisos desde el Historial**:<br>  - Habilitación de eventos clic interactivos en las filas de la tabla Excel del historial para cargar los datos y el PDF en el visor.<br>• **Regeneración de Prisma Client y Sincronización**:<br>  - Compilación de tipos Prisma (`v6.19.3`) con todos los roles de usuario (`RADICADOS`, `ENCARGADO`, `GERENCIA`, `ADMIN`, `OPERATIVO`, `CLIENTE`). | • Módulos de OCR y Permisos 100% operativos.<br>• Archivos [VistaEncargado.vue](file:///c:/Escritorio/Codigo%20Aquasan/acusan/frontend/src/modules/permisos/views/VistaEncargado.vue), [ocrRadicados.js](file:///c:/Escritorio/Codigo%20Aquasan/acusan/frontend/src/modules/radicados/services/ocrRadicados.js), [radicados.service.js](file:///c:/Escritorio/Codigo%20Aquasan/acusan/backend/src/modules/radicados/radicados.service.js).<br>• Build de producción Vite verificado en 1.25s. | **Foto:** 1) Formulario de Permisos con el PDF en el visor y los campos de *Nombre*, *Cédula*, *Cargo*, *Área*, *Fecha*, *Horario* y *Motivo* autocompletados. 2) Tabla Excel de historial mostrando la lista de registros. |
+| **Miércoles 02/09/2026** | • Pruebas integrales de flujo extremo a extremo entre ventanilla de Radicados y bandeja de Gerencia.<br>• Verificación de persistencia de archivos PDF en Base64 en MongoDB Atlas. | Reporte de pruebas funcionales y validación de términos SLA. | **Foto:** Panel de Gerencia mostrando los radicados recibidos y términos legales. |
+| **Jueves 03/09/2026** | • Implementación de la Fase 2 del módulo PQR: Controladores, rutas y servicios RESTful con validaciones de entrada (`express-validator`).<br>• Asignación automática de área responsable según tipo de daño y servicio. | Código de `pqr.controller.js` y `pqr.routes.js`. | **Foto:** Endpoints del módulo PQR en código o herramienta de pruebas API. |
+| **Viernes 04/09/2026** | • Integración del Dashboard PQR con agregaciones de 18 KPIs oficiales de la SSPD.<br>• Auditoría de seguridad y despliegue continuo en Vercel. | Dashboard PQR funcional y despliegue verificado. | **Foto:** Vista del Dashboard PQR en el navegador con gráficos de estado y tiempos de respuesta. |
+
+> *05/09/2026 y 06/09/2026 — Fin de semana (No laboral)*

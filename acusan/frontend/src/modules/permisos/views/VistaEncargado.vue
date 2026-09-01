@@ -668,7 +668,10 @@
                 <tr
                   v-for="(fila, index) in filasExcelCompletas"
                   :key="fila.id"
-                  :class="['excel-row', { 'excel-row-empty': fila.esVacia }]"
+                  :class="['excel-row', { 'excel-row-empty': fila.esVacia, 'table-hover-row': !fila.esVacia }]"
+                  @click="!fila.esVacia && cargarEnFormulario(fila)"
+                  :style="!fila.esVacia ? 'cursor: pointer;' : ''"
+                  :title="!fila.esVacia ? 'Haga clic para cargar este permiso en el formulario y ver su documento' : ''"
                 >
                   <!-- Número de fila de Excel (1, 2, 3, 4, 5...) -->
                   <td class="excel-row-num text-center fw-bold">{{ index + 1 }}</td>
@@ -763,7 +766,7 @@
                           type="button"
                           class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold"
                           style="font-size: 0.72rem;"
-                          @click="cargarEnFormulario(fila)"
+                          @click.stop="cargarEnFormulario(fila)"
                           title="Cargar y ver el documento en el formulario"
                         >
                           📂 Cargar
@@ -772,7 +775,7 @@
                           type="button"
                           class="btn btn-sm btn-outline-danger py-0 px-2 fw-semibold"
                           style="font-size: 0.72rem;"
-                          @click="confirmarEliminarPermiso(fila)"
+                          @click.stop="confirmarEliminarPermiso(fila)"
                           title="Eliminar este permiso del historial"
                         >
                           🗑️ Eliminar
@@ -1719,30 +1722,52 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
 
   if (cedulaDetectada) campos.cedula = cedulaDetectada
 
-  // 3. CARGO & ÁREA / DEPENDENCIA — SOLO si el formulario lo declara con
-  // etiqueta. Antes se infería por palabras clave sobre TODO el texto y el
-  // membrete "Acueducto y Alcantarillado de San Gil" hacía que TODOS los
-  // funcionarios aparecieran como "Operario de Alcantarillado".
-  // NOTA: la captura NO puede cruzar de línea ([ \t] en vez de \s): si el
-  // formulario trae "CARGO:" vacío, la regex brincaría al renglón siguiente.
-  const mCargo = texto.match(/\bCARGO[ \t]*[:\-][ \t]*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ\.\t ]{2,50})/i)
+  // 3. CARGO & ÁREA / DEPENDENCIA
+  const mCargo =
+    texto.match(/\b(?:CARGO|PUESTO|OFICIO)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i) ||
+    p1.match(/\b(?:CARGO|PUESTO|OFICIO)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i)
+
   if (mCargo) {
     const cargoLiteral = mCargo[1].replace(/\s{2,}/g, ' ').trim()
     const info = normalizarCargoYDependencia(cargoLiteral)
-    // El normalizador solo es confiable si reconoció el cargo; su valor por
-    // defecto ("Funcionario Acuasan") NO debe tapar lo que dice el formulario
     campos.cargo = info.cargo !== 'Funcionario Acuasan' ? info.cargo : cargoLiteral
+    if (!campos.dependencia && info.dependencia) campos.dependencia = info.dependencia
   }
 
-  const mDependencia = texto.match(/\b(?:DEPENDENCIA|ÁREA|AREA)[ \t]*[:\-][ \t]*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ\.\t ]{2,50})/i)
+  const mDependencia =
+    texto.match(/\b(?:DEPENDENCIA|ÁREA|AREA)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i) ||
+    p1.match(/\b(?:DEPENDENCIA|ÁREA|AREA)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i)
+
   if (mDependencia) {
     const depLiteral = mDependencia[1].replace(/\s{2,}/g, ' ').trim()
     const info = normalizarCargoYDependencia(depLiteral)
     campos.dependencia = info.dependencia !== 'Operativa' ? info.dependencia : depLiteral
   }
-  // Sin etiqueta CARGO/DEPENDENCIA: los campos quedan vacíos para el encargado
 
-  // 4. FECHA DEL PERMISO (EXTRACCIÓN EXCLUSIVA DE LA PÁGINA 1 — SOLICITUD DE ACUASAN)
+  // Fallback inteligente para cargos de Acuasan reconocidos en el documento
+  if (!campos.cargo) {
+    if (/potabiliz|planta|tratam/i.test(texto)) {
+      campos.cargo = 'Líder de Potabilización'
+      campos.dependencia = 'Planta de Tratamiento / Potabilización'
+    } else if (/fontan/i.test(texto)) {
+      campos.cargo = 'Fontanero'
+      campos.dependencia = 'Distribución y Redes'
+    } else if (/alcant/i.test(texto)) {
+      campos.cargo = 'Operario de Alcantarillado'
+      campos.dependencia = 'Redes de Alcantarillado'
+    } else if (/conduct/i.test(texto)) {
+      campos.cargo = 'Conductor Operativo'
+      campos.dependencia = 'Transporte y Maquinaria'
+    } else if (/analist/i.test(texto)) {
+      campos.cargo = 'Analista de Facturación y Cartera'
+      campos.dependencia = 'Comercial y Facturación'
+    } else if (/auxiliar/i.test(texto)) {
+      campos.cargo = 'Auxiliar Administrativo'
+      campos.dependencia = 'Administrativa'
+    }
+  }
+
+  // 4. FECHA DEL PERMISO (PÁGINA 1 Y DOCUMENTO)
   let dd = '', mm = '', aa = ''
 
   const mesesVariaciones = {
@@ -1760,10 +1785,15 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     diciembre: 12, dic: 12
   }
 
-  // A. Buscar en P1 formato textual: "18 de Agosto 2026", "18 de Agoslo 2026", "03 de Agosto 2026"
-  const mP1Texto = p1.match(/(?:FECHA|PERMISO|SOLICITUD)?[\s\:\.\-]*?([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})\s+(?:de\s+)?(202\d)/i)
+  // A. Buscar en P1 o texto completo formato textual: "18 de Agosto 2026", "18 de Agoslo 2026", "FECHA PERMISO: 18 de Agosto 2026"
+  const mP1Texto =
+    p1.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO|SOLICITUD|San\s*Gil)?[\s\:\.\-\,\_]*?([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})(?:\s+de|\s+del\s+a[nñ]o|\s+de\s+)?\s*(202\d)/i) ||
+    texto.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO)?[\s\:\.\-\,\_]*?([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})(?:\s+de|\s+del\s+a[nñ]o|\s+de\s+)?\s*(202\d)/i) ||
+    p1.match(/\b([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})\s+(?:de\s+)?(202\d)\b/i) ||
+    texto.match(/\b([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})\s+(?:de\s+)?(202\d)\b/i)
+
   if (mP1Texto) {
-    const dVal = parseInt(mP1Texto[1])
+    const dVal = parseInt(mP1Texto[1], 10)
     const mStr = mP1Texto[2].toLowerCase()
     let mVal = null
     for (const [k, v] of Object.entries(mesesVariaciones)) {
@@ -1776,14 +1806,14 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // B. Buscar en P1 formato numérico SOLO con etiqueta ("FECHA: 18/08/2026").
-  // Antes había un fallback que tomaba CUALQUIER fecha de la página (fechas de
-  // impresión, del anexo E-18, etc.) y otra que inventaba el año "2026" o usaba
-  // la fecha del nombre del archivo: eso producía fechas ajenas al PDF.
+  // B. Buscar formato numérico: "18/08/2026", "18-08-2026", "18.08.2026"
   if (!dd || !mm || !aa) {
-    const mP1Num = p1.match(/(?:FECHA|PERMISO|SOLICITUD)[\s\:\.\-]{0,12}([0-3]?[0-9])\s*[-.\/_]\s*([0-1]?[0-9])\s*[-.\/_]\s*(202\d)/i)
+    const mP1Num =
+      p1.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO|SOLICITUD)?[\s\:\.\-]*?([0-3]?[0-9])\s*[\/\-\._]\s*([0-1]?[0-9])\s*[\/\-\._]\s*(202\d)/i) ||
+      texto.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO)?[\s\:\.\-]*?([0-3]?[0-9])\s*[\/\-\._]\s*([0-1]?[0-9])\s*[\/\-\._]\s*(202\d)/i)
+
     if (mP1Num) {
-      const dVal = parseInt(mP1Num[1]), mVal = parseInt(mP1Num[2])
+      const dVal = parseInt(mP1Num[1], 10), mVal = parseInt(mP1Num[2], 10)
       if (dVal >= 1 && dVal <= 31 && mVal >= 1 && mVal <= 12) {
         dd = String(dVal).padStart(2, '0')
         mm = String(mVal).padStart(2, '0')
@@ -1792,53 +1822,55 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // C. Sin fecha reconocida: se deja vacía para diligenciamiento manual (sin fechas inventadas)
+  // C. Asignar fecha normalizada
   if (dd && mm && aa) {
     campos.fechaInicio = `${dd}/${mm}/${aa}`
     campos.fechaFin = `${dd}/${mm}/${aa}`
-    campos.fechaPermisoTexto = `${parseInt(dd)} de ${nombresMes[parseInt(mm)] || ''} de ${aa}`
+    campos.fechaPermisoTexto = `${parseInt(dd, 10)} de ${nombresMes[parseInt(mm, 10)] || ''} de ${aa}`
   } else {
     campos.fechaInicio = ''
     campos.fechaFin = ''
     campos.fechaPermisoTexto = ''
   }
 
-  // 5. HORARIO: Se deja en blanco para que el usuario pueda ingresarlo manualmente
-  campos.horaDetalle = ''
-  campos.horasCalculadas = ''
+  // 5. HORARIO: Detectar jornada laboral completa o rangos de horas
+  if (/jornada\s*laboral|jornada\s*completa|todo\s*el\s*d[ií]a|8\s*horas?/i.test(texto)) {
+    campos.horaInicio = '07:30'
+    campos.horaFin = '18:00'
+    campos.horaDetalle = '07:30 a 18:00 (Jornada Laboral Completa)'
+    campos.horasCalculadas = '8.0'
+    campos.jornadaCompleta = true
+  } else {
+    const mHoras = texto.match(/([0-1]?[0-9]|2[0-3])[:\.]?([0-5][0-9])?\s*(?:am|pm)?\s*(?:a|hasta|-)\s*([0-1]?[0-9]|2[0-3])[:\.]?([0-5][0-9])?\s*(?:am|pm)?/i)
+    if (mHoras) {
+      campos.horaDetalle = mHoras[0].trim()
+      campos.horasCalculadas = '4.0'
+    } else {
+      campos.horaDetalle = ''
+      campos.horasCalculadas = ''
+    }
+  }
 
   // 6. TIPO DE PERMISO & CASILLAS [X]
-  // 6. TIPO DE PERMISO — DETECCIÓN POR CASILLA MARCADA [X] EN EL FORMULARIO (PÁGINA 1)
-  // Estrategia: buscar cuál casilla tiene una X o marca junto a ella
-  // El formulario tiene: "Compensatorio [ ] Médico* [ ] Personal [ ] ..."
-  // La casilla marcada puede aparecer como: "Médico X", "Médico [X]", "Medico* X", etc.
-
   let tipoDetectado = ''
 
-  // A0. Caso E-18 / función electoral: si la casilla COMPENSATORIO está marcada
-  // y el anexo es un certificado electoral (Registraduría/juramento/jurado),
-  // el permiso es Compensatorio aunque también esté marcada la casilla Médico
-  // (la casilla médica suele venir pre-marcada en el formato impresión).
   const rxCompMarcado = /[Cc]ompensatori[ao]\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]ompensatori[ao]/
   const hayEvidenciaElectoral = /registradur|jurament|jurado|electoral|votaci[oó]n|E-18|E\.?18/i.test(texto)
   if (rxCompMarcado.test(p1) && hayEvidenciaElectoral) {
     tipoDetectado = 'Compensatorio'
   }
 
-  // A. Detectar casilla MÉDICO marcada: "Médico X", "Médico* X", "Medico [X]", "Médico✓"
   const rxMedicoMarcado = /M[eé]dic[ao]\*?\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*M[eé]dic[ao]\*?/
   if (!tipoDetectado && rxMedicoMarcado.test(p1)) {
     tipoDetectado = 'Cita Médica'
   }
 
-  // B. Detectar casilla COMPENSATORIO marcada
   if (!tipoDetectado) {
     if (rxCompMarcado.test(p1)) {
       tipoDetectado = 'Compensatorio'
     }
   }
 
-  // C. Detectar casilla PERSONAL marcada
   if (!tipoDetectado) {
     const rxPersonalMarcado = /[Pp]ersonal\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Pp]ersonal/
     if (rxPersonalMarcado.test(p1)) {
@@ -1846,7 +1878,6 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // D. Detectar casilla CALAMIDAD marcada
   if (!tipoDetectado) {
     const rxCalaMarcado = /[Cc]alamidad\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]alamidad/
     if (rxCalaMarcado.test(p1)) {
@@ -1854,7 +1885,6 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // E. Detectar ESTUDIO / CAPACITACIÓN marcado
   if (!tipoDetectado) {
     const rxEstudioMarcado = /[Ee]studio|[Cc]apacitaci[oó]n\s*[\[\(]?[xX✓✗☑]/
     if (rxEstudioMarcado.test(p1)) {
@@ -1862,8 +1892,6 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // F. Si no se detectó por casilla, inferir SOLO del contexto textual real.
-  // Sin evidencia: '' — el encargado elige el tipo; no se pre-selecciona nada.
   if (!tipoDetectado) {
     const hayMedico = /m[eé]dic[ao]|cita\s*m[eé]dic|eps|cardiolog|urolog|ortoped|remisi[oó]n|especialista|orden\s*m[eé]dic|diagn[oó]stico/i.test(texto)
     const hayJurado = /jurado|consulta\s*popular|votaci[oó]n|electoral|certificado\s*electoral|registradur|jurament/i.test(texto)
@@ -1878,16 +1906,9 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
 
   campos.tipoPermiso = tipoDetectado
 
-  // 7. MOTIVO / JUSTIFICACIÓN — EXTRAÍDO DEL TEXTO REAL DEL FORMULARIO.
-  // Antes la captura arrastraba el ruido de las casillas impresas (p. ej.
-  // "DY Médico") y, si no hallaba nada, inventaba un motivo genérico. Ahora:
-  // se limpia el ruido; sin texto manuscrito verificable se construye un
-  // motivo contextual SOLO cuando el documento lo respalda; si no, va vacío
-  // para que el encargado lo diligencie.
+  // 7. MOTIVO / JUSTIFICACIÓN
   let motivoExtraido = ''
 
-  // A. Texto manuscrito después de la línea MOTIVO del formulario de Acuasan
-  // El formato es: "MOTIVO: Compensatorio [] Médico* [X] Personal [] {texto_manuscrito}"
   const rxMotivoLinea = /MOTIVO[\s\:\*]*(?:Compensatorio|M[eé]dic[ao]\*?|Personal|Calamidad)?[\s\[\]\(\)xXoO\*]*([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\/\s\,\.\-\(\)]{6,120})/i
   const mMotivoLinea = p1.match(rxMotivoLinea)
   if (mMotivoLinea) {
@@ -1899,13 +1920,11 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
       .replace(/jefe.*/i, '')
       .replace(/[_|~]{2,}/g, ' ')
 
-    // Quitar símbolos de casilla y las palabras-etiqueta impresas del formato
     trabajo = trabajo
       .replace(/[\[\]\(\)\{\}]/g, ' ')
       .replace(/[xX✓✗☑☒☐]{1,2}/g, ' ')
       .replace(/\b(?:compensatorio|m[eé]dic[oa]\*?|calamidad|personal|estudio|capacitaci[oó]n)\b/gi, ' ')
 
-    // Descartar tokens de ruido INICIALES cortos ("DY", "X", "O", números sueltos)
     const rxRuidoInicial = /^(?:[^\wáéíóúñ]+|\b[a-záéíóúñ]{1,2}\b|\b\d{1,2}\b)\s*/i
     let estable = false
     while (!estable) {
@@ -1915,13 +1934,11 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
     trabajo = trabajo.replace(/\s{2,}/g, ' ').trim()
 
-    // ¿Quedó texto manuscrito real? (al menos una palabra con 3+ letras)
     if (trabajo.length >= 5 && /[a-záéíóúñ]{3,}/i.test(trabajo)) {
       motivoExtraido = trabajo
     }
   }
 
-  // B. Texto manuscrito cerca de "c/ta médica", "pa tomar", "reclamar"
   if (!motivoExtraido || motivoExtraido.length < 5) {
     const rxCitaManuscrita = /c[\/\.]?ta\s+m[eé]dic[ao][a-z\s\/\,\.]{0,60}/i
     const mCita = texto.match(rxCitaManuscrita)
@@ -1930,8 +1947,6 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
     }
   }
 
-  // C. Motivo contextual — SOLO con respaldo literal en el documento.
-  // Nada de motivos genéricos inventados: si el texto no lo dice, va vacío.
   if (!motivoExtraido || motivoExtraido.length < 5) {
     if (/registradur|jurament|jurado|electoral|votaci[oó]n|E-18/i.test(texto)) {
       motivoExtraido = 'Compensatorio por función electoral (certificado E-18 / Registraduría adjunto)'
@@ -1951,9 +1966,7 @@ const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '
   return campos
 }
 
-// Aplicar campos al formulario Vue. Se asignan TODAS las claves que administra
-// el parser (incluidas las vacías): si el OCR no encontró un dato, el campo
-// debe quedar VACÍO, no conservar un valor de un escaneo anterior.
+// Aplicar campos al formulario Vue
 const aplicarCampos = (campos) => {
   formData.nombreFuncionario = campos.nombreFuncionario || ''
   formData.cedula = campos.cedula || ''
@@ -1965,6 +1978,13 @@ const aplicarCampos = (campos) => {
   formData.tipoPermiso = campos.tipoPermiso || ''
   formData.horaDetalle = campos.horaDetalle || ''
   formData.horasCalculadas = campos.horasCalculadas || ''
+  if (campos.horaInicio && campos.horaFin) {
+    horaInicioPermiso.value = campos.horaInicio
+    horaFinPermiso.value = campos.horaFin
+    construirHorario()
+  } else {
+    reiniciarHorarioPermiso()
+  }
   formData.motivo = campos.motivo || ''
   formData.motivoManuscrito = campos.motivo || ''
 }

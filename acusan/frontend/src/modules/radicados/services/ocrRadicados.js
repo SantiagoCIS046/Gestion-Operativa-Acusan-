@@ -307,45 +307,23 @@ export const ocrRadicados = {
         }
         const charsDigital = textoDigital.replace(/\s/g, "").length;
 
-        // ── INTENTO 1: PDF con texto digital → Lectura instantánea u OCR de encabezado ──
-        if (charsDigital >= 40) {
-          const tieneRadicadoClaro = /RADICADO/i.test(textoDigital) && (/\b202\d{6,}\b/.test(textoDigital) || /\b\d{6,12}\b/.test(textoDigital));
+        // ── INTENTO 1: PDF con texto digital completo (>= 150 caracteres con datos claros) ──
+        const tieneTextoDigitalRico = charsDigital >= 150 && (
+          /RADICADO/i.test(textoDigital) ||
+          /ASUNTO|REFERENCIA/i.test(textoDigital) ||
+          /SE[NÑ]OR|REMITENTE|PETICIONARIO|NOMBRE/i.test(textoDigital)
+        );
 
-          if (tieneRadicadoClaro) {
-            reportar("Lectura digital completada", 1);
-            return {
-              texto: textoDigital.trim(),
-              metodo: "Lectura digital directa (Instantánea)",
-            };
-          }
-
-          reportar("Escaneando sello en encabezado de página 1…", 0.35);
-          try {
-            const page1 = await doc.getPage(1);
-            const canvas1 = await renderizarEncabezadoACanvas(page1);
-            const proc1 = preprocesarCanvasParaOCR(canvas1);
-            canvas1.width = 0;
-            const textoOcrP1 = await ocrMultimodo(proc1, (etapa, p) =>
-              reportar(`OCR de sello: ${etapa}`, 0.35 + p * 0.55)
-            );
-            proc1.width = 0;
-            page1.cleanup();
-
-            const textoCombinado = `${textoOcrP1.trim()}\n\n${textoDigital.trim()}`;
-            reportar("Lectura completa", 1);
-            return {
-              texto: textoCombinado,
-              metodo: "Lectura digital + OCR de encabezado (Pág. 1)",
-            };
-          } catch (eOcrP1) {
-            console.warn("⚠️ No se pudo hacer OCR a Pág 1:", eOcrP1.message);
-            reportar("Lectura completa", 1);
-            return { texto: textoDigital.trim(), metodo: "Texto digital del PDF" };
-          }
+        if (tieneTextoDigitalRico) {
+          reportar("Lectura digital completada", 1);
+          return {
+            texto: textoDigital.trim(),
+            metodo: "Lectura digital directa (Instantánea)",
+          };
         }
 
-        // ── INTENTO 2: PDF 100% escaneado → OCR completo ─────────
-        reportar("PDF escaneado — preparando OCR de alta resolución…", 0.38);
+        // ── INTENTO 2: PDF escaneado o mixto → OCR completo de páginas ─────────
+        reportar("Documento escaneado — ejecutando OCR de alta resolución…", 0.3);
         let textoOcr = "";
         for (let i = 1; i <= totalPags; i++) {
           const page = await doc.getPage(i);
@@ -354,22 +332,23 @@ export const ocrRadicados = {
             const procesado = preprocesarCanvasParaOCR(canvas);
             canvas.width = 0; // libera el bitmap original
 
-            const base = 0.38 + ((i - 1) / totalPags) * 0.57;
-            const ancho = 0.57 / totalPags;
-            const texto = await ocrMultimodo(procesado, (etapa, p) =>
-              reportar(etapa, base + p * ancho)
+            const base = 0.3 + ((i - 1) / totalPags) * 0.65;
+            const ancho = 0.65 / totalPags;
+            const textoPagina = await ocrMultimodo(procesado, (etapa, p) =>
+              reportar(`Pág ${i}: ${etapa}`, base + p * ancho)
             );
-            textoOcr += texto + "\n\n";
+            textoOcr += `\n--- PÁGINA ${i} ---\n` + textoPagina + "\n\n";
             procesado.width = 0;
           } finally {
             page.cleanup();
           }
         }
 
+        const textoFinal = (textoDigital.trim() ? `${textoDigital.trim()}\n\n` : "") + textoOcr.trim();
         reportar("Lectura completa", 1);
         return {
-          texto: textoOcr.trim(),
-          metodo: `OCR de PDF escaneado (${totalPags} pág.)`,
+          texto: textoFinal.trim(),
+          metodo: `OCR de alta precisión (${totalPags} pág.)`,
         };
       } finally {
         try {
