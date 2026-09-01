@@ -1,7 +1,19 @@
 // Arranca el backend (Express, puerto 3000) y el frontend (Vite, puerto 5173)
 // juntos. Sin esto, `npm run dev` solo levanta Vite y todas las llamadas /api
 // fallan con ECONNREFUSED porque el proxy no encuentra el backend en el puerto 3000.
-import { spawn } from 'node:child_process'
+
+// ── Verificación de integridad del módulo Permisos (congelado) ────────────────
+// Solo AVISA (nunca bloquea el arranque). Si el módulo derivó de su lock,
+// el cartel rojo explica cómo restaurar o cómo regenerar con aprobación.
+const avisoPermisos = spawnSync(
+  process.execPath,
+  ['scripts/proteccion/verificar-permisos.mjs', '--avisar'],
+  { cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8' }
+)
+if (avisoPermisos.stdout) process.stdout.write(avisoPermisos.stdout)
+if (avisoPermisos.stderr) process.stderr.write(avisoPermisos.stderr)
+import { spawn, spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const AZUL = '\x1b[36m'
 const MAGENTA = '\x1b[35m'

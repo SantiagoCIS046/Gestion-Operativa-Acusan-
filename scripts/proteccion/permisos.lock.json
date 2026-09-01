@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "descripcion": "Módulo Permisos congelado — estado estable verificado",
+  "algoritmo": "sha256",
+  "normalizacion": "crlf-a-lf",
+  "generado": "2026-09-01T16:17:19.528Z",
+  "archivos": {
+    "acusan/frontend/src/modules/permisos/components/FormularioValidacionOCR.vue": "7e753d7b7db5060287249ef13e15d3457ba7c2f273117978ca3e9e3bed8a438b",
+    "acusan/frontend/src/modules/permisos/components/VisorPDF.vue": "745ee786552a72bd097815d2f78ac05398d69efe24f0bf551579af2f87c52a53",
+    "acusan/frontend/src/modules/permisos/PROTEGIDO-LEER.md": "20f5ec4154340b3356960e81fe71951ab0387f74cfc1d7bfaee4740cffeeacb3",
+    "acusan/frontend/src/modules/permisos/services/permisosService.js": "4333d8e7aadc7f666cab4d2ca38f4ca3b2d834fa422c4722dc8294b34bf0471c",
+    "acusan/frontend/src/modules/permisos/views/VistaEncargado.vue": "9cad1df20d71e97b822e21fcd63f9d28e6041b8052c8043d1ccdc6197e701275",
+    "acusan/frontend/src/modules/permisos/views/VistaGerenciaPermisos.vue": "4376548cae74373411af2279ece12c5a8049dad8ab54549230dcb86f9ef18f63",
+    "acusan/backend/src/modules/permisos/permisos.controller.js": "4951f2212dd4328445e93d56e3b623208b8e93f10cc0e1312f642ae798c81a0d",
+    "acusan/backend/src/modules/permisos/permisos.routes.js": "ca498e3eb326bda54c3f6fc75eb2786473df0a034f111f3935638a6a41c70561",
+    "acusan/backend/src/modules/permisos/permisos.service.js": "131c19298362c3cb8c852f75bda75e5a989564e16578d2015ba33e38569b6252",
+    "acusan/backend/src/modules/permisos/PROTEGIDO-LEER.md": "7025ad3c0b7d3a433cb153d1086f3d9a31425d912f2a3202ae0c154fd6459b9c"
+  }
+}
