@@ -6,6 +6,14 @@ const router = Router()
 // ── Rutas específicas (ANTES de /:id para no ser capturadas) ────────────────
 router.get('/descargar-excel', RadicadosController.descargarExcel)
 router.post('/extraer-campos', RadicadosController.extraerCampos)
+router.post('/extraer-campos-respuesta', RadicadosController.extraerCamposRespuesta)
+
+// ── Oficios de respuesta de radicados (archivo histórico del módulo) ────────
+router.get('/expedientes', RadicadosController.listarExpedientes)
+router.get('/respuestas', RadicadosController.listarRespuestas)
+router.post('/respuestas', RadicadosController.crearRespuesta)
+router.get('/respuestas/:id/archivo', RadicadosController.obtenerArchivoRespuesta)
+router.delete('/respuestas/:id', RadicadosController.eliminarRespuesta)
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get('/', RadicadosController.listar)

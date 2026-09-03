@@ -177,18 +177,24 @@
               <h3 class="m-0">{{ tipoDocSeleccionado === 'RESPUESTA' ? '📤 Registrar Oficio de Respuesta' : '📝 Registrar Radicado de Entrada' }}</h3>
               <p class="m-0 text-muted" style="font-size: 0.76rem;">{{ tipoDocSeleccionado === 'RESPUESTA' ? 'Archivar oficio de salida vinculado a un radicado' : 'Diligencie los campos de la correspondencia recibida' }}</p>
             </div>
-            <span v-if="tipoDetectadoOcr" class="badge" :class="tipoDetectadoOcr === 'RESPUESTA' ? 'bg-success' : 'bg-primary'" style="font-size: 0.65rem;">
-              OCR: {{ tipoDetectadoOcr === 'RESPUESTA' ? 'Oficio Respuesta' : 'Radicado Inicial' }}
+            <span v-if="tipoDetectadoOcr" class="badge d-flex align-items-center gap-1"
+              :class="tipoDetectadoOcr === 'RESPUESTA' ? 'bg-success' : 'bg-primary'"
+              style="font-size: 0.65rem;">
+              <span>{{ tipoDetectadoOcr === 'RESPUESTA' ? '📤' : '📥' }}</span>
+              <span>Auto-detectado: {{ tipoDetectadoOcr === 'RESPUESTA' ? 'Oficio de Respuesta' : 'Radicado de Entrada' }}</span>
             </span>
           </div>
 
           <!-- 🔘 SELECTOR DE RECTIFICACIÓN / CLASIFICACIÓN DOCUMENTAL -->
+          <div v-if="tipoDetectadoOcr" class="mt-2 alert alert-info py-1 px-2" style="font-size: 0.72rem; line-height: 1.3;">
+            <span>🤖 El sistema identificó este documento como <strong>{{ tipoDetectadoOcr === 'RESPUESTA' ? 'Oficio de Respuesta (Salida)' : 'Radicado de Entrada' }}</strong>. Si el formulario no corresponde, corrija abajo.</span>
+          </div>
           <div class="mt-2 pt-2 border-top">
             <div class="d-flex justify-content-between align-items-center mb-1">
               <label class="form-label small fw-bold text-secondary text-uppercase mb-0" style="font-size: 0.68rem;">
-                🔄 Rectificar Clasificación Documental:
+                🔄 Clasificación Documental:
               </label>
-              <small class="text-muted" style="font-size: 0.65rem;">(Haga clic para cambiar si difiere)</small>
+              <small class="text-muted" style="font-size: 0.65rem;">(Cambie si la detección automática difiere)</small>
             </div>
             <div class="btn-group w-100 shadow-sm" role="group">
               <input type="radio" class="btn-check" name="tipoDocSelector" id="tipoRadicado" value="RADICADO" v-model="tipoDocSeleccionado" @change="alCambiarTipoDoc('RADICADO')">
@@ -211,51 +217,72 @@
           <div class="form-row">
             <div class="form-group">
               <label>N° Radicado PDF</label>
-              <input type="text" v-model="form.numeroRadicadoPdf" class="form-control form-control-sm" placeholder="Número extraído del documento">
+              <input type="text" v-model="form.numeroRadicadoPdf"
+                :class="['form-control', 'form-control-sm', campoOcrClase('numeroRadicadoPdf')]"
+                placeholder="Número extraído del documento">
             </div>
             <div class="form-group">
               <label>Fecha / Hora Sello</label>
-              <input type="text" v-model="form.fechaDocumento" class="form-control form-control-sm" placeholder="Fecha y hora del documento">
+              <input type="text" v-model="form.fechaDocumento"
+                :class="['form-control', 'form-control-sm', campoOcrClase('fechaDocumento')]"
+                placeholder="Fecha y hora del documento">
             </div>
           </div>
 
           <div class="form-group">
             <label>Lugar y Fecha de la Carta</label>
-            <input type="text" v-model="form.lugarFecha" class="form-control form-control-sm" placeholder="Lugar y fecha de emisión">
+            <input type="text" v-model="form.lugarFecha"
+              :class="['form-control', 'form-control-sm', campoOcrClase('lugarFecha')]"
+              placeholder="Lugar y fecha de emisión">
           </div>
 
           <!-- Sección 2: Partes -->
           <div class="form-section-label">👥 Partes del radicado</div>
           <div class="form-group">
             <label>Remitente / Peticionario <span class="req">*</span></label>
-            <input type="text" v-model="form.peticionario" class="form-control form-control-sm" placeholder="Nombre completo o entidad peticionaria" required>
+            <input type="text" v-model="form.peticionario"
+              :class="['form-control', 'form-control-sm', campoOcrClase('peticionario')]"
+              placeholder="Nombre completo o entidad peticionaria" required>
+            <small v-if="resumenLectura && !form.peticionario" class="text-warning fw-semibold">⚠️ No encontrado en el PDF — complete manualmente</small>
           </div>
 
           <div class="form-group">
             <label>Empresa Destinataria <span class="req">*</span></label>
-            <input type="text" v-model="form.dependencia" class="form-control form-control-sm" placeholder="Empresa o entidad destinataria" required>
+            <input type="text" v-model="form.dependencia"
+              :class="['form-control', 'form-control-sm', campoOcrClase('dependencia')]"
+              placeholder="Empresa o entidad destinataria" required>
           </div>
 
           <div class="form-group">
             <label>Destinatario (Funcionario / Área)</label>
-            <input type="text" v-model="form.destinatario" class="form-control form-control-sm" placeholder="Funcionario o dependencia destinataria">
+            <input type="text" v-model="form.destinatario"
+              :class="['form-control', 'form-control-sm', campoOcrClase('destinatario')]"
+              placeholder="Funcionario o dependencia destinataria">
+            <small v-if="resumenLectura && !form.destinatario" class="text-muted">ℹ️ No detectado en el documento — puede completarse manualmente</small>
           </div>
 
           <!-- Sección 3: Contenido -->
           <div class="form-section-label">📄 Contenido del documento</div>
           <div class="form-group">
             <label>Asunto</label>
-            <input type="text" v-model="form.asunto" class="form-control form-control-sm" placeholder="Asunto o tema principal de la solicitud">
+            <input type="text" v-model="form.asunto"
+              :class="['form-control', 'form-control-sm', campoOcrClase('asunto')]"
+              placeholder="Asunto o tema principal de la solicitud">
+            <small v-if="resumenLectura && !form.asunto" class="text-warning fw-semibold">⚠️ Sin asunto detectado — complete manualmente</small>
           </div>
 
           <div class="form-group">
             <label>Referencia</label>
-            <input type="text" v-model="form.referencia" class="form-control form-control-sm" placeholder="Referencia, código o número de cuenta">
+            <input type="text" v-model="form.referencia"
+              :class="['form-control', 'form-control-sm', campoOcrClase('referencia')]"
+              placeholder="Referencia, código o número de cuenta">
           </div>
 
           <div class="form-group">
             <label>Contexto / Observaciones</label>
-            <textarea v-model="form.contexto" class="form-control form-control-sm" rows="2" placeholder="Detalle o resumen de la petición..."></textarea>
+            <textarea v-model="form.contexto"
+              :class="['form-control', 'form-control-sm', campoOcrClase('contexto')]"
+              rows="2" placeholder="Detalle o resumen de la petición..."></textarea>
           </div>
 
           <!-- Sección 4: Datos Operacionales -->
@@ -308,29 +335,39 @@
           <div class="form-row">
             <div class="form-group">
               <label>N° de Oficio de Salida <span class="req">*</span></label>
-              <input type="text" v-model="formRespuesta.numeroOficio" class="form-control form-control-sm" placeholder="Ej: OF-2026-104" required>
+              <input type="text" v-model="formRespuesta.numeroOficio"
+                :class="['form-control', 'form-control-sm', campoOcrClase('numeroOficio')]"
+                placeholder="Ej: OF-2026-104" required>
             </div>
             <div class="form-group">
               <label>Fecha del Oficio</label>
-              <input type="text" v-model="formRespuesta.fechaDocumento" class="form-control form-control-sm" placeholder="Fecha del oficio">
+              <input type="text" v-model="formRespuesta.fechaDocumento"
+                :class="['form-control', 'form-control-sm', campoOcrClase('fechaDocumento')]"
+                placeholder="Fecha del oficio">
             </div>
           </div>
 
           <div class="form-group">
             <label>Lugar y Fecha de Emisión</label>
-            <input type="text" v-model="formRespuesta.lugarFecha" class="form-control form-control-sm" placeholder="Ej: San Gil, 1 de Septiembre de 2026">
+            <input type="text" v-model="formRespuesta.lugarFecha"
+              :class="['form-control', 'form-control-sm', campoOcrClase('lugarFecha')]"
+              placeholder="Ej: San Gil, 1 de Septiembre de 2026">
           </div>
 
           <!-- Sección 3: Destinatario y Asunto -->
           <div class="form-section-label">👥 Destinatario y Asunto de la Respuesta</div>
           <div class="form-group">
             <label>Destinatario (Peticionario / Ciudadano)</label>
-            <input type="text" v-model="formRespuesta.destinatario" class="form-control form-control-sm" placeholder="Nombre de la persona o entidad que recibe">
+            <input type="text" v-model="formRespuesta.destinatario"
+              :class="['form-control', 'form-control-sm', campoOcrClase('destinatario')]"
+              placeholder="Nombre de la persona o entidad que recibe">
           </div>
 
           <div class="form-group">
             <label>Asunto de la Respuesta</label>
-            <input type="text" v-model="formRespuesta.asunto" class="form-control form-control-sm" placeholder="Asunto o síntesis del oficio de salida">
+            <input type="text" v-model="formRespuesta.asunto"
+              :class="['form-control', 'form-control-sm', campoOcrClase('asunto')]"
+              placeholder="Asunto o síntesis del oficio de salida">
           </div>
 
           <div class="form-group">
@@ -765,7 +802,7 @@
           <button type="button" class="btn-close btn-close-sm" @click="cerrarModal()" aria-label="Close"></button>
         </div>
 
-        <div class="modal-body p-2" style="max-height: 75vh; overflow-y: auto;">
+        <div class="modal-body p-3">
           <div class="alert alert-primary text-center mb-1 py-1 px-2 border-dashed">
             <div class="fw-bold text-uppercase tracking-wide" style="font-size: 0.6rem;">SELLO DIGITAL DE RADICACIÓN — ACUASAN</div>
             <div class="fw-bold text-dark mt-0" style="font-size: 0.78rem;">
@@ -811,8 +848,8 @@
                 ↗️ Abrir Archivo
               </a>
             </div>
-            <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2" style="min-height: 380px; max-height: 540px;">
-              <div v-if="modalPdfCargando" class="d-flex align-items-center justify-content-center text-white-50" style="font-size: 0.78rem; min-height: 300px;">
+            <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 position-relative p-2" style="min-height: 720px; height: 82vh;">
+              <div v-if="modalPdfCargando" class="d-flex align-items-center justify-content-center text-white-50" style="font-size: 0.78rem; min-height: 380px;">
                 ⏳ Cargando documento...
               </div>
 
@@ -822,9 +859,9 @@
                 :data="modalPdfUrl"
                 type="application/pdf"
                 class="w-100 rounded-3 border-0 bg-white"
-                style="min-height: 460px;"
+                style="min-height: 700px; height: 100%;"
               >
-                <iframe :src="modalPdfUrl" class="w-100 h-100 rounded-3 border-0 bg-white" style="min-height: 460px;" title="Visor PDF Radicado Original"></iframe>
+                <iframe :src="modalPdfUrl" class="w-100 h-100 rounded-3 border-0 bg-white" style="min-height: 700px;" title="Visor PDF Radicado Original"></iframe>
               </object>
 
               <!-- Imagen escaneada adjunta -->
@@ -1229,8 +1266,73 @@ const leerDocumento = async (file) => {
 
     ultimoTextoOcr = texto || ''
 
-    // 🔍 Detección Inteligente de Tipo de Trámite: ¿Respuesta u Oficio de Entrada?
-    const esRespuestaDetectada = /\b(?:ofici[o0]s?|dando respuesta|en respuesta|en atenci[oó]n|respuesta al radicado|oficio de salida|comunicaci[oó]n oficial de respuesta)\b/i.test(ultimoTextoOcr)
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔍 MOTOR DE DETECCIÓN INTELIGENTE DE TIPO DOCUMENTAL
+    // Analiza señales ponderadas para decidir si es un Radicado de Entrada
+    // o un Oficio de Respuesta emitido por Acuasan. No una sola regex: múltiples
+    // indicadores se suman como puntaje — el tipo con mayor puntaje gana.
+    // ═══════════════════════════════════════════════════════════════════════
+    const textoUpper = ultimoTextoOcr.toUpperCase()
+    let puntajeRespuesta = 0
+    let puntajeRadicado  = 0
+
+    // ── Señales FUERTES de Oficio de Respuesta (salida de Acuasan) ─────────
+    // Frases que solo aparecen en documentos emitidos como respuesta oficial
+    if (/\ben\s+respuesta\s+a(?:l|la|los)?\b/i.test(ultimoTextoOcr))         puntajeRespuesta += 40
+    if (/\brespuesta\s+al\s+radicado\b/i.test(ultimoTextoOcr))               puntajeRespuesta += 40
+    if (/\boficio\s+de\s+respuesta\b/i.test(ultimoTextoOcr))                  puntajeRespuesta += 40
+    if (/\boficio\s+de\s+salida\b/i.test(ultimoTextoOcr))                     puntajeRespuesta += 35
+    if (/\bdando\s+respuesta\b/i.test(ultimoTextoOcr))                        puntajeRespuesta += 35
+    if (/\bdando\s+cumplimiento\b/i.test(ultimoTextoOcr))                     puntajeRespuesta += 30
+    if (/\bcomunicaci[oó]n\s+oficial\s+de\s+respuesta\b/i.test(ultimoTextoOcr)) puntajeRespuesta += 40
+    if (/\bme\s+permito\s+(?:dar|informar|comunicar)\b/i.test(ultimoTextoOcr)) puntajeRespuesta += 20
+    if (/\bref(?:erencia)?\s*[:.]\s*radicado\b/i.test(ultimoTextoOcr))       puntajeRespuesta += 25
+    if (/\bOficio\s+(?:No\.?|N[°º])\s*[A-Z0-9\-\/]{3,}/i.test(ultimoTextoOcr)) puntajeRespuesta += 30
+
+    // Acuasan como REMITENTE (el que envía = el que responde)
+    if (/ACUASAN|ACUEDUCTO[\s,].*ALCANTARILLADO/i.test(ultimoTextoOcr) &&
+        /\bAtentamente\b|\bCordialmente\b|\bRespetuosamente\b/i.test(ultimoTextoOcr)) {
+      // Tiene membrete de Acuasan Y cierre formal de carta = salida de Acuasan
+      puntajeRespuesta += 35
+    }
+
+    // ── Señales FUERTES de Radicado de Entrada (recibido por Acuasan) ─────
+    // El sello de ventanilla física es la evidencia más fuerte
+    if (/\bRemitente\s*:/i.test(ultimoTextoOcr))   puntajeRadicado += 40
+    if (/\bDestinatari[ao]\s*:/i.test(ultimoTextoOcr)) puntajeRadicado += 30
+    if (/\bRadicado\s+No\.?\s*:/i.test(ultimoTextoOcr)) puntajeRadicado += 25
+    if (/\bFolios?\s*:/i.test(ultimoTextoOcr))     puntajeRadicado += 20
+    if (/\bAnexos?\s*:/i.test(ultimoTextoOcr))     puntajeRadicado += 15
+
+    // Acuasan como DESTINATARIO (le están escribiendo A Acuasan)
+    if (/Se[nñ]ores?\s*[:\s]+.*ACUASAN|Se[nñ]ores?\s*[:\s]+.*ACUEDUCTO/i.test(ultimoTextoOcr))
+      puntajeRadicado += 35
+    if (/(?:GERENTE|PRESIDENTE|REPRESENTANTE)\s+(?:GENERAL\s+)?DE[\s,].*ACUASAN/i.test(textoUpper))
+      puntajeRadicado += 30
+
+    // El peticionario ES la persona que escribe a Acuasan (no hay membrete de salida de Acuasan)
+    if (/\bSolicito\b|\bSolicitud\b|\bPetici[oó]n\b/i.test(ultimoTextoOcr) &&
+        !/ACUASAN/i.test(ultimoTextoOcr.substring(0, 300))) {
+      puntajeRadicado += 20
+    }
+
+    // Sello fisico de Acuasan en documento recibido:
+    // año + código de barras + fecha + EMPRESA DE ACUEDUCTO
+    if (/EMPRESA\s+DE\s+ACUEDUCTO.*ALCANTARILLADO.*ASEO/i.test(ultimoTextoOcr) &&
+        /Remitente\s*:/i.test(ultimoTextoOcr)) {
+      puntajeRadicado += 45
+    }
+
+    // ── Señales débiles pero útiles ────────────────────────────────────────
+    if (/\bAcci[oó]n\s+de\s+tutela\b/i.test(ultimoTextoOcr))   puntajeRadicado += 10
+    if (/\bPQRS?\b/i.test(ultimoTextoOcr))                       puntajeRadicado += 10
+    if (/\bDerecho\s+de\s+petici[oó]n\b/i.test(ultimoTextoOcr)) puntajeRadicado += 10
+    if (/\bOficio\b/i.test(ultimoTextoOcr) && puntajeRespuesta === 0) puntajeRespuesta += 5
+
+    // Desempate: si los dos quedan en 0, es un Radicado (es lo más común)
+    const esRespuestaDetectada = puntajeRespuesta > puntajeRadicado
+    const confianzaDeteccion = Math.abs(puntajeRespuesta - puntajeRadicado)
+    console.log(`[OCR] Tipo detectado: ${esRespuestaDetectada ? 'RESPUESTA' : 'RADICADO'} | Puntaje RESP=${puntajeRespuesta} RAD=${puntajeRadicado} | Confianza=${confianzaDeteccion}`)
 
     if (esRespuestaDetectada) {
       tipoDetectadoOcr.value = 'RESPUESTA'
@@ -1277,6 +1379,28 @@ const aplicarCamposExtraidos = (campos, metodo) => {
   resumenLectura.value = { metodo: `Radicado Inicial (${metodo})`, leidos, faltantes }
 }
 
+// Clase CSS dinámica para resaltar campos según resultado OCR
+// Verde = llenado automáticamente · Amarillo = quedó vacío tras la lectura
+const campoOcrClase = (campo) => {
+  if (!resumenLectura.value) return ''
+  const etiquetas = {
+    numeroRadicadoPdf: ['N° radicado del sello'],
+    numeroOficio: ['N° de oficio'],
+    fechaDocumento: ['fecha del sello', 'fecha del oficio'],
+    lugarFecha: ['lugar y fecha de la carta', 'lugar y fecha'],
+    peticionario: ['peticionario'],
+    dependencia: ['empresa destinataria'],
+    destinatario: ['destinatario'],
+    asunto: ['asunto'],
+    referencia: ['referencia'],
+    contexto: ['contexto']
+  }
+  const lista = etiquetas[campo] || [campo]
+  if (lista.some((etq) => resumenLectura.value.leidos.includes(etq))) return 'campo-ocr-llenado'
+  if (lista.some((etq) => resumenLectura.value.faltantes.includes(etq))) return 'campo-ocr-faltante'
+  return ''
+}
+
 // Llenar campos de oficio de respuesta
 const aplicarCamposRespuestaExtraidos = (campos, metodo, textoCompleto = '') => {
   const leidos = []
@@ -1286,14 +1410,26 @@ const aplicarCamposRespuestaExtraidos = (campos, metodo, textoCompleto = '') => 
     formRespuesta.numeroOficio = campos.numeroOficio
     leidos.push('N° de oficio')
   } else {
-    faltantes.push('N° de oficio')
+    // Buscar fallback de código de oficio o consecutivo en el texto
+    const mCodFallback = (textoCompleto || '').match(/\b(\d{2,4}-[A-Z]{1,4}-\d{1,5}-\d{4})\b/i) ||
+                          (textoCompleto || '').match(/\b(?:Radicado|Consecutivo)\s+(?:No\.?|N[°º])?\s*[:.]?\s*([0-9]{7,12})\b/i)
+    if (mCodFallback) {
+      formRespuesta.numeroOficio = mCodFallback[1]
+      leidos.push('N° de oficio')
+    } else {
+      faltantes.push('N° de oficio')
+    }
   }
 
   if (campos.fechaDocumento) {
     formRespuesta.fechaDocumento = campos.fechaDocumento
     leidos.push('fecha del oficio')
   } else {
-    faltantes.push('fecha del oficio')
+    // Si el OCR no trajo fecha explícita, predeterminar fecha actual con modales formales
+    const hoy = new Date()
+    const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+    formRespuesta.fechaDocumento = `${hoy.getDate()} de ${MESES[hoy.getMonth()]} de ${hoy.getFullYear()}`
+    leidos.push('fecha del oficio')
   }
 
   if (campos.lugarFecha) {
@@ -1315,11 +1451,26 @@ const aplicarCamposRespuestaExtraidos = (campos, metodo, textoCompleto = '') => 
     faltantes.push('asunto')
   }
 
-  // Búsqueda inteligente de radicado padre en el texto
-  if (textoCompleto && listaRadicados.value.length) {
+  // Vinculación automática del radicado padre:
+  // 1. Prioridad: número extraído del sello "Respuesta a Radicado No.:" (backend)
+  // 2. Fallback: búsqueda por coincidencia de número en el texto OCR completo
+  let vinculado = false
+  if (campos.radicadoReferencia && listaRadicados.value.length) {
+    const refSimple = campos.radicadoReferencia.replace(/[^0-9]/g, '')
     for (const r of listaRadicados.value) {
       const numSimple = r.numeroRadicado.replace(/[^0-9]/g, '')
-      if (numSimple && numSimple.length >= 4 && textoCompleto.includes(numSimple)) {
+      if (numSimple && refSimple && (numSimple === refSimple || numSimple.endsWith(refSimple) || refSimple.endsWith(numSimple))) {
+        formRespuesta.radicadoId = r.id
+        leidos.push(`radicado vinculado #${r.numeroRadicado}`)
+        vinculado = true
+        break
+      }
+    }
+  }
+  if (!vinculado && textoCompleto && listaRadicados.value.length) {
+    for (const r of listaRadicados.value) {
+      const numSimple = r.numeroRadicado.replace(/[^0-9]/g, '')
+      if (numSimple && numSimple.length >= 6 && textoCompleto.includes(numSimple)) {
         formRespuesta.radicadoId = r.id
         leidos.push(`radicado vinculado #${r.numeroRadicado}`)
         break
@@ -1786,14 +1937,43 @@ const getBadgeBootstrap = (rad) => {
 
 /* Visor PDF Box */
 .pdf-container-box {
-  height: 270px;
+  min-height: 480px;
+  height: 56vh;
+  max-height: 700px;
   background: #f8fafc;
   border: 1.5px dashed #cbd5e1;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.pdf-container-box::-webkit-scrollbar,
+.pdf-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.pdf-container-box::-webkit-scrollbar-track,
+.pdf-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.pdf-container-box::-webkit-scrollbar-thumb,
+.pdf-container::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+.pdf-container-box::-webkit-scrollbar-thumb:hover,
+.pdf-container::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 .pdf-empty-state {
@@ -1866,6 +2046,19 @@ const getBadgeBootstrap = (rad) => {
 
 .lectura-faltan {
   color: #92400e;
+}
+
+/* ── Retroalimentación visual de campos OCR ─────────────────── */
+.campo-ocr-llenado {
+  border-color: #22c55e !important;
+  background-color: #f0fdf4 !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15) !important;
+}
+
+.campo-ocr-faltante {
+  border-color: #f59e0b !important;
+  background-color: #fffbeb !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15) !important;
 }
 
 .lectura-spinner {
@@ -2568,12 +2761,29 @@ const getBadgeBootstrap = (rad) => {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(2px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  overflow-y: scroll;
+  overflow-x: hidden;
   z-index: 9999;
+  padding: 1.5rem 1rem 3.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #38bdf8 rgba(15, 23, 42, 0.4);
+}
+
+.modal-overlay::-webkit-scrollbar {
+  width: 10px;
+}
+.modal-overlay::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.35);
+}
+.modal-overlay::-webkit-scrollbar-thumb {
+  background: #38bdf8;
+  border-radius: 5px;
+}
+.modal-overlay::-webkit-scrollbar-thumb:hover {
+  background: #0ea5e9;
 }
 
 .modal-card {
@@ -2581,15 +2791,16 @@ const getBadgeBootstrap = (rad) => {
   border-radius: 12px;
   width: 92%;
   max-width: 380px;
+  margin: 0 auto;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-/* El modal de detalle lleva el visor de PDF: más ancho para leer el documento
-   (width: 92% lo mantiene responsive en pantallas pequeñas) */
+/* El modal de detalle lleva el visor de PDF: más ancho y con scroll exterior para subir y bajar todo el cuadro */
 .modal-viewer-wide {
-  max-width: 720px;
+  width: 95vw;
+  max-width: 1120px;
+  margin: 0 auto;
 }
 
 .modal-header-info {

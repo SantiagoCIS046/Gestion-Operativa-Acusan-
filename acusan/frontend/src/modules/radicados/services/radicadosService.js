@@ -94,6 +94,35 @@ export const radicadosService = {
   },
 
   /**
+   * Lista los expedientes emparejados: cada radicado con sus oficios de
+   * respuesta archivados (módulo Radicado ↔ Respuesta). Sin caché: si el
+   * backend no responde devuelve [] y ultimoOrigen queda en null.
+   */
+  async obtenerExpedientes() {
+    try {
+      const res = await fetch(`${API_BASE}/expedientes`, {
+        headers: authService.getAuthHeader(),
+        cache: 'no-store'
+      })
+      if (res.status === 401) {
+        authService.logout()
+        window.location.href = '/login'
+        return []
+      }
+      if (!res.ok) throw new Error(`El servidor respondió ${res.status}`)
+      const data = await res.json()
+      if (!(data && data.success && Array.isArray(data.data))) {
+        throw new Error('Respuesta inesperada del servidor.')
+      }
+      this.ultimoOrigen = 'servidor'
+      return data.data
+    } catch (e) {
+      this.ultimoOrigen = null
+      return []
+    }
+  },
+
+  /**
    * Crea un radicado. El backend es la fuente de verdad (numeración y fechas).
    */
   async crear(datos) {

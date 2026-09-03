@@ -105,6 +105,9 @@
                   <router-link to="/radicados/gerencia" class="nav-child" active-class="child-active">
                     <span class="child-icon">📊</span> Historial Gerencial
                   </router-link>
+                  <router-link to="/radicados/expedientes" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🔗</span> Radicado ↔ Respuesta
+                  </router-link>
                 </div>
               </transition>
             </div>
@@ -202,40 +205,73 @@
           </router-link>
 
           <!-- RADICADOS (Eliana y similares): solo su área -->
-          <router-link
-            v-if="tieneAcceso(['RADICADOS'])"
-            to="/radicados/gestion"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">📑</span>
-            <span class="nav-text">Radicados</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
+          <div v-if="tieneAcceso(['RADICADOS'])" class="nav-group">
+            <button
+              class="nav-group-header"
+              :class="{ 'group-active': menuExpandido.radicados }"
+              @click="toggleMenu('radicados')"
+            >
+              <span class="nav-icon">📁</span>
+              <span class="nav-text">Radicados</span>
+              <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.radicados }">›</span>
+            </button>
+            <transition name="slide-down">
+              <div v-if="menuExpandido.radicados" class="nav-group-children">
+                <router-link to="/radicados/gestion" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🖥️</span> Panel de Radicados
+                </router-link>
+                <router-link to="/radicados/expedientes" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🔗</span> Radicado ↔ Respuesta
+                </router-link>
+              </div>
+            </transition>
+          </div>
 
           <!-- ENCARGADO con acceso a radicados: solo su área -->
-          <router-link
-            v-if="tieneAcceso(['ENCARGADO'])"
-            to="/radicados/gestion"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">📑</span>
-            <span class="nav-text">Radicados</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
+          <div v-if="tieneAcceso(['ENCARGADO'])" class="nav-group">
+            <button
+              class="nav-group-header"
+              :class="{ 'group-active': menuExpandido.radicados }"
+              @click="toggleMenu('radicados')"
+            >
+              <span class="nav-icon">📁</span>
+              <span class="nav-text">Radicados</span>
+              <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.radicados }">›</span>
+            </button>
+            <transition name="slide-down">
+              <div v-if="menuExpandido.radicados" class="nav-group-children">
+                <router-link to="/radicados/gestion" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🖥️</span> Panel de Radicados
+                </router-link>
+                <router-link to="/radicados/expedientes" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🔗</span> Radicado ↔ Respuesta
+                </router-link>
+              </div>
+            </transition>
+          </div>
 
           <!-- GERENCIA: Historial de Radicados (visión completa) -->
-          <router-link
-            v-if="tieneAcceso(['GERENCIA'])"
-            to="/radicados/gerencia"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">📑</span>
-            <span class="nav-text">Historial de Radicados</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
+          <div v-if="tieneAcceso(['GERENCIA'])" class="nav-group">
+            <button
+              class="nav-group-header"
+              :class="{ 'group-active': menuExpandido.radicados }"
+              @click="toggleMenu('radicados')"
+            >
+              <span class="nav-icon">📁</span>
+              <span class="nav-text">Radicados</span>
+              <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.radicados }">›</span>
+            </button>
+            <transition name="slide-down">
+              <div v-if="menuExpandido.radicados" class="nav-group-children">
+                <router-link to="/radicados/gerencia" class="nav-child" active-class="child-active">
+                  <span class="child-icon">📊</span> Historial de Radicados
+                </router-link>
+                <router-link to="/radicados/expedientes" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🔗</span> Radicado ↔ Respuesta
+                </router-link>
+              </div>
+            </transition>
+          </div>
 
         </nav>
 
@@ -369,12 +405,12 @@ onUnmounted(() => {
   if (timerLatidoSincronizacion) clearInterval(timerLatidoSincronizacion)
 })
 
-// Estado del acordeón del sidebar (admin)
+// Estado del acordeón del sidebar
 const menuExpandido = ref({
   permisos: false,
   horasExtras: false,
   pqr: false,
-  radicados: false
+  radicados: true
 })
 
 function toggleMenu(key) {

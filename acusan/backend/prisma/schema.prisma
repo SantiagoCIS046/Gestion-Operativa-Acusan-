@@ -228,3 +228,39 @@ model Radicado {
   @@map("radicados")
 }
 
+// -------------------------------------------------------------
+// MÓDULO: RADICADOS — OFICIOS DE RESPUESTA ARCHIVADOS
+// -------------------------------------------------------------
+// Cada radicado puede tener una o varias respuestas (oficios de salida)
+// escaneadas y archivadas en la base de datos. Se enlaza al radicado padre
+// por radicadoId SIN @relation deliberadamente: el modelo Radicado queda
+// intacto (cero riesgo para los datos existentes). numeroRadicado va
+// desnormalizado (lo fija el servidor al crear) para listar y mostrar en
+// Gerencia sin cruzar colecciones.
+model RespuestaRadicado {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  radicadoId     String   @db.ObjectId
+  numeroRadicado String
+
+  // Fecha en que se archivó la respuesta en el sistema
+  fechaRespuesta DateTime @default(now())
+
+  // Campos del oficio (OCR estricto: el dato sale del documento o va vacío)
+  numeroOficio   String?
+  destinatario   String?
+  asunto         String?
+  fechaDocumento String?
+  lugarFecha     String?
+  observaciones  String?
+
+  // Documento escaneado de la respuesta (data URL base64, igual que radicados)
+  archivoNombre  String?
+  archivoBase64  String?
+
+  registradoPor  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("respuestas_radicado")
+}
+

@@ -27,25 +27,6 @@
 
       <!-- BOTONES DE ACCIÓN DEL HEADER -->
       <div class="header-right d-flex align-items-center gap-2 flex-wrap">
-        <!-- ESTADO DEL SONDEO EN VIVO: verde solo si el último sondeo llegó al
-             servidor; si falló, gris "Sin conexión" para no vender un tablero
-             vacío como si estuviera vivo -->
-        <span
-          v-if="ultimaActualizacion && origenDatos === 'servidor'"
-          class="badge bg-success text-white px-2 py-1"
-          style="font-size: 0.72rem;"
-          title="Este tablero se actualiza automáticamente cada 5 segundos desde que la encargada guarda un radicado"
-        >
-          ● En vivo · {{ horaUltimaActualizacion }}
-        </span>
-        <span
-          v-else-if="ultimaActualizacion"
-          class="badge bg-secondary text-white px-2 py-1"
-          style="font-size: 0.72rem;"
-          title="El último sondeo no pudo conectar con el servidor: los datos en pantalla pueden estar desactualizados"
-        >
-          ● Sin conexión · {{ horaUltimaActualizacion }}
-        </span>
 
         <!-- BOTÓN PRINCIPAL DE ALERTAS DE RADICACIONES SUBIDAS -->
         <button 
@@ -155,7 +136,7 @@
         <div class="fx-icon">fx</div>
         <div class="formula-input">
           <span class="formula-text">
-            =AUDITORIA_RADICADOS() &rarr; Total Radicados: <strong>{{ listaRadicados.length }}</strong> | Subidos por Eliana: <strong>{{ statsEliana }}</strong> | Subidos por Román: <strong>{{ statsRoman }}</strong> | Pendientes en Término: <strong>{{ statsPendientes }}</strong>
+            =AUDITORIA_RADICADOS() &rarr; Total Radicados: <strong>{{ listaRadicados.length }}</strong> | Subidos por Eliana: <strong>{{ statsEliana }}</strong> | Subidos por Román: <strong>{{ statsRoman }}</strong> | Pendientes en Término: <strong>{{ statsPendientes }}</strong> | Respondidos: <strong>{{ statsRespondidos }}</strong>
           </span>
         </div>
       </div>
@@ -209,12 +190,20 @@
             >
               <span class="dot dot-red"></span> Críticos / Vencidos ({{ statsVencidos }})
             </button>
-            <button 
-              type="button" 
-              :class="['filter-chip chip-resuelto', filtroSla === 'resuelto' ? 'active' : '']" 
+            <button
+              type="button"
+              :class="['filter-chip chip-resuelto', filtroSla === 'resuelto' ? 'active' : '']"
               @click="filtroSla = filtroSla === 'resuelto' ? '' : 'resuelto'"
             >
               <span class="dot dot-green"></span> Resueltos ({{ statsResueltos }})
+            </button>
+            <button
+              type="button"
+              :class="['filter-chip chip-respondido', filtroRespondido === 'con' ? 'active' : '']"
+              @click="filtroRespondido = filtroRespondido === 'con' ? '' : 'con'"
+              title="Radicados con oficio de respuesta archivado"
+            >
+              <span class="dot dot-blue"></span> Respondidos ({{ statsRespondidos }})
             </button>
           </div>
         </div>
@@ -318,6 +307,13 @@
                   <div class="asunto-title" :title="rad.asunto">{{ rad.asunto || 'Sin asunto especificado' }}</div>
                   <div v-if="rad.destinatario" class="destinatario-badge text-truncate" :title="'Destino: ' + rad.destinatario">
                     <span class="fw-bold">Para:</span> {{ rad.destinatario }}
+                  </div>
+                  <div
+                    v-if="mapaRespuestas.get(rad.id)"
+                    class="respondido-chip text-truncate"
+                    :title="'Oficio de respuesta archivado: ' + (mapaRespuestas.get(rad.id).numeroOficio || 'sin número de oficio')"
+                  >
+                    📤 Respondido{{ mapaRespuestas.get(rad.id).numeroOficio ? ' · ' + mapaRespuestas.get(rad.id).numeroOficio : '' }}
                   </div>
                 </div>
               </td>
@@ -571,6 +567,11 @@
               </div>
             </div>
           </div>
+
+          <!-- 📨 Oficios de respuesta del radicado (archivo histórico — consulta) -->
+          <div class="mt-3">
+            <PanelRespuestas :radicado="radicadoSeleccionado" :editable="false" />
+          </div>
         </div>
 
         <div class="modal-detalle-footer">
@@ -584,6 +585,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
+import respuestasService from '../services/respuestasService.js'
+import PanelRespuestas from '../components/PanelRespuestas.vue'
 
 // Estado
 const listaRadicados = ref([])
@@ -592,6 +595,11 @@ const busqueda = ref('')
 const filtroResponsable = ref('')
 const filtroEstado = ref('')
 const filtroSla = ref('')
+const filtroRespondido = ref('') // '' | 'con' | 'sin'
+// radicadoId → última respuesta archivada (chip "Respondido · OF-xxx"). Se
+// reemplaza entero en cada sondeo: nadie muta el Map, solo se lee desde el
+// template y los computeds.
+const mapaRespuestas = ref(new Map())
 const modalAlertasVisible = ref(false)
 const radicadoSeleccionado = ref(null)
 const detallePdfUrl = ref(null)
@@ -621,8 +629,27 @@ const cargarDatos = async (silencioso = false) => {
   cargaEnCurso = true
   try {
     if (!silencioso) cargando.value = true
-    const datos = await radicadosService.obtenerTodos()
+    // Radicados y respuestas juntos: el chip "Respondido" de la tabla nace de
+    // cruzar ambos listados por radicadoId (vínculo que valida el servidor).
+    const [datos, respuestas] = await Promise.all([
+      radicadosService.obtenerTodos(),
+      respuestasService.obtenerTodas()
+    ])
     listaRadicados.value = datos || []
+    const mapa = new Map()
+    for (const resp of respuestas || []) {
+      // Si un radicado tiene varias respuestas, la última archivada es la que
+      // se muestra en el chip (el oficio vigente con el que se respondió).
+      mapa.set(resp.radicadoId, resp)
+    }
+    mapaRespuestas.value = mapa
+    // El modal de detalle guarda una instantánea: al recargar se resincroniza
+    // para que el badge de estado refleje lo último (otro usuario archiva una
+    // respuesta → Resuelto) sin cerrar y reabrir el modal.
+    if (radicadoSeleccionado.value) {
+      const fresco = listaRadicados.value.find((r) => r.id === radicadoSeleccionado.value.id)
+      if (fresco) radicadoSeleccionado.value = fresco
+    }
     ultimaActualizacion.value = new Date()
     origenDatos.value = radicadosService.ultimoOrigen
   } catch (err) {
@@ -712,6 +739,11 @@ const statsResueltos = computed(() => {
   return listaRadicados.value.filter(r => r.estado === 'Resuelto').length
 })
 
+// Radicados con oficio de respuesta archivado (cruce por radicadoId)
+const statsRespondidos = computed(() => {
+  return listaRadicados.value.filter(r => mapaRespuestas.value.has(r.id)).length
+})
+
 // Radicados ordenados cronológicamente por subida (más recientes primero)
 const radicadosOrdenadosPorSubida = computed(() => {
   return [...listaRadicados.value].sort((a, b) => {
@@ -751,7 +783,15 @@ const radicadosFiltrados = computed(() => {
       matchSla = r.estado === 'Resuelto'
     }
 
-    return matchBusqueda && matchResponsable && matchEstado && matchSla
+    // Filtro de respuesta archivada
+    let matchRespondido = true
+    if (filtroRespondido.value === 'con') {
+      matchRespondido = mapaRespuestas.value.has(r.id)
+    } else if (filtroRespondido.value === 'sin') {
+      matchRespondido = !mapaRespuestas.value.has(r.id)
+    }
+
+    return matchBusqueda && matchResponsable && matchEstado && matchSla && matchRespondido
   })
 })
 
@@ -1213,6 +1253,32 @@ const esImagenDocumento = (rad) => {
 }
 .dot-red { background: #ef4444; }
 .dot-green { background: #22c55e; }
+.dot-blue { background: #3b82f6; }
+
+/* Chip de filtro "Respondidos" (azul institucional, mismo peso visual que
+   Críticos/Resueltos) */
+.chip-respondido.active {
+  background: #004884;
+  border-color: #004884;
+  color: #ffffff;
+}
+
+/* Chip en la fila: oficio de respuesta archivado para ese radicado */
+.respondido-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  margin-top: 3px;
+}
 
 /* Tabla */
 .table-responsive-wrapper {

@@ -20,6 +20,27 @@ const responderError = (res, error, accion) => {
   })
 }
 
+// Tope del texto OCR que acepta el parser: un oficio escaneado de decenas de
+// páginas no supera ~100 mil caracteres; más allá de 200 mil no hay documento
+// legítimo y solo queda riesgo (payload gigante contra las regex de etiquetas).
+const MAX_TEXTO_OCR = 200000
+
+// Variante para respuestas: mismo contrato, mensaje acorde al recurso.
+const responderErrorRespuesta = (res, error, accion) => {
+  if (error.status) {
+    return res.status(error.status).json({ success: false, message: error.message })
+  }
+  if (error.code === 'P2025') {
+    return res.status(404).json({ success: false, message: 'Respuesta no encontrada' })
+  }
+  logger.error('RADICADOS', `RESPUESTAS ${accion} ERR`, error.message)
+  return res.status(500).json({
+    success: false,
+    message: `Error al ${accion} respuesta(s)`,
+    error: error.message
+  })
+}
+
 export const RadicadosController = {
   async listar(req, res) {
     try {
@@ -117,6 +138,9 @@ export const RadicadosController = {
       if (typeof texto !== 'string' || !texto.trim()) {
         return res.status(400).json({ success: false, message: 'El campo texto es obligatorio' })
       }
+      if (texto.length > MAX_TEXTO_OCR) {
+        return res.status(400).json({ success: false, message: `El texto es demasiado largo (máximo ${MAX_TEXTO_OCR} caracteres)` })
+      }
       const campos = RadicadosService.extraerCampos(texto)
       const respuesta = { success: true, data: campos }
       // Modo diagnóstico: muestra el texto OCR recibido y los campos extraídos
@@ -141,6 +165,117 @@ export const RadicadosController = {
       res.send(csv)
     } catch (error) {
       responderError(res, error, 'generar reporte de')
+    }
+  },
+
+  // ═══════════════ OFICIOS DE RESPUESTA DE RADICADOS ═══════════════
+
+  /**
+   * GET /expedientes — cada radicado emparejado con sus respuestas
+   * archivadas (módulo Radicado ↔ Respuesta). El Base64 no viaja: los
+   * documentos se sirven por /:id/archivo y /respuestas/:id/archivo.
+   */
+  async listarExpedientes(req, res) {
+    try {
+      const expedientes = await RadicadosService.listarExpedientes()
+      res.json({ success: true, data: expedientes })
+    } catch (error) {
+      responderError(res, error, 'listar expedientes de')
+    }
+  },
+
+  /**
+   * GET /respuestas?radicadoId=… — lista las respuestas archivadas (de un
+   * radicado o de todos). El documento Base64 jamás viaja en el listado.
+   */
+  async listarRespuestas(req, res) {
+    try {
+      const respuestas = await RadicadosService.listarRespuestas(req.query?.radicadoId || null)
+      res.json({ success: true, data: respuestas })
+    } catch (error) {
+      responderErrorRespuesta(res, error, 'listar')
+    }
+  },
+
+  /**
+   * POST /respuestas — archiva la respuesta escaneada de un radicado. El
+   * servidor valida el radicado padre y lo marca Resuelto al archivar.
+   */
+  async crearRespuesta(req, res) {
+    try {
+      const operador = req.usuario?.email || 'anónimo'
+      const nuevo = await RadicadosService.crearRespuesta(req.body || {})
+      logger.create('RADICADOS', 'RESPONDER', `${nuevo.numeroRadicado} ← ${nuevo.numeroOficio || 'oficio sin número'} | Por: ${operador}`)
+      res.status(201).json({
+        success: true,
+        message: `Respuesta del radicado ${nuevo.numeroRadicado} archivada`,
+        data: nuevo
+      })
+    } catch (error) {
+      responderErrorRespuesta(res, error, 'archivar')
+    }
+  },
+
+  /**
+   * Documento de la respuesta, servido como binario para el visor embebido
+   * (object/iframe PDF o img) o descarga — mismo contrato que radicados.
+   */
+  async obtenerArchivoRespuesta(req, res) {
+    try {
+      const { id } = req.params
+      const archivo = await RadicadosService.obtenerArchivoRespuesta(id)
+      if (!archivo) {
+        return res.status(404).json({ success: false, message: 'La respuesta no tiene documento adjunto' })
+      }
+      res.setHeader('Content-Type', archivo.mime)
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(archivo.nombre)}"`)
+      res.setHeader('Cache-Control', 'private, max-age=60')
+      res.send(archivo.buffer)
+    } catch (error) {
+      responderErrorRespuesta(res, error, 'obtener documento de')
+    }
+  },
+
+  /**
+   * DELETE /respuestas/:id — elimina una respuesta archivada (el radicado
+   * padre queda intacto).
+   */
+  async eliminarRespuesta(req, res) {
+    try {
+      const { id } = req.params
+      const eliminada = await RadicadosService.eliminarRespuesta(id)
+      logger.delete('RADICADOS', 'ELIMINAR RESPUESTA', `${eliminada.numeroRadicado} ← ${eliminada.numeroOficio || '(sin oficio)'} | Por: ${req.usuario?.email || 'anónimo'}`)
+      res.json({ success: true, message: `Respuesta del radicado ${eliminada.numeroRadicado} eliminada`, data: { id: eliminada.id } })
+    } catch (error) {
+      responderErrorRespuesta(res, error, 'eliminar')
+    }
+  },
+
+  /**
+   * Recibe el texto OCR del oficio de respuesta (extraído en el navegador) y
+   * devuelve los campos que se logran leer con certeza. ?debug=1 → diagnóstico.
+   */
+  async extraerCamposRespuesta(req, res) {
+    try {
+      const { texto } = req.body || {}
+      if (typeof texto !== 'string' || !texto.trim()) {
+        return res.status(400).json({ success: false, message: 'El campo texto es obligatorio' })
+      }
+      if (texto.length > MAX_TEXTO_OCR) {
+        return res.status(400).json({ success: false, message: `El texto es demasiado largo (máximo ${MAX_TEXTO_OCR} caracteres)` })
+      }
+      const campos = RadicadosService.extraerCamposRespuesta(texto)
+      const respuesta = { success: true, data: campos }
+      if (req.query.debug === '1') {
+        respuesta._debug = {
+          textoOCR: texto,
+          lineas: texto.split(/\r?\n/).filter(Boolean).length,
+          caracteres: texto.length
+        }
+      }
+      res.json(respuesta)
+    } catch (error) {
+      responderErrorRespuesta(res, error, 'extraer campos de')
     }
   }
 }

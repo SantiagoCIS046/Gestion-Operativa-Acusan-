@@ -53,6 +53,12 @@ const routes = [
     component: () => import('../modules/radicados/views/VistaGerenciaRadicados.vue'),
     meta: { title: 'Supervisión de Radicados | Gerencia Acuasan', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
   },
+  {
+    path: '/radicados/expedientes',
+    name: 'ExpedientesRadicados',
+    component: () => import('../modules/radicados/views/VistaExpedientesRadicados.vue'),
+    meta: { title: 'Radicado ↔ Respuesta | Acuusan', requiresAuth: true, roles: ['RADICADOS', 'ENCARGADO', 'GERENCIA', 'ADMIN'] }
+  },
 
   // --- MÓDULO ADMIN (exclusivo ADMIN) ---
   {
