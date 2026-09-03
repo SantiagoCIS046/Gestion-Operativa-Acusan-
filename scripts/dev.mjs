@@ -2,16 +2,22 @@
 // juntos. Sin esto, `npm run dev` solo levanta Vite y todas las llamadas /api
 // fallan con ECONNREFUSED porque el proxy no encuentra el backend en el puerto 3000.
 
-// ── Verificación de integridad del módulo Permisos (congelado) ────────────────
-// Solo AVISA (nunca bloquea el arranque). Si el módulo derivó de su lock,
+// ── Verificación de integridad de los módulos congelados ─────────────────────
+// Solo AVISA (nunca bloquea el arranque). Si un módulo derivó de su lock,
 // el cartel rojo explica cómo restaurar o cómo regenerar con aprobación.
-const avisoPermisos = spawnSync(
-  process.execPath,
-  ['scripts/proteccion/verificar-permisos.mjs', '--avisar'],
-  { cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8' }
-)
-if (avisoPermisos.stdout) process.stdout.write(avisoPermisos.stdout)
-if (avisoPermisos.stderr) process.stderr.write(avisoPermisos.stderr)
+const AVISOS_PROTECCION = [
+  'scripts/proteccion/verificar-permisos.mjs',
+  'scripts/proteccion/verificar-radicados.mjs',
+]
+for (const script of AVISOS_PROTECCION) {
+  const aviso = spawnSync(
+    process.execPath,
+    [script, '--avisar'],
+    { cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8' }
+  )
+  if (aviso.stdout) process.stdout.write(aviso.stdout)
+  if (aviso.stderr) process.stderr.write(aviso.stderr)
+}
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
