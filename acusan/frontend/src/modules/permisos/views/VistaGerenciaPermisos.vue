@@ -180,6 +180,9 @@
               <th class="col-letter text-center">F</th>
               <th class="col-letter text-center">G</th>
               <th class="col-letter text-center">H</th>
+              <th class="col-letter">I</th>
+              <th class="col-letter text-center">J</th>
+              <th class="col-letter text-center">K</th>
             </tr>
 
             <!-- Excel Header Row -->
@@ -193,11 +196,14 @@
               <th class="text-center">SOLICITUDES / MES</th>
               <th class="text-center">HORAS ACUM. MES</th>
               <th class="text-center">CONFIANZA OCR</th>
+              <th>MOTIVO / OBSERVACIONES</th>
+              <th class="text-center">ESTADO</th>
+              <th class="text-center">ACCIONES</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="permisosFiltrados.length === 0">
-              <td colspan="10" class="text-center py-4 text-muted font-mono">
+              <td colspan="12" class="text-center py-4 text-muted font-mono">
                 [Hoja vacía] No se encontraron registros de permisos para {{ mesNombreActual }} {{ anioSeleccionado }}.
               </td>
             </tr>
@@ -260,6 +266,32 @@
                     <div class="progress-bar-fill" :style="{ width: (item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95)) + '%' }"></div>
                   </div>
                 </div>
+              </td>
+
+              <!-- I: Motivo / Observaciones -->
+              <td>
+                <span class="cell-motivo text-truncate d-block" style="max-width: 220px;" :title="item.motivo || item.observaciones">
+                  {{ item.motivo || item.observaciones || 'Sin observaciones' }}
+                </span>
+              </td>
+
+              <!-- J: Estado -->
+              <td class="text-center">
+                <span :class="['badge', item.estado === 'Aprobado' ? 'bg-success' : 'bg-warning text-dark']" style="font-size: 0.68rem;">
+                  {{ item.estado || 'Aprobado' }}
+                </span>
+              </td>
+
+              <!-- K: Acciones -->
+              <td class="text-center">
+                <button
+                  type="button"
+                  class="btn-eye-only"
+                  @click="abrirDetallePermisoModal(item)"
+                  title="Ver documento escaneado y soporte OCR"
+                >
+                  👁️
+                </button>
               </td>
             </tr>
           </tbody>
@@ -1418,7 +1450,7 @@ const getIniciales = (nombre) => {
   font-size: 0.72rem;
 }
 
-/* Tabla Estilo Excel Grid con Scroll Automático */
+/* Tabla Estilo Excel Grid con Scroll Lateral Visible y Fluido */
 .table-responsive {
   width: 100%;
   overflow-x: auto !important;
@@ -1426,14 +1458,59 @@ const getIniciales = (nombre) => {
   max-height: calc(100vh - 280px);
   min-height: 250px;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #107c41 #f1f5f9;
+}
+
+.table-responsive::-webkit-scrollbar {
+  height: 11px;
+  width: 9px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: #107c41; /* Verde oficial de Excel */
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #0b582e;
 }
 
 .excel-table {
   width: 100%;
-  min-width: 960px;
+  min-width: 1460px; /* Asegura que el scroll horizontal siempre funcione y se vea todo el contenido */
   border-collapse: collapse;
   font-size: 0.76rem;
   font-family: 'Inter', -apple-system, sans-serif;
+}
+
+.btn-eye-only {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-eye-only:hover {
+  background: #dcfce7;
+  border-color: #16a34a;
+  transform: scale(1.15);
+  box-shadow: 0 3px 8px rgba(22, 163, 74, 0.25);
 }
 
 /* Fila de letras de columna Excel (A, B, C...) */
