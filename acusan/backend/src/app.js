@@ -13,6 +13,7 @@ import authRoutes from './modules/auth/auth.routes.js'
 import permisosRoutes from './modules/permisos/permisos.routes.js'
 import horasExtrasRoutes from './modules/horas-extras/horas-extras.routes.js'
 import pqrRoutes from './modules/pqr/pqr.routes.js'
+import whatsappRoutes from './modules/pqr/whatsapp.routes.js'
 import radicadosRoutes from './modules/radicados/radicados.routes.js'
 import adminRoutes from './modules/admin/admin.routes.js'
 
@@ -28,7 +29,9 @@ const PORT = process.env.PORT || 3000
 
 // ─── Middlewares globales ─────────────────────────────────────────────────────
 app.use(cors())
-app.use(express.json({ limit: '50mb' }))
+// verify() conserva el cuerpo crudo del JSON: el webhook de WhatsApp lo
+// necesita para validar la firma X-Hub-Signature-256 de Meta (byte-exacta)
+app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf } }))
 app.use(express.urlencoded({ limit: '50mb', extended: true }))
 app.use(auditMiddleware) // 📋 Registro automático de cada request HTTP
 
@@ -43,6 +46,10 @@ app.get('/api/health', (req, res) => {
 
 // ─── Rutas públicas ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
+
+// Webhook de WhatsApp Cloud API — público por necesidad: Meta no puede enviar
+// JWT. Se blinda con hub.verify_token (GET) + firma X-Hub-Signature-256 (POST)
+app.use('/api/pqr/whatsapp', whatsappRoutes)
 
 // ─── Rutas privadas & modulares ───────────────────────────────────────────────
 app.use('/api/permisos',     verificarToken, permisosRoutes)
