@@ -1,151 +1,264 @@
+﻿/**
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  PQR Service — Acuasan Gestión Operativa                           ║
+ * ║  Capa de lógica de negocio. 100 % desacoplado de Express / HTTP.   ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
+ * SOLUCIÓN AL RADICADO SECUENCIAL EN MONGODB:
+ * ─────────────────────────────────────────────
+ * Usa un documento-contador dedicado (colección `contadores_secuenciales`)
+ * actualizado con findAndModify + $inc vía prisma.$runCommandRaw.
+ * Esta operación es atómica en MongoDB: sin importar cuántos hilos
+ * la llamen en paralelo, cada uno obtiene un número DIFERENTE y
+ * SECUENCIAL. No hay race conditions posibles.
+ */
+
 import { randomUUID } from 'crypto'
 import prisma from '../../config/prisma.js'
 
-export const PqrService = {
-  /**
-   * Listar PQRs con filtros
-   */
-  async listar(filtros = {}) {
-    const where = {}
-    if (filtros.estado) where.estado = filtros.estado
-    if (filtros.matricula) where.matricula = filtros.matricula
-    if (filtros.prioridad) where.prioridad = filtros.prioridad
+// ─── CONSTANTES ──────────────────────────────────────────────────────────────
+const DIAS_TERMINO_LEGAL = 15
+const ACTOR_WHATSAPP     = 'WhatsApp Bot'
+const EVENTO_INICIAL     = 'Reporte Recibido — PQR Radicada en Sistema'
 
-    return prisma.pQR.findMany({
-      where,
-      orderBy: { fechaRadicado: 'desc' }
-    })
-  },
+// ─── UTILIDADES PRIVADAS ─────────────────────────────────────────────────────
+function calcularFechaVencimiento(dias = DIAS_TERMINO_LEGAL) {
+  const fecha = new Date()
+  fecha.setDate(fecha.getDate() + dias)
+  return fecha
+}
 
-  /**
-   * Obtener detalle de PQR
-   */
-  async obtenerPorId(id) {
-    return prisma.pQR.findUnique({
-      where: { id }
-    })
-  },
+function formatearSecuencia(seq) {
+  return String(seq).padStart(5, '0')
+}
 
-  /**
-   * Genera el siguiente radicado secuencial real de la BD: PQR-<anio>-000X
-   * (máximo consecutivo + reintentos, sin colisiones por registros borrados)
-   */
-  async generarRadicadoUnico() {
-    const anio = new Date().getFullYear()
-    const prefijo = `PQR-${anio}-`
+// ─── GENERADOR ATÓMICO DE RADICADO ───────────────────────────────────────────
+/**
+ * Genera el siguiente número PQR-AAAA-NNNNN de forma atómica.
+ * Usa findAndModify con $inc — operación nativa de MongoDB que
+ * garantiza unicidad bajo cualquier nivel de concurrencia.
+ *
+ * @returns {Promise<string>} Ej: "PQR-2026-00042"
+ */
+export async function generarNumeroPQR() {
+  const anio = new Date().getFullYear()
+  const clave = `PQR-${anio}`
 
-    const existentes = await prisma.pQR.findMany({
-      where: { radicado: { startsWith: prefijo } },
-      select: { radicado: true }
-    })
+  const resultado = await prisma.$runCommandRaw({
+    findAndModify: 'contadores_secuenciales',
+    query:  { clave },
+    update: { $inc: { ultimo: 1 } },
+    upsert: true,
+    new:    true,
+  })
 
-    let maxSeq = 0
-    for (const p of existentes) {
-      const m = p.radicado.match(new RegExp(`^${prefijo}(\\d+)$`))
-      if (m) {
-        const seq = parseInt(m[1], 10)
-        if (seq > maxSeq) maxSeq = seq
-      }
-    }
+  const valorActual = resultado?.value?.ultimo
 
-    for (let intento = 1; intento <= 5; intento++) {
-      const candidato = `${prefijo}${String(maxSeq + intento).padStart(4, '0')}`
-      const yaExiste = await prisma.pQR.findFirst({ where: { radicado: candidato } })
-      if (!yaExiste) return candidato
-    }
-
-    // Último recurso: timestamp
-    return `${prefijo}${Date.now()}`
-  },
-
-  /**
-   * Radicar nueva PQR
-   */
-  async crear(datos) {
-    // IDEMPOTENCIA: si la sincronización offline ya creó este registro (la respuesta
-    // se perdió y el cliente reintentó), se devuelve el registro existente sin duplicar.
-    if (datos.idLocal) {
-      const existente = await prisma.pQR.findFirst({ where: { idLocal: String(datos.idLocal) } })
-      if (existente) {
-        console.warn(`PQR idempotente: idLocal=${datos.idLocal} ya existe como ${existente.radicado}`)
-        return existente
-      }
-    }
-
-    // Cálculo legal de término de respuesta (15 días hábiles aprox / 15 días calendario)
-    const fechaVencimiento = new Date()
-    fechaVencimiento.setDate(fechaVencimiento.getDate() + 15)
-
-    const itemData = {
-      usuario: datos.usuario,
-      cedulaNit: datos.cedulaNit,
-      matricula: datos.matricula,
-      telefono: datos.telefono,
-      email: datos.email,
-      direccion: datos.direccion,
-      motivo: datos.motivo,
-      descripcion: datos.descripcion,
-      prioridad: datos.prioridad || 'MEDIA',
-      estado: datos.estado || 'ABIERTO',
-      respuestaOficial: datos.respuestaOficial || null,
-      fechaRespuesta: datos.respuestaOficial ? new Date() : null,
-      respondidoPor: datos.respondidoPor || null,
-      fechaVencimiento,
-      // NUNCA null: el índice único de MongoDB indexaría null como valor y solo
-      // cabría un documento sin idLocal en toda la colección (P2002 masivo).
-      idLocal: String(datos.idLocal || randomUUID())
-    }
-
-    // Radicado secuencial PQR-AAAA-0001 generado por el backend (fuente de verdad).
-    // Reintento real ante colisión concurrente (P2002): si fue por idLocal es
-    // idempotencia (se devuelve el existente); si fue por radicado se regenera.
-    let ultimoError = null
-    for (let intento = 1; intento <= 4; intento++) {
-      let radicado
-      try {
-        radicado = await this.generarRadicadoUnico()
-      } catch (eCount) {
-        throw new Error(`No se pudo generar la numeración de la PQR: ${eCount.message}`)
-      }
-
-      try {
-        return await prisma.pQR.create({
-          data: { ...itemData, radicado }
-        })
-      } catch (e) {
-        ultimoError = e
-        if (e.code !== 'P2002') break
-
-        // Colisión por idLocal = creación concurrente del mismo registro offline
-        const porIdLocal = await prisma.pQR.findFirst({ where: { idLocal: itemData.idLocal } })
-        if (porIdLocal) {
-          console.warn(`PQR idempotente (colisión): idLocal=${itemData.idLocal} ya existe como ${porIdLocal.radicado}`)
-          return porIdLocal
-        }
-
-        console.warn(
-          `Colisión de numeración (intento ${intento}/4), regenerando consecutivo: ${e.message}`
-        )
-      }
-    }
-
+  if (typeof valorActual !== 'number' || valorActual <= 0) {
     throw new Error(
-      `No se pudo persistir la PQR en la base de datos: ${ultimoError?.message || 'error desconocido'}`
+      `generarNumeroPQR: respuesta inesperada de MongoDB — ${JSON.stringify(resultado)}`
     )
-  },
+  }
 
-  /**
-   * Responder y resolver PQR
-   */
-  async responder(id, { respuestaOficial, respondidoPor, nuevoEstado }) {
-    return prisma.pQR.update({
-      where: { id },
+  return `${clave}-${formatearSecuencia(valorActual)}`
+}
+
+// ─── CREAR PQR — TRANSACCIÓN COMPLETA ────────────────────────────────────────
+/**
+ * Crea una PQR garantizando atomicidad con prisma.$transaction:
+ *  1. Upsert de UsuarioPQR por teléfono
+ *  2. Creación del documento PQR
+ *  3. Primer evento en HistorialEstadoPQR ("Reporte Recibido")
+ *
+ * @param {object} datos
+ * @returns {Promise<object>} PQR creada con historial y usuario
+ */
+export async function crearPQR(datos) {
+  if (datos.idLocal) {
+    const existente = await prisma.pQR.findFirst({
+      where:   { idLocal: String(datos.idLocal) },
+      include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
+    })
+    if (existente) {
+      console.info(`[PQR] Idempotencia: idLocal=${datos.idLocal} → ${existente.radicado}`)
+      return existente
+    }
+  }
+
+  const radicado         = await generarNumeroPQR()
+  const fechaVencimiento = calcularFechaVencimiento()
+  const actor            = datos.actor || ACTOR_WHATSAPP
+  const idLocal          = String(datos.idLocal || randomUUID())
+
+  const [pqrCreada] = await prisma.$transaction(async (tx) => {
+    let usuarioPqrId = null
+    if (datos.telefono) {
+      const ciudadano = await tx.usuarioPQR.upsert({
+        where:  { telefono: datos.telefono },
+        update: {
+          nombre: datos.usuario,
+          ...(datos.email     && { email:     datos.email }),
+          ...(datos.cedulaNit && { cedulaNit: datos.cedulaNit }),
+          ...(datos.direccion && { direccion: datos.direccion }),
+        },
+        create: {
+          telefono:  datos.telefono,
+          nombre:    datos.usuario,
+          cedulaNit: datos.cedulaNit ?? null,
+          email:     datos.email     ?? null,
+          direccion: datos.direccion ?? null,
+        },
+      })
+      usuarioPqrId = ciudadano.id
+    }
+
+    const nuevaPqr = await tx.pQR.create({
       data: {
-        respuestaOficial,
-        respondidoPor: respondidoPor || 'Atención al Usuario Acuasan',
-        fechaRespuesta: new Date(),
-        estado: nuevoEstado || 'RESUELTO'
-      }
+        radicado,
+        idLocal,
+        usuarioPqrId,
+        usuario:     datos.usuario,
+        cedulaNit:   datos.cedulaNit   ?? null,
+        matricula:   datos.matricula   ?? null,
+        telefono:    datos.telefono    ?? null,
+        email:       datos.email       ?? null,
+        direccion:   datos.direccion   ?? null,
+        motivo:      datos.motivo,
+        descripcion: datos.descripcion,
+        prioridad:   datos.prioridad   ?? 'MEDIA',
+        estado:      'ABIERTO',
+        fechaVencimiento,
+      },
+    })
+
+    const historial = await tx.historialEstadoPQR.create({
+      data: {
+        pqrId:         nuevaPqr.id,
+        estadoAntes:   null,
+        estadoDespues: 'ABIERTO',
+        actor,
+        observaciones: EVENTO_INICIAL,
+      },
+    })
+
+    return [nuevaPqr, historial]
+  })
+
+  return prisma.pQR.findUniqueOrThrow({
+    where:   { id: pqrCreada.id },
+    include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
+  })
+}
+
+// ─── ACTUALIZAR ESTADO CON AUDITORÍA ─────────────────────────────────────────
+/**
+ * Cambia el estado de una PQR y deja registro inmutable en el historial.
+ * Ambas operaciones son atómicas bajo prisma.$transaction.
+ *
+ * @param {string} pqrId
+ * @param {'EN_TRAMITE'|'RESUELTO'|'ANULADO'} nuevoEstado
+ * @param {string} actor
+ * @param {string} [observaciones]
+ * @returns {Promise<object>}
+ */
+export async function actualizarEstadoPQR(pqrId, nuevoEstado, actor, observaciones) {
+  const ESTADOS_VALIDOS = ['EN_TRAMITE', 'RESUELTO', 'ANULADO']
+
+  if (!ESTADOS_VALIDOS.includes(nuevoEstado)) {
+    throw new Error(
+      `actualizarEstadoPQR: estado inválido "${nuevoEstado}". Permitidos: ${ESTADOS_VALIDOS.join(', ')}`
+    )
+  }
+  if (!actor?.trim()) {
+    throw new Error('actualizarEstadoPQR: "actor" es obligatorio para la auditoría')
+  }
+
+  const pqrActual = await prisma.pQR.findUniqueOrThrow({
+    where:  { id: pqrId },
+    select: { id: true, estado: true, radicado: true },
+  })
+
+  if (pqrActual.estado === nuevoEstado) {
+    return prisma.pQR.findUniqueOrThrow({
+      where:   { id: pqrId },
+      include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
     })
   }
+
+  const [pqrActualizada] = await prisma.$transaction(async (tx) => {
+    const updated = await tx.pQR.update({
+      where: { id: pqrId },
+      data: {
+        estado: nuevoEstado,
+        ...(nuevoEstado === 'RESUELTO' && observaciones && {
+          respuestaOficial: observaciones,
+          fechaRespuesta:   new Date(),
+          respondidoPor:    actor,
+        }),
+      },
+    })
+
+    const evento = await tx.historialEstadoPQR.create({
+      data: {
+        pqrId,
+        estadoAntes:   pqrActual.estado,
+        estadoDespues: nuevoEstado,
+        actor:         actor.trim(),
+        observaciones: observaciones ?? null,
+      },
+    })
+
+    return [updated, evento]
+  })
+
+  return prisma.pQR.findUniqueOrThrow({
+    where:   { id: pqrActualizada.id },
+    include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
+  })
+}
+
+// ─── CONSULTAS ────────────────────────────────────────────────────────────────
+export async function listarPQRs(filtros = {}) {
+  const where = {}
+  if (filtros.estado)    where.estado    = filtros.estado
+  if (filtros.matricula) where.matricula = filtros.matricula
+  if (filtros.prioridad) where.prioridad = filtros.prioridad
+  if (filtros.telefono)  where.telefono  = filtros.telefono
+
+  return prisma.pQR.findMany({
+    where,
+    orderBy: { fechaRadicado: 'desc' },
+    include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
+  })
+}
+
+export async function obtenerPQRPorId(id) {
+  return prisma.pQR.findUnique({
+    where:   { id },
+    include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
+  })
+}
+
+export async function obtenerPQRPorRadicado(radicado) {
+  return prisma.pQR.findUnique({
+    where:   { radicado },
+    include: { historial: { orderBy: { creadoEn: 'asc' } }, usuarioPqr: true },
+  })
+}
+
+export async function responderPQR(id, { respuestaOficial, respondidoPor, nuevoEstado }) {
+  const estado = nuevoEstado || 'RESUELTO'
+  const actor  = respondidoPor || 'Atención al Usuario Acuasan'
+  return actualizarEstadoPQR(id, estado, actor, respuestaOficial)
+}
+
+// ─── ALIAS DE COMPATIBILIDAD — mantiene el contrato del controlador ───────────
+export const PqrService = {
+  listar:             listarPQRs,
+  obtenerPorId:       obtenerPQRPorId,
+  obtenerPorRadicado: obtenerPQRPorRadicado,
+  crear:              crearPQR,
+  responder:          responderPQR,
+  actualizarEstado:   actualizarEstadoPQR,
+  generarRadicado:    generarNumeroPQR,
 }

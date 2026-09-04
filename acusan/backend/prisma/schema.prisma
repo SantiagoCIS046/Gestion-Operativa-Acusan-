@@ -100,6 +100,20 @@ model HoraExtra {
 // -------------------------------------------------------------
 // MÓDULO: PQR (Peticiones, Quejas, Reclamos & Recursos)
 // -------------------------------------------------------------
+
+// Contador atómico para radicados secuenciales sin colisiones.
+// La operación $inc de MongoDB es la única forma segura de
+// autoincremental sin transacciones ACID en alta concurrencia.
+model ContadorSecuencial {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  // Clave del contador, ej: "PQR-2026"
+  clave  String @unique
+  // Último número emitido (comienza en 0)
+  ultimo Int    @default(0)
+
+  @@map("contadores_secuenciales")
+}
+
 enum EstadoPQR {
   ABIERTO
   EN_TRAMITE
@@ -114,12 +128,35 @@ enum PrioridadPQR {
   URGENTE
 }
 
+// Ciudadano o usuario externo que radica la PQR.
+// Se busca por teléfono; si no existe se crea en el acto.
+model UsuarioPQR {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  telefono   String   @unique
+  nombre     String
+  cedulaNit  String?
+  email      String?
+  direccion  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  pqrs       PQR[]
+
+  @@map("usuarios_pqr")
+}
+
 model PQR {
   id               String       @id @default(auto()) @map("_id") @db.ObjectId
   radicado         String       @unique
   // Identificador del cliente para idempotencia de la sincronización offline
   // (evita duplicados al reintentar el POST de un registro pendiente)
   idLocal          String?      @unique
+
+  // Relación con el ciudadano que radica
+  usuarioPqrId     String?      @db.ObjectId
+  usuarioPqr       UsuarioPQR?  @relation(fields: [usuarioPqrId], references: [id])
+
+  // Campos planos heredados (compatibilidad hacia atrás con datos existentes)
   usuario          String
   cedulaNit        String?
   matricula        String?
@@ -138,7 +175,24 @@ model PQR {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
+  historial        HistorialEstadoPQR[]
+
   @@map("pqrs")
+}
+
+// Registro inmutable de cada cambio de estado de la PQR.
+// Nunca se actualiza, solo se inserta → auditoria perfecta.
+model HistorialEstadoPQR {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  pqrId        String    @db.ObjectId
+  pqr          PQR       @relation(fields: [pqrId], references: [id])
+  estadoAntes  String?
+  estadoDespues String
+  actor        String    // email o "sistema" / "WhatsApp"
+  observaciones String?
+  creadoEn     DateTime  @default(now())
+
+  @@map("historial_estado_pqr")
 }
 
 // -------------------------------------------------------------
