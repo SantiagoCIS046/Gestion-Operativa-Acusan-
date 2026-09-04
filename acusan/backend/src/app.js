@@ -21,6 +21,9 @@ import adminRoutes from './modules/admin/admin.routes.js'
 import { verificarToken, verificarRol } from './middlewares/auth.middleware.js'
 import { auditMiddleware } from './middlewares/audit.middleware.js'
 
+// WebSockets (Socket.io): se adjuntan a la instancia HTTP creada por app.listen
+import { inicializarSocketServer } from './config/socket.config.js'
+
 // Seed de usuarios iniciales
 import { AuthService } from './modules/auth/auth.service.js'
 
@@ -86,8 +89,12 @@ app.use((err, req, res, next) => {
 // app.listen() al importarse provoca FUNCTION_INVOCATION_FAILED. Vercel define
 // process.env.VERCEL automáticamente, así que sirve de guard.
 if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, async () => {
+  const servidor = app.listen(PORT, async () => {
     logger.startup(PORT, process.env.NODE_ENV || 'development')
+
+    // WebSockets sobre ESTA instancia HTTP (requiere proceso persistente:
+    // por eso va aquí y no en el export serverless de Vercel)
+    inicializarSocketServer(servidor)
 
     try {
       await AuthService.asegurarUsuariosIniciales()

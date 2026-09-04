@@ -49,6 +49,7 @@ const MODULOS = {
   'H-EXTRAS': { icon: '⏱️ ', color: C.magenta },
   PQR:        { icon: '📩', color: C.orange  },
   RADICADOS:  { icon: '📁', color: C.yellow  },
+  SOCKET:     { icon: '🔌', color: C.cyan    },
   SISTEMA:    { icon: '⚙️ ', color: C.gray   },
   DB:         { icon: '🗄️ ', color: C.gray   },
   SERVER:     { icon: '🚀', color: C.green   },
