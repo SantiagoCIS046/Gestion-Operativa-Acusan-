@@ -92,3 +92,252 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* ==========================================================================
+   SISTEMA GLOBAL SPECULAR BUTTONS (Para todos los botones sin perder su color)
+   ========================================================================== */
+
+.btn,
+.btn-login,
+.btn-nuevo,
+.btn-save,
+.btn-cancel,
+.btn-del-confirm,
+.btn-retry,
+.btn-secundario,
+.act-btn,
+button.btn,
+.specular-button {
+  --sb-radius: 8px;
+  position: relative !important;
+  overflow: hidden !important;
+  isolation: isolate;
+  border-radius: var(--sb-radius);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.22s ease,
+              filter 0.2s ease !important;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Mantener texto e íconos siempre nítidos sobre el reflejo */
+.btn > *,
+.btn-login > *,
+.btn-nuevo > *,
+.btn-save > *,
+.btn-cancel > *,
+.btn-del-confirm > *,
+.btn-retry > *,
+.btn-secundario > * {
+  position: relative;
+  z-index: 4;
+}
+
+/* Micro-interacción al hacer click (Active Scale) */
+.btn:active:not(:disabled),
+.btn-login:active:not(:disabled),
+.btn-nuevo:active:not(:disabled),
+.btn-save:active:not(:disabled),
+.btn-cancel:active:not(:disabled),
+.btn-del-confirm:active:not(:disabled),
+.btn-retry:active:not(:disabled),
+.btn-secundario:active:not(:disabled),
+.act-btn:active:not(:disabled) {
+  transform: scale(0.97) !important;
+}
+
+/* Borde Especular Reflejante de Alta Precisión (Bisel de Luz) */
+.btn:not(.btn-link):not(.btn-close)::before,
+.btn-login::before,
+.btn-nuevo::before,
+.btn-save::before,
+.btn-cancel::before,
+.btn-del-confirm::before,
+.btn-retry::before,
+.btn-secundario::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.25) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.75;
+  transition: opacity 0.25s ease;
+}
+
+/* Destello Dinámico / Barrido Especular (Shine Sweep + Cursor Follow) */
+.btn:not(.btn-link):not(.btn-close)::after,
+.btn-login::after,
+.btn-nuevo::after,
+.btn-save::after,
+.btn-cancel::after,
+.btn-del-confirm::after,
+.btn-retry::after,
+.btn-secundario::after {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  width: 220%;
+  height: 220%;
+  background: 
+    radial-gradient(
+      circle 60px at var(--btn-mx, 50%) var(--btn-my, 50%),
+      rgba(255, 255, 255, 0.32) 0%,
+      transparent 70%
+    ),
+    linear-gradient(
+      115deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.15) 47%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0.15) 53%,
+      transparent 65%
+    );
+  transform: rotate(25deg) translateY(-140%);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  animation: specular-auto-sweep 7s ease-in-out infinite;
+}
+
+@keyframes specular-auto-sweep {
+  0%, 65% {
+    transform: rotate(25deg) translateY(-140%);
+    opacity: 0;
+  }
+  70% {
+    opacity: 0.85;
+  }
+  85% {
+    transform: rotate(25deg) translateY(140%);
+    opacity: 0.85;
+  }
+  90%, 100% {
+    transform: rotate(25deg) translateY(140%);
+    opacity: 0;
+  }
+}
+
+/* Hover: activa el resplandor especular y resalta el bisel */
+.btn:hover:not(:disabled)::before,
+.btn-login:hover:not(:disabled)::before,
+.btn-nuevo:hover:not(:disabled)::before,
+.btn-save:hover:not(:disabled)::before,
+.btn-del-confirm:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.btn:hover:not(:disabled)::after,
+.btn-login:hover:not(:disabled)::after,
+.btn-nuevo:hover:not(:disabled)::after,
+.btn-save:hover:not(:disabled)::after,
+.btn-del-confirm:hover:not(:disabled)::after {
+  opacity: 0.95;
+}
+
+/* ==========================================================================
+   CONSERVACIÓN Y REALCE DE LOS COLORES ORIGINALES
+   ========================================================================== */
+
+/* Botones Azules (Primarios / Institucionales) */
+.btn-primary,
+.btn-login:not(.btn-success):not(.btn-amber) {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 4px 16px rgba(0, 72, 132, 0.35) !important;
+}
+.btn-primary:hover:not(:disabled),
+.btn-login:not(.btn-success):not(.btn-amber):hover:not(:disabled) {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 8px 24px rgba(0, 72, 132, 0.5) !important;
+  filter: brightness(1.05);
+}
+
+/* Botones Verdes (Success / Acuasan Verde / Guardar / Nuevo) */
+.btn-success,
+.btn-nuevo,
+.btn-save,
+.btn-login.btn-success {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(115, 190, 40, 0.35) !important;
+}
+.btn-success:hover:not(:disabled),
+.btn-nuevo:hover:not(:disabled),
+.btn-save:hover:not(:disabled),
+.btn-login.btn-success:hover:not(:disabled) {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 24px rgba(115, 190, 40, 0.5) !important;
+  filter: brightness(1.05);
+}
+
+/* Botones Rojos (Danger / Eliminar) */
+.btn-danger,
+.btn-del-confirm {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 4px 16px rgba(220, 38, 38, 0.35) !important;
+}
+.btn-danger:hover:not(:disabled),
+.btn-del-confirm:hover:not(:disabled) {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 8px 24px rgba(220, 38, 38, 0.5) !important;
+  filter: brightness(1.05);
+}
+
+/* Botones Amarillos / Ámbar (Warning / Recuperar) */
+.btn-warning,
+.btn-login.btn-amber {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 4px 16px rgba(217, 119, 6, 0.35) !important;
+}
+.btn-warning:hover:not(:disabled),
+.btn-login.btn-amber:hover:not(:disabled) {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 8px 24px rgba(217, 119, 6, 0.5) !important;
+  filter: brightness(1.05);
+}
+
+/* Botones Secundarios / Outline / Light */
+.btn-secondary,
+.btn-light,
+.btn-cancel,
+.btn-secundario,
+.btn-outline-primary,
+.btn-outline-secondary,
+.btn-outline-success,
+.btn-outline-danger {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.btn-secondary:hover:not(:disabled),
+.btn-light:hover:not(:disabled),
+.btn-cancel:hover:not(:disabled),
+.btn-secundario:hover:not(:disabled) {
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 14px rgba(0, 0, 0, 0.14) !important;
+}

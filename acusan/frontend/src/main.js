@@ -7,6 +7,8 @@ import router from './router'
 import authService from './modules/auth/services/authService.js'
 import { conectarSocketPQR } from './services/socket.service.js'
 
+import SpecularButton from './components/SpecularButton.vue'
+
 // Limpieza automática de claves obsoletas con datos de prueba antiguos en cualquier máquina
 try {
   const legacyKeys = ['acuasan_permisos_db', 'acuasan_radicados_db', 'acuasan_horas_db', 'acuasan_pqr_db']
@@ -15,6 +17,9 @@ try {
 
 const app = createApp(App)
 const pinia = createPinia()
+
+// Registro global de componente SpecularButton
+app.component('SpecularButton', SpecularButton)
 
 // Pinia debe montarse antes de que socket.service use usePqrStore()
 app.use(pinia)
@@ -26,4 +31,23 @@ app.mount('#app')
 if (authService.estaAutenticado()) {
   conectarSocketPQR(authService.getToken())
 }
+
+// Seguimiento dinámico de luz especular al mover el cursor sobre cualquier botón
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointermove', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest(
+      '.btn, .btn-login, .specular-button, .btn-nuevo, .btn-save, .btn-cancel, .btn-del-confirm, .btn-retry, .btn-secundario, button'
+    )
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      if (rect.width && rect.height) {
+        const x = ((e.clientX - rect.left) / rect.width) * 100
+        const y = ((e.clientY - rect.top) / rect.height) * 100
+        btn.style.setProperty('--btn-mx', `${x.toFixed(1)}%`)
+        btn.style.setProperty('--btn-my', `${y.toFixed(1)}%`)
+      }
+    }
+  }, { passive: true })
+}
+
 
