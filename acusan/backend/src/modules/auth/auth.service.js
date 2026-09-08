@@ -13,8 +13,8 @@ const USUARIOS_SEMILLA = [
     cargo: 'Encargada de Radicaciones'
   },
   {
-    nombre: 'Román',
-    email: 'roman@acuasan.com',
+    nombre: 'Ramon',
+    email: 'ramon@acuasan.com',
     password: 'acuasan2026',
     rol: 'ENCARGADO',
     cedula: '11009002',
