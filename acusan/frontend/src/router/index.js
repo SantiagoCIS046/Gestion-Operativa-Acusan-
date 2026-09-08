@@ -1,6 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import authService from '../modules/auth/services/authService.js'
 
+// ─────────────────────────────────────────────────────────────────
+// BLOQUEO TEMPORAL DEL MÓDULO PQR (conflicto en curso, 2026-09-08).
+// Mientras esté en true, toda ruta /pqr/* redirige a una página de
+// "no disponible". Para reactivar el módulo: poner en false (y borrar
+// el guard y la ruta marcados abajo con [BLOQUEO-PQR]).
+// El código del módulo está además congelado (ver PROTECCION-PQR.md).
+// ─────────────────────────────────────────────────────────────────
+const PQR_BLOQUEADO = true
+
 const routes = [
   // --- LOGIN (PÚBLICO) ---
   {
@@ -53,6 +62,14 @@ const routes = [
         meta: { title: 'Atención en Vivo | Acuasan' }
       }
     ]
+  },
+
+  // --- [BLOQUEO-PQR] PÁGINA DE BLOQUEO TEMPORAL ---
+  {
+    path: '/pqr/no-disponible',
+    name: 'PQRBloqueada',
+    component: () => import('../views/VistaPQRBloqueada.vue'),
+    meta: { title: 'PQR no disponible', public: true }
   },
 
   // --- MÓDULO DE RADICADOS ---
@@ -113,6 +130,13 @@ const router = createRouter({
 
 // Navigation Guards — Control de Acceso por Autenticación y Rol
 router.beforeEach((to, from, next) => {
+  // [BLOQUEO-PQR] Toda navegación a /pqr/* cae en la página de bloqueo.
+  // Debe ir primero: la ruta de inicio del rol OPERATIVO es /pqr/gestion,
+  // así que redirigir "al inicio" no es opción (sería un bucle).
+  if (PQR_BLOQUEADO && to.path.startsWith('/pqr') && to.name !== 'PQRBloqueada') {
+    return next({ name: 'PQRBloqueada' })
+  }
+
   // Título dinámico en el navegador
   if (to.meta?.title) {
     document.title = `${to.meta.title} | Acuasan E.S.P.`
