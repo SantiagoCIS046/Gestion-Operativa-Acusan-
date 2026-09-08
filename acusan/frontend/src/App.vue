@@ -367,12 +367,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import authService from './modules/auth/services/authService.js'
 import sincronizacionService from './services/sincronizacionService.js'
 import NotificacionesToast from './components/NotificacionesToast.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 const modalCerrarSesionVisible = ref(false)
 
@@ -405,16 +406,35 @@ onUnmounted(() => {
   if (timerLatidoSincronizacion) clearInterval(timerLatidoSincronizacion)
 })
 
-// Estado del acordeón del sidebar
+// Estado del acordeón del sidebar: cerrado por defecto si no se está usando
 const menuExpandido = ref({
   permisos: false,
   horasExtras: false,
   pqr: false,
-  radicados: true
+  radicados: false
 })
 
+const sincronizarMenuConRuta = (path) => {
+  const p = path || ''
+  menuExpandido.value = {
+    permisos: p.startsWith('/permisos'),
+    horasExtras: p.startsWith('/horas-extras'),
+    pqr: p.startsWith('/pqr'),
+    radicados: p.startsWith('/radicados')
+  }
+}
+
+// Cierra automáticamente cualquier área que no se esté viendo o utilizando
+watch(
+  () => route.path,
+  (nuevoPath) => {
+    sincronizarMenuConRuta(nuevoPath)
+  },
+  { immediate: true }
+)
+
 function toggleMenu(key) {
-  // Si ya está abierto, cerrar; si no, abrir solo ese y cerrar los demás
+  // Si ya está abierto, lo cierra; si no, abre solo ese y cierra todos los demás
   const estaAbierto = menuExpandido.value[key]
   Object.keys(menuExpandido.value).forEach(k => {
     menuExpandido.value[k] = false
