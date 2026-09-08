@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { WhatsappController } from './whatsapp.controller.js'
+import { verificarToken } from '../../middlewares/auth.middleware.js'
 
 const router = Router()
 
@@ -10,5 +11,9 @@ router.get('/', WhatsappController.verificar)
 // Recepción de eventos: mensajes entrantes y acuses de estado (statuses).
 // Responde 200 inmediato y delega al worker asíncrono
 router.post('/', WhatsappController.recibir)
+
+// Respuesta manual del operario al ciudadano (Fase 6). A diferencia del
+// webhook, este POST SÍ está protegido: lo invoca el frontend con JWT
+router.post('/responder', verificarToken, WhatsappController.responder)
 
 export default router

@@ -40,6 +40,21 @@ const routes = [
     meta: { title: 'Gestión PQR Acuasan', requiresAuth: true, roles: ['OPERATIVO', 'GERENCIA', 'ADMIN'] }
   },
 
+  // --- MÓDULO DE PQR: DASHBOARD EN TIEMPO REAL (WebSockets) ---
+  {
+    path: '/pqr/dashboard',
+    component: () => import('../modules/pqr/views/VistaDashboardPQR.vue'),
+    meta: { title: 'Dashboard PQR | Acuasan', requiresAuth: true, roles: ['OPERATIVO', 'GERENCIA', 'ADMIN'] },
+    children: [
+      {
+        path: 'atencion/:telefono',
+        name: 'AtencionEnVivo',
+        component: () => import('../modules/pqr/views/VistaAtencionEnVivo.vue'),
+        meta: { title: 'Atención en Vivo | Acuasan' }
+      }
+    ]
+  },
+
   // --- MÓDULO DE RADICADOS ---
   {
     path: '/radicados/gestion',

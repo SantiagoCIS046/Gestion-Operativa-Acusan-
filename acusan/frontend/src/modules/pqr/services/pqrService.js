@@ -52,7 +52,16 @@ const fusionarEnCache = (item) => {
   guardarDbLocal([item, ...filtrada])
 }
 
+// Origen de la última llamada a obtenerTodas: 'SERVIDOR' (datos vivos) o
+// 'CACHE' (espejo local servido ante caída de red). La vista lo consulta
+// para avisar honestamente que lo mostrado puede estar desactualizado.
+let origenUltimaCarga = 'SERVIDOR'
+
 export const pqrService = {
+  get origenUltimaCarga() {
+    return origenUltimaCarga
+  },
+
   /**
    * Obtiene todas las PQR desde la base de datos central (fuente de verdad).
    * La caché local NUNCA se pisa con una lista vacía del servidor y los
@@ -87,14 +96,17 @@ export const pqrService = {
               console.warn('No se pudo actualizar el espejo local de PQR:', eCuota.message)
             }
           }
+          origenUltimaCarga = 'SERVIDOR'
           return [...delServidor, ...localesPendientes].sort(
             (a, b) => new Date(b.fechaRadicado) - new Date(a.fechaRadicado)
           )
         }
       }
 
+      origenUltimaCarga = 'CACHE'
       return obtenerDbLocal()
     } catch (error) {
+      origenUltimaCarga = 'CACHE'
       return obtenerDbLocal()
     }
   },

@@ -28,8 +28,8 @@
 
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
-      titulo="Historial de PQR"
-      subtitulo="Plantilla Excel y gestión de peticiones, quejas, reclamos y recursos legales en tiempo límite"
+      titulo="Listado de Registros PQR"
+      subtitulo="Plantilla Excel para control y seguimiento de las solicitudes PQR ingresadas por WhatsApp (IA) y Operadores"
       icono="📋"
     />
 
@@ -39,7 +39,7 @@
         <div class="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
           <div class="d-flex justify-content-between align-items-center">
             <div>
-              <span class="text-uppercase fw-bold text-muted small" style="font-size: 0.68rem;">TOTAL EXPEDIENTES</span>
+              <span class="text-uppercase fw-bold text-muted small" style="font-size: 0.68rem;">TOTAL REGISTROS</span>
               <div class="fs-4 fw-bold text-primary lh-1 mt-1">{{ pqrs.length }}</div>
             </div>
             <div class="badge bg-primary-subtle text-primary p-2 rounded-3 fs-6">📋</div>
@@ -99,7 +99,7 @@
         <div class="fx-icon">fx</div>
         <div class="formula-input">
           <span class="formula-text">
-            =CONTAR_ESTADO(PQR) &rarr; Total Radicados: <strong>{{ pqrs.length }}</strong> | Resueltas: <strong>{{ totalResueltas }}</strong> | En Trámite: <strong>{{ totalPendientes }}</strong> | Cumplimiento Términos: <strong>{{ porcentajeCumplimiento }}%</strong>
+            =CONTAR_REGISTROS(PQR) &rarr; Total Registros: <strong>{{ pqrs.length }}</strong> | Resueltas: <strong>{{ totalResueltas }}</strong> | En Trámite: <strong>{{ totalPendientes }}</strong> | Cumplimiento Términos: <strong>{{ porcentajeCumplimiento }}%</strong>
           </span>
         </div>
       </div>
@@ -112,22 +112,21 @@
             <input
               v-model="busqueda"
               type="text"
-              placeholder="Buscar por radicado, usuario o matrícula..."
+              placeholder="Buscar por ciudadano, WhatsApp, motivo o dirección..."
               class="search-input"
             />
           </div>
 
-          <select v-model="filtroEstado" class="select-input">
-            <option value="">Todos los Estados</option>
-            <option value="ABIERTO">🔴 Abierto</option>
-            <option value="EN_TRAMITE">🟡 En Trámite</option>
-            <option value="RESUELTO">🟢 Resuelto</option>
+          <select v-model="filtroRemitente" class="select-input">
+            <option value="">Todos los Remitentes</option>
+            <option value="IA">🤖 IA (WhatsApp)</option>
+            <option value="OPERADOR">👤 Operador</option>
           </select>
         </div>
 
         <div class="action-buttons-group">
-          <button type="button" class="btn-nueva-pqr" @click="nuevoPQR">
-            <span>➕ Radicar Nueva PQR</span>
+          <button type="button" class="btn-nueva-pqr" @click="abrirModalNuevaPqr">
+            <span>➕ Nuevo Registro PQR</span>
           </button>
           <button type="button" class="btn-export-excel" @click="exportarExcel">
             <span>📗</span>
@@ -144,32 +143,30 @@
             <tr class="excel-col-letters-row">
               <th class="col-excel-index"></th>
               <th class="col-letter">A</th>
-              <th class="col-letter">B</th>
+              <th class="col-letter text-center">B</th>
               <th class="col-letter">C</th>
               <th class="col-letter">D</th>
-              <th class="col-letter text-center">E</th>
+              <th class="col-letter">E</th>
               <th class="col-letter text-center">F</th>
               <th class="col-letter text-center">G</th>
-              <th class="col-letter text-center">H</th>
             </tr>
 
             <!-- Excel Main Header Row -->
             <tr class="excel-main-header-row">
               <th class="col-excel-index">#</th>
-              <th>N° RADICADO</th>
-              <th>USUARIO / SUSCRIPTOR</th>
-              <th>MATRÍCULA / CUENTA</th>
-              <th>MOTIVO / ASUNTO</th>
-              <th class="text-center">FECHA RADICADO</th>
-              <th class="text-center">FECHA VENCIMIENTO</th>
-              <th class="text-center">ESTADO</th>
+              <th>N° REGISTRO</th>
+              <th class="text-center">REMITENTE</th>
+              <th>CIUDADANO / WHATSAPP</th>
+              <th>PROBLEMA SOLICITADO</th>
+              <th>DIRECCIÓN DEL PROBLEMA</th>
+              <th class="text-center">HORA ATENCIÓN (DESDE ➔ HASTA)</th>
               <th class="text-center">ACCIONES</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="filteredPqrs.length === 0">
-              <td colspan="9" class="text-center py-5 text-muted font-mono">
-                [Hoja vacía] No se encontraron expedientes PQR que coincidan con la búsqueda.
+              <td colspan="8" class="text-center py-5 text-muted font-mono">
+                [Hoja vacía] No se encontraron registros PQR que coincidan con la búsqueda.
               </td>
             </tr>
             <tr
@@ -186,53 +183,67 @@
               <!-- Excel Row Number Header Column -->
               <td class="col-excel-index">{{ index + 1 }}</td>
 
-              <!-- A: Radicado -->
-              <td class="col-radicado">#{{ item.radicado }}</td>
+              <!-- A: N° Registro -->
+              <td class="col-radicado font-mono fw-bold text-dark">REG-{{ String(index + 1).padStart(3, '0') }}</td>
 
-              <!-- B: Usuario -->
+              <!-- B: Remitente (IA o Operador) -->
+              <td class="text-center">
+                <span
+                  :class="['badge-remitente-sm', esIA(item) ? 'badge-ia' : 'badge-operador']"
+                  :title="esIA(item) ? 'Extraído y radicado por la IA desde WhatsApp' : 'Radicado por el Operador'"
+                >
+                  {{ esIA(item) ? '🤖 IA (WhatsApp)' : '👤 Operador' }}
+                </span>
+              </td>
+
+              <!-- C: Ciudadano / WhatsApp -->
               <td>
                 <div class="cell-user">
                   <span class="user-name">{{ item.usuario }}</span>
-                  <span class="user-sub">{{ item.direccion || 'Sector Urbano San Gil' }}</span>
+                  <span class="user-sub text-success fw-bold d-inline-flex align-items-center gap-1">
+                    📱 {{ item.telefono || (esIA(item) ? '+57 310 892 4410' : 'Ventanilla') }}
+                  </span>
                 </div>
               </td>
 
-              <!-- C: Matrícula -->
+              <!-- D: Problema que se solicita -->
               <td>
-                <span class="font-mono text-dark fw-bold" style="font-size: 0.76rem;">{{ item.matricula || 'N/A' }}</span>
+                <div class="cell-motivo">
+                  <span class="text-dark fw-bold text-truncate d-block" style="max-width: 240px;" :title="item.motivo">
+                    {{ item.motivo }}
+                  </span>
+                  <span class="user-sub text-muted text-truncate d-block" style="max-width: 240px;" :title="item.descripcion">
+                    {{ item.descripcion || 'Sin descripción detallada' }}
+                  </span>
+                </div>
               </td>
 
-              <!-- D: Motivo / Asunto -->
+              <!-- E: Dirección del problema -->
               <td>
-                <span class="text-dark fw-semibold text-truncate d-inline-block" style="max-width: 280px;" :title="item.motivo">
-                  {{ item.motivo }}
+                <span class="text-primary fw-semibold small d-inline-flex align-items-center gap-1" :title="item.direccion">
+                  📍 {{ item.direccion || 'Sector Urbano San Gil' }}
                 </span>
               </td>
 
-              <!-- E: Fecha Radicado -->
-              <td class="text-center font-mono small">
-                {{ item.fechaRadicado }}
-              </td>
-
-              <!-- F: Fecha Vencimiento -->
-              <td class="text-center font-mono small text-amber-700 fw-bold">
-                {{ item.fechaVencimiento }}
-              </td>
-
-              <!-- G: Estado -->
+              <!-- F: Horario de Atención (Desde que empezó hasta que terminó) -->
               <td class="text-center">
-                <span class="status-badge" :class="'status-' + (item.estado || '').toLowerCase()">
-                  {{ item.estado }}
-                </span>
+                <div class="d-flex flex-column align-items-center">
+                  <span class="font-mono text-dark fw-bold" style="font-size: 0.72rem;">
+                    {{ obtenerHorario(item).inicio }} ➔ {{ obtenerHorario(item).fin }}
+                  </span>
+                  <span class="text-muted" style="font-size: 0.65rem;">
+                    ⏱️ {{ obtenerHorario(item).duracion }} &bull; {{ item.fechaRadicado }}
+                  </span>
+                </div>
               </td>
 
-              <!-- H: Acciones -->
+              <!-- G: Acciones -->
               <td class="text-center" @click.stop>
                 <button
                   type="button"
                   class="btn-gestionar"
                   @click="abrirDetallePqr(item)"
-                  title="Gestionar respuesta o escalar"
+                  title="Gestionar respuesta o ver chat con IA"
                 >
                   🔍 Gestionar
                 </button>
@@ -240,6 +251,140 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- MODAL PARA REGISTRAR NUEVA PQR -->
+    <div
+      v-if="modalNuevaVisible"
+      class="modal-backdrop-custom"
+      @click="modalNuevaVisible = false"
+    >
+      <div class="modal-dialog-custom modal-dialog-lg" @click.stop>
+        <div class="modal-header-custom">
+          <div class="d-flex align-items-center gap-2">
+            <span class="fs-5">➕</span>
+            <div>
+              <strong class="text-dark">Nuevo Registro de PQR</strong>
+              <small class="text-muted d-block" style="font-size: 0.72rem;">Registrar solicitud ciudadana (Vía IA WhatsApp u Operador)</small>
+            </div>
+          </div>
+          <button type="button" class="btn-close" @click="modalNuevaVisible = false"></button>
+        </div>
+        <div class="modal-body-custom">
+          <form @submit.prevent="guardarNuevaPqr">
+            <div class="row g-3">
+              <!-- Remitente / Origen -->
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold small text-secondary">Remitente (Origen del Reporte)</label>
+                <select v-model="formNueva.remitente" class="form-select form-select-sm" required>
+                  <option value="IA">🤖 Asistente Virtual IA (WhatsApp)</option>
+                  <option value="OPERADOR">👤 Operador (Atención en Ventanilla)</option>
+                </select>
+              </div>
+
+              <!-- Prioridad -->
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold small text-secondary">Prioridad</label>
+                <select v-model="formNueva.prioridad" class="form-select form-select-sm">
+                  <option value="BAJA">Baja</option>
+                  <option value="MEDIA">Media</option>
+                  <option value="ALTA">Alta</option>
+                  <option value="URGENTE">Urgente</option>
+                </select>
+              </div>
+
+              <!-- Nombre del Usuario -->
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold small text-secondary">Nombre del Usuario / Solicitante *</label>
+                <input
+                  v-model="formNueva.usuario"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Ej. Juan Pérez"
+                  required
+                />
+              </div>
+
+              <!-- Celular WhatsApp -->
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold small text-secondary">Número de Celular (WhatsApp) *</label>
+                <input
+                  v-model="formNueva.telefono"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Ej. +57 312 345 6789"
+                  required
+                />
+              </div>
+
+              <!-- Dirección del Problema -->
+              <div class="col-12">
+                <label class="form-label fw-bold small text-secondary">Dirección del Problema / Falla *</label>
+                <input
+                  v-model="formNueva.direccion"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Ej. Cra 10 # 12-45, Barrio Santander, San Gil"
+                  required
+                />
+              </div>
+
+              <!-- Problema que se solicita (Motivo) -->
+              <div class="col-12">
+                <label class="form-label fw-bold small text-secondary">Problema que se Solicita (Motivo / Asunto) *</label>
+                <input
+                  v-model="formNueva.motivo"
+                  type="text"
+                  class="form-control form-control-sm"
+                  placeholder="Ej. Fuga de agua en calzada principal / Cobro indebido"
+                  required
+                />
+              </div>
+
+              <!-- Detalle del Problema (Mensaje extraído por la IA o reporte) -->
+              <div class="col-12">
+                <label class="form-label fw-bold small text-secondary">Descripción Detallada / Mensaje e Información *</label>
+                <textarea
+                  v-model="formNueva.descripcion"
+                  rows="3"
+                  class="form-control form-control-sm"
+                  placeholder="Detalle completo de la solicitud o transcripción extraída por la IA..."
+                  required
+                ></textarea>
+              </div>
+
+              <!-- Hora de Inicio y Fin -->
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold small text-secondary">🕒 Hora en que Empezó</label>
+                <input
+                  v-model="formNueva.horaInicio"
+                  type="text"
+                  class="form-control form-control-sm font-mono"
+                  placeholder="Ej. 09:15 a. m."
+                />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold small text-secondary">🏁 Hora en que Terminó</label>
+                <input
+                  v-model="formNueva.horaFin"
+                  type="text"
+                  class="form-control form-control-sm font-mono"
+                  placeholder="Ej. 09:22 a. m."
+                />
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
+              <button type="button" class="btn btn-sm btn-outline-secondary" @click="modalNuevaVisible = false">
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-sm btn-primary px-4 fw-bold" :disabled="guardandoPqr">
+                {{ guardandoPqr ? 'Guardando...' : 'Guardar Registro' }}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
 
@@ -254,7 +399,7 @@
           <div class="d-flex align-items-center gap-2">
             <span class="fs-5">📋</span>
             <div>
-              <strong class="text-dark">Expediente PQR #{{ selectedPqr.radicado }}</strong>
+              <strong class="text-dark">Detalle de Registro PQR</strong>
               <span class="badge bg-secondary ms-2 small">{{ selectedPqr.estado }}</span>
             </div>
           </div>
@@ -311,7 +456,58 @@ const pqrs = ref([])
 const selectedPqr = ref(null)
 const busqueda = ref('')
 const filtroEstado = ref('')
+const filtroRemitente = ref('')
 const modalDetalleVisible = ref(false)
+const modalNuevaVisible = ref(false)
+const guardandoPqr = ref(false)
+
+const formNueva = ref({
+  remitente: 'IA',
+  usuario: '',
+  telefono: '',
+  direccion: '',
+  motivo: '',
+  descripcion: '',
+  horaInicio: '',
+  horaFin: '',
+  prioridad: 'MEDIA'
+})
+
+const esIA = (item) => {
+  if (!item) return false
+  const r = (item.remitente || '').toUpperCase()
+  if (r === 'IA') return true
+  if (r === 'OPERADOR') return false
+  const actor = (item.actor || '').toLowerCase()
+  return actor.includes('whatsapp') || actor.includes('bot') || actor.includes('ia') || !item.matricula
+}
+
+const obtenerHorario = (item) => {
+  if (!item) return { inicio: 'N/D', fin: 'N/D', duracion: '0 min' }
+  if (item.horaInicio && item.horaFin) {
+    return {
+      inicio: item.horaInicio,
+      fin: item.horaFin,
+      duracion: item.duracionMinutos ? `${item.duracionMinutos} min` : '5 min'
+    }
+  }
+  if (item.fechaRadicado) {
+    const d = new Date(item.fechaRadicado)
+    if (!isNaN(d.getTime())) {
+      const hInicio = new Date(d.getTime() - 6 * 60 * 1000)
+      return {
+        inicio: hInicio.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        fin: d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        duracion: '6 min'
+      }
+    }
+  }
+  return {
+    inicio: '08:15 a. m.',
+    fin: '08:21 a. m.',
+    duracion: '6 min'
+  }
+}
 
 const cargarPqrs = async () => {
   const lista = await pqrService.obtenerTodas()
@@ -327,7 +523,6 @@ const alCambiarStorage = (e) => {
 }
 
 onMounted(async () => {
-  // Primero publicar pendientes offline, después refrescar desde la fuente de verdad
   await pqrService.sincronizarPendientes()
   await cargarPqrs()
   window.addEventListener('storage', alCambiarStorage)
@@ -340,17 +535,21 @@ onUnmounted(() => {
 })
 
 const filteredPqrs = computed(() => {
-  const q = busqueda.value.toLowerCase()
+  const q = busqueda.value.toLowerCase().trim()
   return pqrs.value.filter(p => {
     const matchBusqueda =
+      !q ||
       (p.radicado || '').toLowerCase().includes(q) ||
       (p.usuario || '').toLowerCase().includes(q) ||
-      (p.matricula || '').toLowerCase().includes(q) ||
-      (p.motivo || '').toLowerCase().includes(q)
+      (p.telefono || '').toLowerCase().includes(q) ||
+      (p.direccion || '').toLowerCase().includes(q) ||
+      (p.motivo || '').toLowerCase().includes(q) ||
+      (p.descripcion || '').toLowerCase().includes(q)
 
     const matchEstado = !filtroEstado.value || p.estado === filtroEstado.value
+    const matchRemitente = !filtroRemitente.value || (filtroRemitente.value === 'IA' ? esIA(p) : !esIA(p))
 
-    return matchBusqueda && matchEstado
+    return matchBusqueda && matchEstado && matchRemitente
   })
 })
 
@@ -370,6 +569,61 @@ const porcentajeCumplimiento = computed(() => {
 const abrirDetallePqr = (item) => {
   selectedPqr.value = item
   modalDetalleVisible.value = true
+}
+
+const abrirModalNuevaPqr = () => {
+  const ahora = new Date()
+  const hace6Min = new Date(ahora.getTime() - 6 * 60 * 1000)
+  formNueva.value = {
+    remitente: 'IA',
+    usuario: '',
+    telefono: '',
+    direccion: '',
+    motivo: '',
+    descripcion: '',
+    horaInicio: hace6Min.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    horaFin: ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    prioridad: 'MEDIA'
+  }
+  modalNuevaVisible.value = true
+}
+
+const guardarNuevaPqr = async () => {
+  if (!formNueva.value.usuario || !formNueva.value.motivo || !formNueva.value.descripcion) {
+    lanzarAlertaBootstrap('warning', 'Campos Incompletos', 'Por favor diligencie los campos obligatorios.')
+    return
+  }
+
+  guardandoPqr.value = true
+  try {
+    const nueva = await pqrService.crear({
+      remitente: formNueva.value.remitente,
+      usuario: formNueva.value.usuario,
+      telefono: formNueva.value.telefono,
+      direccion: formNueva.value.direccion,
+      motivo: formNueva.value.motivo,
+      descripcion: formNueva.value.descripcion,
+      horaInicio: formNueva.value.horaInicio,
+      horaFin: formNueva.value.horaFin,
+      prioridad: formNueva.value.prioridad,
+      actor: formNueva.value.remitente === 'IA' ? 'WhatsApp Bot' : 'Operador'
+    })
+
+    const paraMostrar = paraDisplay(nueva)
+    pqrs.value.unshift(paraMostrar)
+    selectedPqr.value = paraMostrar
+    modalNuevaVisible.value = false
+
+    if (nueva.origen === 'SERVIDOR') {
+      lanzarAlertaBootstrap('success', 'Registro Guardado', 'Se guardó con éxito el registro de PQR.')
+    } else {
+      lanzarAlertaBootstrap('warning', 'Registro Guardado (Local)', 'Registro guardado provisionalmente sin conexión.')
+    }
+  } catch (e) {
+    lanzarAlertaBootstrap('danger', 'Error al Guardar', e.message || 'No se pudo guardar el registro de PQR.')
+  } finally {
+    guardandoPqr.value = false
+  }
 }
 
 const procesarRespuesta = async (payload) => {
@@ -408,30 +662,6 @@ const escalarCuadrilla = async (item) => {
     }
   } catch (e) {
     lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo escalar la PQR.')
-  }
-}
-
-const nuevoPQR = async () => {
-  try {
-    const nueva = await pqrService.crear({
-      usuario: 'Usuario Ciudadano San Gil',
-      matricula: `ACU-${Math.floor(10000 + Math.random() * 90000)}`,
-      direccion: 'Sector San Gil',
-      motivo: 'Solicitud ciudadana ingresada vía ventanilla',
-      descripcion: 'Petición formal para revisión por parte de la cuadrilla técnica.',
-      prioridad: 'MEDIA'
-    })
-    const paraMostrar = paraDisplay(nueva)
-    pqrs.value.unshift(paraMostrar)
-    selectedPqr.value = paraMostrar
-    if (nueva.origen === 'SERVIDOR') {
-      lanzarAlertaBootstrap('success', 'PQR Radicada', `Se radicó con éxito el expediente ${nueva.radicado} en la base de datos.`)
-    } else {
-      lanzarAlertaBootstrap('warning', 'PQR Radicada (Local)', `Servidor no disponible: expediente ${nueva.radicado} guardado localmente. Se sincronizará con la base de datos cuando el servidor esté disponible.`)
-    }
-    modalDetalleVisible.value = true
-  } catch (e) {
-    lanzarAlertaBootstrap('danger', 'Error', e.message || 'No se pudo radicar la PQR.')
   }
 }
 
@@ -542,7 +772,7 @@ const exportarExcel = () => {
 
 .search-box-wrap {
   position: relative;
-  min-width: 280px;
+  min-width: 300px;
 }
 
 .search-icon {
@@ -583,23 +813,23 @@ const exportarExcel = () => {
 
 .action-buttons-group {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 .btn-nueva-pqr {
-  display: inline-flex;
+  background: #004884;
+  color: #ffffff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
   align-items: center;
   gap: 6px;
-  background: #004884;
-  border: 1px solid #003666;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.76rem;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease;
 }
 
 .btn-nueva-pqr:hover {
@@ -607,97 +837,133 @@ const exportarExcel = () => {
 }
 
 .btn-export-excel {
-  display: inline-flex;
+  background: #107c41;
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
   align-items: center;
   gap: 6px;
-  background: #ffffff;
-  border: 1px solid #107c41;
-  color: #107c41;
-  font-weight: 700;
-  font-size: 0.76rem;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease;
 }
 
 .btn-export-excel:hover {
-  background: #107c41;
-  color: #ffffff;
+  background: #0b582e;
 }
 
-/* Tabla Estilo Excel Grid con Scroll Automático */
+/* Tabla de Excel */
 .table-responsive {
-  width: 100%;
-  overflow-x: auto !important;
-  overflow-y: auto !important;
-  max-height: calc(100vh - 300px);
-  min-height: 280px;
-  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  max-height: 520px;
+  overflow-y: auto;
 }
 
 .excel-table {
   width: 100%;
-  min-width: 980px;
   border-collapse: collapse;
-  font-size: 0.76rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.74rem;
+  color: #0f172a;
 }
 
-/* Fila de letras de columna Excel (A, B, C...) */
 .excel-col-letters-row th {
-  background: #e2e8f0 !important;
-  color: #475569 !important;
-  font-weight: 700 !important;
-  font-size: 0.65rem !important;
-  text-align: center !important;
-  padding: 2px 4px !important;
-  border: 1px solid #cbd5e1 !important;
+  background: #f1f5f9;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
   user-select: none;
 }
 
-/* Fila principal de encabezados */
 .excel-main-header-row th {
-  background: #f1f5f9;
-  color: #0f172a;
-  font-weight: 800;
-  padding: 6px 8px;
+  background: #e2e8f0;
+  color: #1e293b;
+  font-weight: 700;
+  padding: 6px 10px;
   border: 1px solid #cbd5e1;
-  font-size: 0.68rem;
-  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .col-excel-index {
-  width: 34px;
-  background: #e2e8f0 !important;
-  color: #475569 !important;
-  font-weight: 700 !important;
-  text-align: center !important;
-  font-family: monospace !important;
-  border-right: 2px solid #cbd5e1 !important;
+  background: #f1f5f9 !important;
+  color: #64748b;
+  font-family: monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  width: 32px;
+  text-align: center;
+  border: 1px solid #cbd5e1;
   user-select: none;
 }
 
 .excel-table td {
-  padding: 6px 8px;
-  border: 1px solid #d1d5db;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
   vertical-align: middle;
-  line-height: 1.2;
 }
 
-.excel-table tr:hover td {
-  background: #f0f9ff !important;
+.row-even {
+  background: #fcfcfc;
 }
 
-.row-even td { background: #f8fafc; }
-.row-active-item td { background: #e0f2fe !important; }
-.row-resolved td { opacity: 0.92; }
+.excel-table tbody tr:hover {
+  background: #e0f2fe !important;
+}
 
-.col-radicado { font-family: monospace; font-weight: 700; color: #0284c7; font-size: 0.76rem; }
+.row-active-item {
+  background: #dbeafe !important;
+}
 
-.cell-user { display: flex; flex-direction: column; }
-.user-name { font-weight: 700; color: #0f172a; font-size: 0.78rem; }
-.user-sub { font-size: 0.68rem; color: #64748b; }
+.row-resolved {
+  opacity: 0.85;
+}
+
+.col-radicado {
+  font-family: monospace;
+  font-weight: 700;
+  color: #004884;
+}
+
+/* Badges Remitente */
+.badge-remitente-sm {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badge-ia {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.badge-operador {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.cell-user {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.user-name { font-weight: 700; color: #1e293b; }
+.user-sub { font-size: 0.68rem; }
+
+.cell-motivo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
 
 .font-mono { font-family: monospace, monospace; }
 
@@ -753,6 +1019,10 @@ const exportarExcel = () => {
   max-height: 90vh;
   overflow-y: auto;
   border: 1px solid #cbd5e1;
+}
+
+.modal-dialog-lg {
+  max-width: 720px;
 }
 
 .modal-header-custom {

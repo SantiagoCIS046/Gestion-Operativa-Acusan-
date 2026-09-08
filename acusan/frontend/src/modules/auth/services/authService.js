@@ -4,6 +4,7 @@
  */
 
 import { reactive } from 'vue'
+import { conectarSocketPQR, desconectarSocket } from '../../../services/socket.service.js'
 
 const API_BASE = '/api/auth'
 const TOKEN_KEY = 'acuasan_token'
@@ -125,6 +126,9 @@ export const authService = {
     state.token = data.token
     state.usuario = data.usuario
 
+    // Alertas PQR en tiempo real: abrir el WebSocket apenas haya sesión
+    conectarSocketPQR(data.token)
+
     return data
   },
 
@@ -186,6 +190,7 @@ export const authService = {
    * Cierra sesión de forma reactiva limpiando el estado y localStorage
    */
   logout() {
+    desconectarSocket()
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     state.token = null

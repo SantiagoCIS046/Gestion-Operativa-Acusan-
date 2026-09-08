@@ -18,6 +18,8 @@
 import crypto from 'crypto'
 import logger from '../../config/logger.js'
 import { procesarMensajeEntrante } from './whatsapp.worker.js'
+import { enviarMensajeWhatsApp } from './whatsapp.sender.js'
+import { PqrService } from './pqr.service.js'
 
 // ─── Configuración (lectura perezosa) ─────────────────────────────────────────
 // Los imports estáticos se evalúan ANTES de que app.js ejecute dotenv.config(),
@@ -155,6 +157,86 @@ export const WhatsappController = {
         procesarMensajeEntrante(msg.telefono, msg.texto, msg).catch((err) => {
           logger.error('PQR', 'WHATSAPP WORKER', `+${msg.telefono} — ${err.message}`)
         })
+      })
+    }
+  },
+
+  /**
+   * POST /api/pqr/whatsapp/responder — Respuesta manual del operario al
+   * ciudadano (Fase 6: handoff completado). Protegido con JWT.
+   *
+   * Payload: { telefono, mensaje, pqrId? }
+   *  - Envía el texto vía Graph API (whatsapp.sender.js).
+   *  - Trazabilidad opcional: si viene pqrId y la PQR está ABIERTA, se
+   *    promueve a EN_TRAMITE registrando en HistorialEstado el mensaje
+   *    manual. No bloqueante: el mensaje YA salió — un fallo en la
+   *    auditoría no debe inducir al operario a reenviar y duplicar.
+   */
+  async responder(req, res) {
+    try {
+      const { telefono, mensaje, pqrId } = req.body
+
+      const tel = String(telefono || '').trim()
+      const texto = String(mensaje || '').trim().slice(0, 4000) // límite defensivo WhatsApp
+
+      if (!tel || !texto) {
+        return res.status(400).json({
+          success: false,
+          message: 'telefono y mensaje son obligatorios'
+        })
+      }
+      if (!/^\+?\d{8,15}$/.test(tel)) {
+        return res.status(400).json({
+          success: false,
+          message: 'telefono debe ser un número de WhatsApp válido (8 a 15 dígitos)'
+        })
+      }
+
+      // 1) Acción principal: entregar el texto al ciudadano
+      const enviado = await enviarMensajeWhatsApp(tel, texto)
+      if (!enviado) {
+        return res.status(502).json({
+          success: false,
+          message: 'No fue posible enviar el mensaje por WhatsApp (Graph API). Intente nuevamente en unos segundos.'
+        })
+      }
+
+      // 2) Trazabilidad opcional sobre el HistorialEstado (capa de Z.ai)
+      let trazabilidad = false
+      if (pqrId) {
+        try {
+          const pqr = await PqrService.obtenerPorId(pqrId)
+          // Solo ABIERTO → EN_TRAMITE: actualizarEstadoPQR no registra
+          // historial si el estado no cambia, y reabrir una PQR RESUELTA
+          // por enviar un mensaje sería incorrecto
+          if (pqr && pqr.estado === 'ABIERTO') {
+            await PqrService.actualizarEstado(
+              pqrId,
+              'EN_TRAMITE',
+              req.usuario?.email || 'operador',
+              `Mensaje manual del operador a +${tel}: "${texto.slice(0, 120)}"`
+            )
+            trazabilidad = true
+          }
+        } catch (e) {
+          logger.warn('PQR', 'TRAZABILIDAD', `pqrId ${pqrId} — ${e.message} (el mensaje SÍ fue enviado)`)
+        }
+      }
+
+      const operador = req.usuario?.email || 'anónimo'
+      logger.create('PQR', 'RESP MANUAL', `Por: ${operador} → +${tel}${trazabilidad ? ' (PQR → EN_TRAMITE)' : ''}`)
+
+      return res.status(200).json({
+        success: true,
+        message: 'Respuesta enviada al ciudadano',
+        data: { telefono: tel, mensaje: texto, trazabilidad }
+      })
+    } catch (error) {
+      logger.error('PQR', 'RESP MANUAL ERR', error.message)
+      res.status(500).json({
+        success: false,
+        message: 'Error al enviar la respuesta manual',
+        error: error.message
       })
     }
   }

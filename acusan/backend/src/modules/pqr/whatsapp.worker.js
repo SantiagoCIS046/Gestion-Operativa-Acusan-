@@ -84,11 +84,17 @@ export async function procesarMensajeEntrante(telefono, mensaje, meta = {}) {
     const respuesta = await AiService.procesar(telefono, mensaje, meta)
 
     if (respuesta.tipo === 'COMPLETO') {
+      // Transcripción del intercambio con el asistente: se captura ANTES de
+      // crear (la sesión sigue viva) y viaja al radicado como registro de
+      // cómo se obtuvo la información que la IA extrajo
+      const conversacion = AiService.obtenerHistorial(telefono)
+
       // El teléfono del WhatsApp viaja con los datos: PqrService hace upsert
       // del ciudadano y crea PQR + historial en una transacción atómica
       const pqr = await PqrService.crear({
         ...respuesta.datos,
-        telefono
+        telefono,
+        ...(conversacion.length ? { conversacion } : {})
       })
 
       // La sesión se libera SOLO si el radicado se confirmó en BD: si crear()

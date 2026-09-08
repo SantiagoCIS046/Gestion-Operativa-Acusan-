@@ -15,6 +15,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true
+      },
+      // WebSockets de Socket.io (alertas PQR en dev; en prod usa VITE_BACKEND_URL)
+      '/socket.io': {
+        target: 'http://localhost:3000',
+        ws: true,
+        changeOrigin: true
       }
     }
   },

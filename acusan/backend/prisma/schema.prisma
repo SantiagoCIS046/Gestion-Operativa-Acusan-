@@ -165,6 +165,11 @@ model PQR {
   direccion        String?
   motivo           String
   descripcion      String
+  remitente        String       @default("IA") // "IA" (WhatsApp) u "OPERADOR" (Ventanilla / Manual)
+  horaInicio       String?      // Hora en que empezó la interacción/reporte (ej: "09:15 a. m.")
+  horaFin          String?      // Hora en que terminó la interacción/reporte (ej: "09:22 a. m.")
+  duracionMinutos  Int?         // Tiempo total transcurrido en minutos
+  conversacion     Json?        // Hilo íntegro y exacto de mensajes WhatsApp entre usuario e IA
   prioridad        PrioridadPQR @default(MEDIA)
   estado           EstadoPQR    @default(ABIERTO)
   fechaRadicado    DateTime     @default(now())

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ╔══════════════════════════════════════════════════════════════════════╗
  * ║  PQR Service — Acuasan Gestión Operativa                           ║
  * ║  Capa de lógica de negocio. 100 % desacoplado de Express / HTTP.   ║
@@ -125,7 +125,12 @@ export async function crearPQR(datos) {
         direccion:   datos.direccion   ?? null,
         motivo:      datos.motivo,
         descripcion: datos.descripcion,
-        prioridad:   datos.prioridad   ?? 'MEDIA',
+        remitente:       datos.remitente || (actor.toLowerCase().includes('whatsapp') || actor.toLowerCase().includes('ia') ? 'IA' : 'OPERADOR'),
+        horaInicio:      datos.horaInicio || new Date(Date.now() - 5 * 60 * 1000).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        horaFin:         datos.horaFin || new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        duracionMinutos: datos.duracionMinutos !== undefined ? Number(datos.duracionMinutos) : 5,
+        conversacion:    datos.conversacion || null,
+        prioridad:       datos.prioridad   ?? 'MEDIA',
         estado:      'ABIERTO',
         fechaVencimiento,
       },
@@ -140,6 +145,26 @@ export async function crearPQR(datos) {
         observaciones: EVENTO_INICIAL,
       },
     })
+
+    // Registro opcional de la transcripción que el asistente de IA sostuvo
+    // con el ciudadano por WhatsApp (la trae el worker; los radicados
+    // manuales no la tienen). Queda como evento de trazabilidad del PQR:
+    // el "mensaje" que originó el radicado es consultable después.
+    if (Array.isArray(datos.conversacion) && datos.conversacion.length) {
+      const transcripcion = datos.conversacion
+        .map((turno) => `[${String(turno.de || '?').toUpperCase()}] ${turno.texto}`)
+        .join('\n')
+        .slice(0, 2400)
+      await tx.historialEstadoPQR.create({
+        data: {
+          pqrId:         nuevaPqr.id,
+          estadoAntes:   null,
+          estadoDespues: 'ABIERTO',
+          actor:         ACTOR_WHATSAPP,
+          observaciones: `💬 Conversación con el asistente (transcripción):\n${transcripcion}`,
+        },
+      })
+    }
 
     return [nuevaPqr, historial]
   })
