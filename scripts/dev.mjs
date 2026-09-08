@@ -8,6 +8,7 @@
 const AVISOS_PROTECCION = [
   'scripts/proteccion/verificar-permisos.mjs',
   'scripts/proteccion/verificar-radicados.mjs',
+  'scripts/proteccion/verificar-pqr.mjs',
 ]
 for (const script of AVISOS_PROTECCION) {
   const aviso = spawnSync(
