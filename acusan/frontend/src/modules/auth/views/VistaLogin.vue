@@ -382,21 +382,72 @@
 
     <!-- Right brand panel (65%) -->
     <div class="brand-panel">
-      <div class="brand-panel-inner">
-        <div class="brand-logo-wrapper">
-          <img src="/logo-acuasan.svg" alt="Acuasan 100% Sangileña" class="brand-logo" />
-        </div>
-        <h1 class="brand-name">ACUASAN</h1>
-        <p class="brand-tagline">100% Sangileña</p>
-        <div class="brand-divider"></div>
-        <p class="brand-description">
-          Empresa de Acueducto, Alcantarillado y Aseo de San Gil. Plataforma de control operativo de permisos laborales, autorización presupuestal de horas extras y gestión de PQR.
-        </p>
+      <!-- Gradient Waves Background Effect -->
+      <div class="waves-bg-wrapper">
+        <GradientWaves
+          horizon-color="#0076ff"
+          wave-color="#00e5ff"
+          crest-color="#ffffff"
+          :speed="0.6"
+          :amplitude="1.75"
+          :wave-scale="1.35"
+          :wave-ratio="0.3"
+          :swell="27.5"
+          :turbulence="41"
+          :tilt="1.3"
+          :zoom="1"
+          :height="3.2"
+          :fog-depth="29"
+          detail="low"
+          :brightness="1"
+          :opacity="1"
+          :mouse-interaction="false"
+          :parallax-strength="0.8"
+          :grain="true"
+          :grain-intensity="0"
+        />
       </div>
-      <!-- Animated water background circles -->
-      <div class="water-circle wc-1"></div>
-      <div class="water-circle wc-2"></div>
-      <div class="water-circle wc-3"></div>
+
+      <div class="brand-panel-inner">
+        <!-- Executive Logo Stage with Creative Ambient Animations -->
+        <div class="brand-logo-stage">
+          <div class="logo-ambient-aura"></div>
+          <div class="logo-ripple-ring ring-1"></div>
+          <div class="logo-ripple-ring ring-2"></div>
+          <div class="logo-orbit-ring"></div>
+          
+          <div class="brand-logo-glass">
+            <img src="/logo-acuasan.svg" alt="Acuasan Institucional" class="brand-logo" />
+            <div class="logo-shimmer-sweep"></div>
+          </div>
+        </div>
+
+        <!-- Executive Tagline Pill -->
+        <div class="executive-tag-pill">
+          <span class="pill-pulse-dot"></span>
+          <span class="pill-title">SISTEMA INTEGRAL DE GESTIÓN OPERATIVA</span>
+        </div>
+
+        <h1 class="brand-title-wrap">
+          <DepthText
+            text="ACUASAN"
+            :layers="11"
+            :depth="3.6"
+            face-color="#ffffff"
+            depth-color="#032fb4"
+            :tilt="12"
+            pointer-tracking
+            :smoothing="0.11"
+            :perspective="900"
+            :auto-orbit="false"
+            :orbit-speed="0.75"
+            font-size="clamp(2.5rem, 4.6vw, 4rem)"
+            :font-weight="700"
+            letter-spacing="0.08em"
+            :shadow="false"
+          />
+        </h1>
+      </div>
     </div>
   </div>
 </template>
@@ -405,6 +456,8 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import authService from '../services/authService.js'
+import DepthText from '@/components/DepthText.vue'
+import GradientWaves from '@/components/GradientWaves.vue'
 
 const router = useRouter()
 const currentYear = new Date().getFullYear()
@@ -849,22 +902,22 @@ const handleResetearPassword = async () => {
 
 /* Login button */
 .btn-login {
+  --sb-radius: 40px;
   width: 100%;
-  padding: 10px 18px;
+  padding: 12px 20px;
   background: linear-gradient(135deg, #004884 0%, #002d57 100%);
   color: #ffffff;
   border: none;
-  border-radius: 8px;
-  font-size: 0.86rem;
+  border-radius: 40px;
+  font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   transition: all 0.2s ease;
-  margin-top: 4px;
-  box-shadow: 0 3px 12px rgba(0, 72, 132, 0.25);
+  margin-top: 6px;
 }
 
 .btn-success {
@@ -964,6 +1017,16 @@ const handleResetearPassword = async () => {
   padding: 30px;
 }
 
+.waves-bg-wrapper {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
 .brand-panel-inner {
   position: relative;
   z-index: 2;
@@ -971,70 +1034,213 @@ const handleResetearPassword = async () => {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 14px;
+  gap: 20px;
+  user-select: none;
 }
 
-.brand-logo {
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
-  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.4));
-  animation: float 4s ease-in-out infinite;
+/* ==================== EXECUTIVE LOGO STAGE ==================== */
+.brand-logo-stage {
+  position: relative;
+  width: clamp(210px, 17vw, 250px);
+  height: clamp(210px, 17vw, 250px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+/* Dynamic Ambient Color Aura */
+.logo-ambient-aura {
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 229, 255, 0.4) 0%, rgba(115, 190, 40, 0.28) 45%, transparent 72%);
+  filter: blur(32px);
+  animation: aura-breathe 5s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 
-.brand-name {
-  font-size: 1.9rem;
-  font-weight: 800;
-  color: #ffffff;
-  letter-spacing: 4px;
-  margin: 0;
-  text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+@keyframes aura-breathe {
+  0% { transform: scale(0.92); opacity: 0.5; filter: blur(24px); }
+  50% { transform: scale(1.18); opacity: 0.9; filter: blur(36px); }
+  100% { transform: scale(1.04); opacity: 0.7; filter: blur(28px); }
 }
 
-.brand-tagline {
-  font-size: 0.82rem;
-  color: #73be28;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  margin: 0;
-}
-
-.brand-divider {
-  width: 50px;
-  height: 3px;
-  background: linear-gradient(90deg, #73be28, #004884);
-  border-radius: 2px;
-}
-
-.brand-description {
-  font-size: 0.84rem;
-  color: rgba(255, 255, 255, 0.75);
-  line-height: 1.6;
-  max-width: 340px;
-  margin: 0;
-}
-
-/* Water ripple background animations */
-.water-circle {
+/* Expanding Water Ripples */
+.logo-ripple-ring {
   position: absolute;
   border-radius: 50%;
-  border: 1px solid rgba(115, 190, 40, 0.2);
-  animation: ripple 6s ease-in-out infinite;
+  border: 1.5px solid rgba(0, 229, 255, 0.45);
+  pointer-events: none;
+  animation: ripple-pulse 4.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
-.wc-1 { width: 300px; height: 300px; bottom: -80px; right: -80px; animation-delay: 0s; }
-.wc-2 { width: 500px; height: 500px; bottom: -180px; right: -180px; animation-delay: -2s; }
-.wc-3 { width: 700px; height: 700px; bottom: -280px; right: -280px; animation-delay: -4s; }
+.ring-1 {
+  width: clamp(170px, 13vw, 205px);
+  height: clamp(170px, 13vw, 205px);
+  animation-delay: 0s;
+}
 
-@keyframes ripple {
-  0%, 100% { transform: scale(1); opacity: 0.4; }
-  50% { transform: scale(1.05); opacity: 0.15; }
+.ring-2 {
+  width: clamp(170px, 13vw, 205px);
+  height: clamp(170px, 13vw, 205px);
+  border-color: rgba(115, 190, 40, 0.45);
+  animation-delay: 2.4s;
+}
+
+@keyframes ripple-pulse {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  70% { opacity: 0.25; }
+  100% { transform: scale(1.48); opacity: 0; }
+}
+
+/* Rotating Executive Orbit Halo */
+.logo-orbit-ring {
+  position: absolute;
+  width: clamp(190px, 15vw, 225px);
+  height: clamp(190px, 15vw, 225px);
+  border-radius: 50%;
+  padding: 2px;
+  background: conic-gradient(from 0deg, transparent 0%, #00e5ff 25%, transparent 50%, #73be28 75%, transparent 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #fff calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #fff calc(100% - 2px));
+  animation: orbit-rotate 14s linear infinite;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+@keyframes orbit-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Glass pedestal holder */
+.brand-logo-glass {
+  position: relative;
+  width: clamp(155px, 12vw, 185px);
+  height: clamp(155px, 12vw, 185px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.14) 0%, rgba(0, 36, 76, 0.55) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.5),
+    0 0 35px rgba(0, 118, 255, 0.3),
+    inset 0 1px 3px rgba(255, 255, 255, 0.45);
+  animation: logo-levitate 5s ease-in-out infinite;
+  overflow: hidden;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+  cursor: pointer;
+}
+
+.brand-logo-glass:hover {
+  transform: translateY(-8px) scale(1.05);
+  box-shadow: 
+    0 28px 60px rgba(0, 0, 0, 0.6),
+    0 0 50px rgba(0, 229, 255, 0.45),
+    inset 0 1px 4px rgba(255, 255, 255, 0.7);
+}
+
+@keyframes logo-levitate {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-12px) scale(1.025);
+  }
+}
+
+/* Main emblem SVG - Large & crisp */
+.brand-logo {
+  width: clamp(145px, 11.5vw, 175px);
+  height: clamp(145px, 11.5vw, 175px);
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.4));
+  transition: transform 0.3s ease;
+}
+
+/* Specular Crystal Shimmer Sweep */
+.logo-shimmer-sweep {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.4) 48%,
+    rgba(255, 255, 255, 0.75) 50%,
+    rgba(255, 255, 255, 0.4) 52%,
+    transparent 65%
+  );
+  transform: rotate(25deg) translateY(-120%);
+  animation: shimmer-sweep 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer-sweep {
+  0%, 55% { transform: rotate(25deg) translateY(-130%); opacity: 0; }
+  60% { opacity: 0.85; }
+  80% { transform: rotate(25deg) translateY(130%); opacity: 0.85; }
+  85%, 100% { transform: rotate(25deg) translateY(130%); opacity: 0; }
+}
+
+/* ==================== EXECUTIVE PILL BADGE ==================== */
+.executive-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 18px;
+  background: rgba(1, 26, 50, 0.7);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.executive-tag-pill:hover {
+  background: rgba(1, 35, 68, 0.85);
+  border-color: rgba(115, 190, 40, 0.5);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(115, 190, 40, 0.3);
+}
+
+.pill-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #73be28;
+  box-shadow: 0 0 10px #73be28;
+  animation: dot-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes dot-glow {
+  0% { opacity: 0.55; transform: scale(0.85); box-shadow: 0 0 4px #73be28; }
+  100% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 12px #73be28, 0 0 20px rgba(115, 190, 40, 0.6); }
+}
+
+.pill-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 2.2px;
+  color: #d1e2f2;
+  text-transform: uppercase;
+}
+
+.brand-title-wrap {
+  margin: 0;
+  padding: 2px 0;
+  line-height: 1;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
 }
 
 @media (max-width: 850px) {
