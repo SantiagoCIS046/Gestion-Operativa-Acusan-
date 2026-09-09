@@ -39,58 +39,59 @@
     <!-- SCENARIO A: FORMULARIO PRINCIPAL OCR & VISOR ORIGINAL -->
     <!-- ========================================== -->
     <template v-if="vistaActiva === 'formulario'">
-      <!-- Top Action & KPI Header -->
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-        <!-- KPI Card: Procesados esta semana (Lunes a Viernes relacionado al mes) -->
-        <div class="card border-0 shadow-sm rounded-3 px-3 py-2 bg-white" style="min-width: 260px;">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <span class="text-uppercase fw-bold text-muted small" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+      <!-- Top Action & KPI Header Compacto -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <!-- KPI Card Compacto -->
+        <div class="card border shadow-sm rounded-2 px-2.5 py-1.5 bg-white d-flex flex-row align-items-center gap-2.5" style="border-color: #e2e8f0 !important;">
+          <div class="badge bg-success-subtle text-success p-1.5 rounded-2 d-flex align-items-center justify-content-center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <polyline points="9 15 12 18 17 13"></polyline>
+            </svg>
+          </div>
+          <div class="d-flex flex-column">
+            <div class="d-flex align-items-baseline gap-1.5">
+              <span class="fw-bold text-primary lh-1" style="color: #004884 !important; font-size: 1.25rem;">
+                {{ totalProcesadosEstaSemana }}
+              </span>
+              <span class="text-uppercase fw-bold text-muted" style="font-size: 0.62rem; letter-spacing: 0.4px;">
                 PROCESADOS ESTA SEMANA (LUN - VIE)
               </span>
-              <div class="fs-2 fw-bold text-primary lh-1 mt-1" style="color: #004884 !important;">
-                {{ totalProcesadosEstaSemana }}
-              </div>
-              <div class="text-muted fw-semibold mt-1" style="font-size: 0.68rem;">
-                {{ rangoSemanaActualTexto }}
-              </div>
             </div>
-            <div class="badge bg-success-subtle text-success p-2 rounded-3">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <polyline points="9 15 12 18 17 13"></polyline>
-              </svg>
-            </div>
+            <span class="text-muted fw-semibold" style="font-size: 0.63rem;">
+              {{ rangoSemanaActualTexto }}
+            </span>
           </div>
         </div>
 
-        <!-- Action Buttons: Historial de Permisos + Insertar Permiso Escaneado -->
+        <!-- Botones de Acción Compactos -->
         <div class="d-flex flex-wrap gap-2 align-items-center">
           <!-- Button: Historial de Permisos (Plantilla Excel) -->
           <button
             type="button"
-            class="btn btn-outline-success fw-bold d-inline-flex align-items-center gap-2 shadow-sm rounded-3"
+            class="btn btn-sm btn-outline-success fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5"
+            style="font-size: 0.77rem;"
             @click="vistaActiva = 'historial'"
             title="Ver plantilla de Excel y listado de entregas procesadas"
           >
             <span>📗</span>
             <span>Historial (Plantilla Excel)</span>
-            <span class="badge bg-success text-white rounded-pill">{{ historialRemisiones.length }}</span>
+            <span class="badge bg-success text-white rounded-pill ms-1" style="font-size: 0.65rem; padding: 2px 5px;">{{ historialRemisiones.length }}</span>
           </button>
 
           <!-- Button: Insertar Permiso Escaneado -->
           <label
-            class="btn btn-primary fw-bold d-inline-flex align-items-center gap-2 shadow-sm rounded-3 mb-0"
-            style="background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
+            class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5 mb-0"
+            style="font-size: 0.77rem; background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
             title="Seleccionar archivo PDF, Word, TXT o imagen del computador"
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <span>Insertar Permiso Escaneado (PDF/Word/TXT/Imagen)</span>
+            <span>Insertar Permiso Escaneado</span>
             <input
               type="file"
               accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
@@ -122,21 +123,21 @@
       </transition>
 
       <!-- Main Workspace (Visor Original + Cuadro de Datos OCR con Bootstrap parejos 50/50) -->
-      <div class="row g-3">
+      <div class="row g-2">
         <!-- LEFT COLUMN: Visor del PDF / Archivo Original Real Escaneado (50% Parejo) -->
         <div class="col-lg-6 col-md-12">
-          <div class="card border shadow-sm rounded-3 overflow-hidden h-100 d-flex flex-column">
+          <div class="card border shadow-sm rounded-2 overflow-hidden h-100 d-flex flex-column" style="border-color: #e2e8f0 !important;">
             <!-- Header Toolbar -->
-            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
-              <div class="d-flex align-items-center gap-2">
-                <span class="fs-5">📄</span>
-                <span class="fw-bold small text-dark text-truncate" style="max-width: 320px;">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-1.5 px-3 border-bottom">
+              <div class="d-flex align-items-center gap-1.5">
+                <span class="fs-6">📄</span>
+                <span class="fw-bold small text-dark text-truncate" style="max-width: 260px; font-size: 0.8rem;">
                   {{ documentLoaded ? documentFileName : 'Ningún documento cargado' }}
                 </span>
               </div>
 
               <div v-if="documentLoaded">
-                <label class="btn btn-sm btn-outline-secondary fw-semibold mb-0" style="cursor: pointer;" title="Cambiar archivo">
+                <label class="btn btn-sm btn-outline-secondary fw-semibold mb-0 py-0.5 px-2" style="cursor: pointer; font-size: 0.72rem;" title="Cambiar archivo">
                   <span>🔄 Cambiar Archivo</span>
                   <input
                     type="file"
@@ -149,23 +150,23 @@
             </div>
 
             <!-- Viewport: Visualización del PDF / Documento Escaneado en Todo el Cuadro -->
-            <div class="card-body p-0 bg-dark bg-opacity-75 d-flex justify-content-center align-items-start overflow-auto flex-grow-1" style="min-height: 600px; max-height: 740px;">
+            <div class="card-body p-0 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center overflow-auto flex-grow-1" style="min-height: 440px; max-height: 520px;">
               <!-- STATE A: NO DOCUMENT LOADED (WAITING FOR INSERTION) -->
-              <div v-if="!documentLoaded" class="card border-0 shadow-sm p-4 text-center mx-auto my-auto rounded-3 bg-white" style="max-width: 420px;">
-                <div class="mx-auto mb-3 d-flex align-items-center justify-content-center bg-success-subtle border border-success-subtle rounded-circle" style="width: 70px; height: 70px;">
-                  <span class="fs-2">📑</span>
+              <div v-if="!documentLoaded" class="card border-0 shadow-sm p-3 text-center mx-auto my-auto rounded-3 bg-white" style="max-width: 310px;">
+                <div class="mx-auto mb-2 d-flex align-items-center justify-content-center bg-success-subtle border border-success-subtle rounded-circle" style="width: 44px; height: 44px;">
+                  <span class="fs-5">📑</span>
                 </div>
-                <h5 class="fw-bold mb-2 text-primary" style="color: #004884 !important;">Bandeja de Permisos Lista</h5>
-                <p class="text-muted small mb-3">
-                  Inserte el archivo PDF, Word, TXT o imagen desde su computador para visualizar el documento original y extraer su información automáticamente.
+                <h6 class="fw-bold mb-1 text-primary" style="color: #004884 !important; font-size: 0.88rem;">Bandeja de Permisos Lista</h6>
+                <p class="text-muted mb-2.5" style="font-size: 0.72rem; line-height: 1.35;">
+                  Inserte el archivo PDF, Word, TXT o imagen para previsualizar el soporte original y rectificar los datos.
                 </p>
-                <label class="btn btn-primary fw-bold mx-auto mb-0" style="background: #004884; cursor: pointer;">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="me-1">
+                <label class="btn btn-primary btn-sm fw-bold mx-auto mb-0 py-1 px-2.5" style="background: #004884; font-size: 0.75rem; cursor: pointer;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="me-1">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
-                  <span>Seleccionar Permiso Escaneado (PDF/Word/TXT/Imagen)</span>
+                  <span>Seleccionar Archivo</span>
                   <input
                     type="file"
                     accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
@@ -183,38 +184,38 @@
                   :data="displayFileUrl"
                   type="application/pdf"
                   class="w-100 rounded bg-white border-0 flex-grow-1"
-                  style="min-height: 680px;"
+                  style="min-height: 480px;"
                 >
                   <iframe
                     :src="displayFileUrl"
                     class="w-100 h-100 border-0"
-                    style="min-height: 680px;"
+                    style="min-height: 480px;"
                     title="Visor PDF Original"
                   ></iframe>
                 </object>
 
                 <!-- If it's a Word document: panel with the extracted document text -->
-                <div v-else-if="isWordFile && customFileUrl" class="w-100 h-100 bg-white overflow-auto p-3">
-                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-2 border-bottom">
-                    <div class="d-flex align-items-center gap-2">
-                      <span class="badge bg-primary text-white">DOCX / Word</span>
-                      <span class="text-muted small text-truncate">{{ documentFileName }}</span>
+                <div v-else-if="isWordFile && customFileUrl" class="w-100 h-100 bg-white overflow-auto p-2.5">
+                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-1.5 border-bottom">
+                    <div class="d-flex align-items-center gap-1.5">
+                      <span class="badge bg-primary text-white" style="font-size: 0.68rem;">DOCX / Word</span>
+                      <span class="text-muted small text-truncate" style="font-size: 0.75rem;">{{ documentFileName }}</span>
                     </div>
-                    <a :href="displayFileUrl" :download="documentFileName" class="btn btn-sm btn-outline-primary fw-semibold">Descargar</a>
+                    <a :href="displayFileUrl" :download="documentFileName" class="btn btn-sm btn-outline-primary fw-semibold py-0.5 px-2" style="font-size: 0.72rem;">Descargar</a>
                   </div>
-                  <pre class="mb-0 small text-dark" style="white-space: pre-wrap; word-break: break-word; font-family: inherit;">{{ textoDocumentoExtraido || 'No se pudo extraer el texto del documento Word. Verifique que sea un archivo .docx valido.' }}</pre>
+                  <pre class="mb-0 small text-dark" style="white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.75rem;">{{ textoDocumentoExtraido || 'No se pudo extraer el texto del documento Word. Verifique que sea un archivo .docx valido.' }}</pre>
                 </div>
 
                 <!-- If it's a plain text file -->
-                <div v-else-if="isTextFile && customFileUrl" class="w-100 h-100 bg-white overflow-auto p-3">
-                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-2 border-bottom">
-                    <div class="d-flex align-items-center gap-2">
-                      <span class="badge bg-secondary text-white">TXT / Texto</span>
-                      <span class="text-muted small text-truncate">{{ documentFileName }}</span>
+                <div v-else-if="isTextFile && customFileUrl" class="w-100 h-100 bg-white overflow-auto p-2.5">
+                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-1.5 border-bottom">
+                    <div class="d-flex align-items-center gap-1.5">
+                      <span class="badge bg-secondary text-white" style="font-size: 0.68rem;">TXT / Texto</span>
+                      <span class="text-muted small text-truncate" style="font-size: 0.75rem;">{{ documentFileName }}</span>
                     </div>
-                    <a :href="displayFileUrl" :download="documentFileName" class="btn btn-sm btn-outline-primary fw-semibold">Descargar</a>
+                    <a :href="displayFileUrl" :download="documentFileName" class="btn btn-sm btn-outline-primary fw-semibold py-0.5 px-2" style="font-size: 0.72rem;">Descargar</a>
                   </div>
-                  <pre class="mb-0 small text-dark" style="white-space: pre-wrap; word-break: break-word; font-family: inherit;">{{ textoDocumentoExtraido }}</pre>
+                  <pre class="mb-0 small text-dark" style="white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.75rem;">{{ textoDocumentoExtraido }}</pre>
                 </div>
 
                 <!-- If user uploaded a custom image from PC -->
@@ -223,15 +224,15 @@
                     :src="displayFileUrl"
                     alt="Documento Original Escaneado"
                     class="img-fluid rounded shadow bg-white border"
-                    style="max-width: 100%; max-height: 700px; object-fit: contain;"
+                    style="max-width: 100%; max-height: 480px; object-fit: contain;"
                   />
                 </div>
 
                 <!-- Fallback: En caso de no tener archivo binario -->
-                <div v-else class="w-100 text-center p-4 my-auto">
-                  <span class="fs-1 d-block mb-2">📄</span>
-                  <h6 class="fw-bold text-dark mb-1">{{ documentFileName }}</h6>
-                  <p class="text-muted small">El archivo se encuentra registrado en el sistema.</p>
+                <div v-else class="w-100 text-center p-3 my-auto">
+                  <span class="fs-2 d-block mb-1">📄</span>
+                  <h6 class="fw-bold text-dark mb-1" style="font-size: 0.85rem;">{{ documentFileName }}</h6>
+                  <p class="text-muted mb-0" style="font-size: 0.73rem;">El archivo se encuentra registrado en el sistema.</p>
                 </div>
               </div>
             </div>
@@ -240,113 +241,128 @@
 
         <!-- RIGHT COLUMN: Formulario con Todos los Campos de Texto Estilo Bootstrap (50% Parejo) -->
         <div class="col-lg-6 col-md-12">
-          <div class="card border shadow-sm rounded-3">
-            <div class="card-header bg-white py-3 px-3 border-bottom">
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <h5 class="fw-bold text-primary m-0" style="color: #004884 !important;">
+          <div class="card border shadow-sm rounded-2" style="border-color: #e2e8f0 !important;">
+            <div class="card-header bg-white py-2 px-3 border-bottom">
+              <div class="d-flex justify-content-between align-items-center mb-0.5">
+                <h6 class="fw-bold text-primary m-0" style="color: #004884 !important; font-size: 0.88rem;">
                   Revisión de Datos (OCR)
-                </h5>
-                <span v-if="isScanningOCR" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">
-                  ⏳ Extrayendo datos del documento...
+                </h6>
+                <span v-if="isScanningOCR" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-0.5" style="font-size: 0.68rem;">
+                  ⏳ Extrayendo datos...
                 </span>
-                <span v-else-if="documentLoaded" :class="['badge px-2 py-1 border', claseConfianzaOcr]">
+                <span v-else-if="documentLoaded" :class="['badge px-2 py-0.5 border', claseConfianzaOcr]" style="font-size: 0.68rem;">
                   {{ textoConfianzaOcr }}
                 </span>
-                <span v-else class="badge bg-secondary-subtle text-secondary border px-2 py-1">
+                <span v-else class="badge bg-secondary-subtle text-secondary border px-2 py-0.5" style="font-size: 0.68rem;">
                   ⏳ Esperando Documento
                 </span>
               </div>
-              <p class="text-muted small mb-0">
-                Revise y rectifique los datos extraídos del PDF antes de confirmar el registro del permiso.
+              <p class="text-muted mb-0" style="font-size: 0.7rem;">
+                Revise y rectifique los datos extraídos antes de confirmar la radicación.
               </p>
             </div>
 
-            <div class="card-body p-3">
+            <div class="card-body p-2.5">
               <form class="permiso-form" @submit.prevent="confirmarYEnviar">
                 <!-- SECTION 1: INFORMACIÓN DEL TRABAJADOR -->
-                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
-                  <div class="bg-success rounded" style="width: 4px; height: 14px;"></div>
-                  <span class="text-uppercase fw-bold text-primary small" style="font-size: 0.72rem; letter-spacing: 0.4px;">
+                <div class="d-flex align-items-center mb-1.5 pb-1 border-bottom">
+                  <div class="bg-success rounded" style="width: 3px; height: 12px; margin-right: 6px; flex-shrink: 0;"></div>
+                  <span class="text-uppercase fw-bold text-primary" style="font-size: 0.68rem; letter-spacing: 0.3px;">
                     INFORMACIÓN DEL TRABAJADOR (SOLICITANTE)
                   </span>
                 </div>
 
-                <div class="mb-3">
-                  <label class="form-label mb-1 fw-semibold text-secondary small">Nombre Completo del Trabajador</label>
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-light text-muted">👤</span>
-                    <input
-                      v-model="formData.nombreFuncionario"
-                      type="text"
-                      class="form-control fw-bold"
-                      placeholder="Esperando documento escaneado..."
-                      :disabled="!documentLoaded"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div class="row g-2 mb-3">
-                  <div class="col-md-6">
-                    <label class="form-label mb-1 fw-semibold text-secondary small">Cédula / Documento</label>
+                <div class="row g-2 mb-1.5" style="padding-top: 4px;">
+                  <div class="col-7">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Nombre Completo del Trabajador</label>
                     <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-light text-muted">🪪</span>
+                      <span class="input-group-text bg-light text-muted py-0.5 px-2" style="font-size: 0.75rem;">👤</span>
                       <input
-                        v-model="formData.cedula"
+                        v-model="formData.nombreFuncionario"
                         type="text"
-                        class="form-control"
-                        placeholder="Número de cédula"
+                        class="form-control form-control-sm fw-bold py-1"
+                        style="font-size: 0.78rem;"
+                        placeholder="Esperando documento escaneado..."
                         :disabled="!documentLoaded"
                         required
                       />
                     </div>
                   </div>
 
-                  <div class="col-md-6">
-                    <label class="form-label mb-1 fw-semibold text-secondary small">Cargo</label>
+                  <div class="col-5">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Cédula / Documento</label>
                     <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-light text-muted">💼</span>
+                      <span class="input-group-text bg-light text-muted py-0.5 px-2" style="font-size: 0.75rem;">🪪</span>
+                      <input
+                        v-model="formData.cedula"
+                        type="text"
+                        class="form-control form-control-sm py-1"
+                        style="font-size: 0.78rem;"
+                        placeholder="Número de cédula"
+                        :disabled="!documentLoaded"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                  <div class="col-6">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Cargo</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted py-0.5 px-2" style="font-size: 0.75rem;">💼</span>
                       <input
                         v-model="formData.cargo"
                         type="text"
-                        class="form-control"
+                        class="form-control form-control-sm py-1"
+                        style="font-size: 0.78rem;"
                         placeholder="Cargo del funcionario"
+                        :disabled="!documentLoaded"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="col-6">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Área / Dependencia</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted py-0.5 px-2" style="font-size: 0.75rem;">🏢</span>
+                      <input
+                        v-model="formData.dependencia"
+                        type="text"
+                        class="form-control form-control-sm py-1"
+                        style="font-size: 0.78rem;"
+                        placeholder="Área u operativa"
                         :disabled="!documentLoaded"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div class="mb-3">
-                  <label class="form-label mb-1 fw-semibold text-secondary small">Área / Dependencia</label>
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-light text-muted">🏢</span>
-                    <input
-                      v-model="formData.dependencia"
-                      type="text"
-                      class="form-control"
-                      placeholder="Área u operativa"
-                      :disabled="!documentLoaded"
-                    />
+                <!-- SECTION 2: DETALLES DEL PERMISO LABORAL -->
+                <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom" style="margin-top: 12px;">
+                  <div class="d-flex align-items-center">
+                    <div class="bg-success rounded" style="width: 3px; height: 12px; margin-right: 6px; flex-shrink: 0;"></div>
+                    <span class="text-uppercase fw-bold text-primary" style="font-size: 0.68rem; letter-spacing: 0.3px;">
+                      DETALLES DEL PERMISO LABORAL
+                    </span>
+                  </div>
+                  <!-- Aviso de Jornada / Fin de semana integrado discretamente en la cabecera -->
+                  <div v-if="esJornadaCompleta" class="badge bg-success-subtle text-success border border-success-subtle px-1.5 py-0.5" style="font-size: 0.67rem;" :title="tituloJornadaBoton">
+                    ✓ Jornada completa ({{ textoJornadaResumen }})
+                  </div>
+                  <div v-else-if="esFinDeSemana" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1.5 py-0.5" style="font-size: 0.67rem;" title="En fin de semana solo labora personal en horas extras: registre el horario con los relojes.">
+                    ⚠ Fin de semana (Horas extras)
                   </div>
                 </div>
 
-                <!-- SECTION 2: DETALLES DEL PERMISO LABORAL -->
-                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
-                  <div class="bg-success rounded" style="width: 4px; height: 14px;"></div>
-                  <span class="text-uppercase fw-bold text-primary small" style="font-size: 0.72rem; letter-spacing: 0.4px;">
-                    DETALLES DEL PERMISO LABORAL
-                  </span>
-                </div>
-
-                <div class="row g-2 mb-3">
-                  <div class="col-md-4">
-                    <label class="form-label mb-1 fw-semibold text-secondary small d-flex justify-content-between">
-                      <span>Fecha Permiso</span>
-                      <span class="text-muted fw-normal" style="font-size: 0.68rem;">(DD/MM/YYYY)</span>
+                <!-- Fila de 3 columnas estrictamente al mismo nivel (Fecha, Hora Inicio, Hora Fin) -->
+                <div class="row g-2 flex-nowrap align-items-start mb-1.5" style="padding-top: 4px;">
+                  <div class="col-4" style="min-width: 0;">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary d-block text-truncate" style="font-size: 0.7rem; line-height: 1.2; height: 16px;" title="Fecha del permiso">
+                      Fecha <span class="text-muted fw-normal" style="font-size: 0.61rem;">(DD/MM/AAAA)</span>
                     </label>
                     <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-light text-muted">📅</span>
+                      <span class="input-group-text bg-light text-muted px-1.5 py-0" style="font-size: 0.72rem; height: 28px;">📅</span>
                       <input
                         v-model="formData.fechaInicio"
                         @input="escribirFechaInput($event, 'fechaInicio')"
@@ -354,7 +370,8 @@
                         type="text"
                         inputmode="numeric"
                         maxlength="10"
-                        class="form-control fw-bold"
+                        class="form-control form-control-sm fw-bold px-1.5 py-0"
+                        style="font-size: 0.75rem; height: 28px;"
                         placeholder="DD/MM/YYYY"
                         :disabled="!documentLoaded"
                         required
@@ -362,79 +379,66 @@
                     </div>
                   </div>
 
-                  <div class="col-md-8">
-                    <label class="form-label mb-1 fw-semibold text-secondary small">Horario del Permiso</label>
+                  <div class="col-4" style="min-width: 0;">
+                    <label for="horaInicioPermiso" class="form-label mb-0.5 fw-semibold text-secondary d-block text-truncate" style="font-size: 0.7rem; line-height: 1.2; height: 16px;" title="Hora de inicio">
+                      Hora Inicio
+                    </label>
+                    <input
+                      id="horaInicioPermiso"
+                      v-model="horaInicioPermiso"
+                      @change="construirHorario"
+                      type="time"
+                      class="form-control form-control-sm text-center fw-bold px-1 py-0"
+                      style="font-size: 0.74rem; height: 28px;"
+                      :disabled="!documentLoaded"
+                    />
+                  </div>
 
-                    <!-- Confirmación compacta: las horas coinciden con la jornada del día -->
-                    <div v-if="esJornadaCompleta" class="aviso-horario aviso-jornada mb-2" :title="tituloJornadaBoton">
-                      <span>✓</span> Jornada completa — {{ textoJornadaResumen }}
-                    </div>
-                    <div
-                      v-else-if="esFinDeSemana"
-                      class="aviso-horario aviso-fin-semana mb-2"
-                      title="En fin de semana solo labora personal en horas extras: registre el horario con los relojes."
-                    >
-                      <span>⚠</span> Fin de semana — solo horas extras
-                    </div>
-
-                    <!-- Relojes: hora de inicio y fin del permiso -->
-                    <div class="row g-2">
-                      <div class="col-6">
-                        <label for="horaInicioPermiso" class="form-label mb-1 small text-muted" style="font-size: 0.72rem;">Hora de inicio</label>
-                        <div class="input-group input-group-sm">
-                          <span class="input-group-text">🕗</span>
-                          <input
-                            id="horaInicioPermiso"
-                            v-model="horaInicioPermiso"
-                            @change="construirHorario"
-                            type="time"
-                            class="form-control text-center fw-bold"
-                            :disabled="!documentLoaded"
-                          />
-                        </div>
-                      </div>
-                      <div class="col-6">
-                        <label for="horaFinPermiso" class="form-label mb-1 small text-muted" style="font-size: 0.72rem;">Hora de fin</label>
-                        <div class="input-group input-group-sm">
-                          <span class="input-group-text">🕤</span>
-                          <input
-                            id="horaFinPermiso"
-                            v-model="horaFinPermiso"
-                            @change="construirHorario"
-                            type="time"
-                            class="form-control text-center fw-bold"
-                            :disabled="!documentLoaded"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                  <div class="col-4" style="min-width: 0;">
+                    <label for="horaFinPermiso" class="form-label mb-0.5 fw-semibold text-secondary d-block text-truncate" style="font-size: 0.7rem; line-height: 1.2; height: 16px;" title="Hora de fin">
+                      Hora Fin
+                    </label>
+                    <input
+                      id="horaFinPermiso"
+                      v-model="horaFinPermiso"
+                      @change="construirHorario"
+                      type="time"
+                      class="form-control form-control-sm text-center fw-bold px-1 py-0"
+                      style="font-size: 0.74rem; height: 28px;"
+                      :disabled="!documentLoaded"
+                    />
                   </div>
                 </div>
 
-                <div class="row g-2 mb-3">
-                  <div class="col-md-6">
-                    <label class="form-label mb-1 fw-semibold text-secondary small">Tipo de Permiso</label>
-                    <select
-                      v-model="formData.tipoPermiso"
-                      class="form-select form-select-sm fw-bold"
-                      :disabled="!documentLoaded"
-                    >
-                      <option value="" disabled>Según el PDF — seleccione...</option>
-                      <option value="Compensatorio">Compensatorio</option>
-                      <option value="Cita Médica">Cita Médica</option>
-                      <option value="Personal">Personal / Asunto Propio</option>
-                      <option value="Calamidad Doméstica">Calamidad Doméstica</option>
-                      <option value="Estudio / Capacitación">Estudio / Capacitación</option>
-                    </select>
+                <div class="row g-2 mb-2" style="margin-top: 4px;">
+                  <div class="col-6">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Tipo de Permiso</label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted py-0.5 px-2" style="font-size: 0.75rem;">📋</span>
+                      <select
+                        v-model="formData.tipoPermiso"
+                        class="form-select form-select-sm fw-bold py-1"
+                        style="font-size: 0.78rem;"
+                        :disabled="!documentLoaded"
+                      >
+                        <option value="" disabled>Seleccione...</option>
+                        <option value="Compensatorio">Compensatorio</option>
+                        <option value="Cita Médica">Cita Médica</option>
+                        <option value="Personal">Personal / Asunto Propio</option>
+                        <option value="Calamidad Doméstica">Calamidad Doméstica</option>
+                        <option value="Estudio / Capacitación">Estudio / Capacitación</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div class="col-md-6">
-                    <label class="form-label mb-1 fw-semibold text-secondary small">Vo.Bo. Jefe Inmediato</label>
+                  <div class="col-6">
+                    <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Vo.Bo. Jefe Inmediato</label>
                     <div class="input-group input-group-sm">
-                      <span class="input-group-text bg-success-subtle text-success">✔</span>
+                      <span class="input-group-text bg-success-subtle text-success py-0.5 px-2" style="font-size: 0.72rem;">✔</span>
                       <input
                         type="text"
-                        class="form-control bg-light text-success fw-bold"
+                        class="form-control form-control-sm bg-light text-success fw-bold py-1"
+                        style="font-size: 0.78rem;"
                         :value="documentLoaded ? 'Firmado en Solicitud' : 'Pendiente'"
                         disabled
                       />
@@ -443,24 +447,26 @@
                 </div>
 
                 <!-- SECTION 3: MOTIVO Y OBSERVACIONES -->
-                <div class="mb-3">
-                  <label class="form-label mb-1 fw-semibold text-secondary small">Motivo y Justificación Extraída</label>
+                <div class="mb-2" style="margin-top: 8px;">
+                  <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Motivo y Justificación Extraída</label>
                   <textarea
                     v-model="formData.motivo"
-                    rows="3"
-                    class="form-control form-control-sm"
+                    rows="2"
+                    class="form-control form-control-sm py-1"
+                    style="font-size: 0.78rem;"
                     placeholder="El motivo escrito en la solicitud aparecerá aquí..."
                     :disabled="!documentLoaded"
                     required
                   ></textarea>
                 </div>
 
-                <div class="mb-3">
-                  <label class="form-label mb-1 fw-semibold text-secondary small">Observaciones (Opcional)</label>
+                <div class="mb-2">
+                  <label class="form-label mb-0.5 fw-semibold text-secondary" style="font-size: 0.71rem;">Observaciones (Opcional)</label>
                   <textarea
                     v-model="formData.observaciones"
-                    rows="2"
-                    class="form-control form-control-sm"
+                    rows="1"
+                    class="form-control form-control-sm py-1"
+                    style="font-size: 0.78rem;"
                     placeholder="Observación o nota adicional..."
                     :disabled="!documentLoaded"
                   ></textarea>
@@ -470,7 +476,8 @@
                 <div class="d-flex justify-content-between align-items-center pt-2 border-top gap-2">
                   <button
                     type="button"
-                    class="btn btn-outline-secondary btn-sm px-3"
+                    class="btn btn-outline-secondary btn-sm px-2.5 py-1"
+                    style="font-size: 0.76rem;"
                     @click="abrirModalRechazo"
                     :disabled="!documentLoaded"
                   >
@@ -479,8 +486,8 @@
 
                   <button
                     type="submit"
-                    class="btn btn-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-2 shadow-sm"
-                    style="background: linear-gradient(180deg, #004884 0%, #002d57 100%); border-color: #002040;"
+                    class="btn btn-primary btn-sm fw-bold px-3 py-1 d-inline-flex align-items-center gap-1.5 shadow-sm"
+                    style="background: linear-gradient(180deg, #004884 0%, #002d57 100%); border-color: #002040; font-size: 0.76rem;"
                     :disabled="!documentLoaded || isSubmitting"
                   >
                     <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
@@ -595,25 +602,75 @@
                         :key="'dia-' + dia"
                         type="button"
                         :class="[
-                          'btn btn-sm p-0 rounded position-relative',
-                          diaSeleccionado === dia ? 'btn-primary text-white fw-bold shadow-sm' : (contarRegistrosPorDia(dia) > 0 ? 'btn-info-subtle border border-info text-dark fw-bold' : 'btn-light text-dark')
+                          'btn btn-sm p-0 rounded position-relative btn-cal-dia',
+                          esDiaHoy(dia) ? 'cal-dia-hoy' : '',
+                          dia === diaPermisoUsuario ? 'cal-dia-permiso-usuario' : '',
+                          diaSeleccionado === dia
+                            ? 'btn-primary text-white fw-bold shadow-sm'
+                            : (contarRegistrosPorDia(dia) > 0
+                                ? 'btn-info-subtle border border-info text-dark fw-bold'
+                                : (dia === diaPermisoUsuario ? 'btn-warning-subtle border border-warning text-dark fw-bold' : 'btn-light text-dark'))
                         ]"
-                        style="height: 28px; font-size: 0.76rem;"
+                        style="height: 30px; font-size: 0.76rem;"
                         @click="seleccionarDia(dia)"
+                        :title="construirTooltipDia(dia)"
                       >
                         {{ dia }}
+
+                        <!-- Pin indicador de día del permiso del funcionario cargado en formulario -->
+                        <span
+                          v-if="dia === diaPermisoUsuario && diaSeleccionado !== dia"
+                          class="position-absolute top-0 start-0 translate-middle-y badge rounded-pill bg-success"
+                          style="font-size: 0.48rem; padding: 1px 3px; z-index: 3;"
+                          title="Día de la solicitud de permiso activa"
+                        >
+                          📌
+                        </span>
+
+                        <!-- Badge contador de permisos registrados en este día -->
                         <span
                           v-if="contarRegistrosPorDia(dia) > 0 && diaSeleccionado !== dia"
                           class="position-absolute top-0 end-0 translate-middle-y badge rounded-pill bg-danger"
-                          style="font-size: 0.5rem; padding: 2px 4px;"
+                          style="font-size: 0.5rem; padding: 2px 4px; z-index: 3;"
+                          :title="`${contarRegistrosPorDia(dia)} permiso(s) registrados`"
                         >
                           {{ contarRegistrosPorDia(dia) }}
                         </span>
+
+                        <!-- Punto indicador exclusivo de HOY (sin afectar color de fondo ni badges de permisos) -->
+                        <span
+                          v-if="esDiaHoy(dia)"
+                          class="indicador-hoy-dot"
+                        ></span>
+                      </button>
+                    </div>
+
+                    <!-- Leyenda institucional de señalización y acceso rápido a Hoy -->
+                    <div class="cal-legend d-flex justify-content-between align-items-center py-1 px-1 mb-1 border-top border-bottom" style="font-size: 0.67rem; color: #64748b;">
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="d-inline-flex align-items-center gap-1" title="Día actual en el que estamos">
+                          <span class="legend-ring-hoy"></span> <strong>Hoy</strong>
+                        </span>
+                        <span class="d-inline-flex align-items-center gap-1" title="Días con permisos de funcionarios">
+                          <span class="legend-badge-perm">#</span> Permisos
+                        </span>
+                        <span v-if="diaPermisoUsuario" class="d-inline-flex align-items-center gap-1 text-success fw-semibold" title="Permiso del funcionario en el formulario">
+                          <span class="legend-pin-func">📌</span> Solicitud
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-primary"
+                        style="font-size: 0.67rem;"
+                        @click="irAHoy"
+                        title="Ir a la fecha actual"
+                      >
+                        Ir a Hoy
                       </button>
                     </div>
 
                     <!-- Footer acciones del cronograma -->
-                    <div class="d-flex flex-column gap-2 pt-2 border-top">
+                    <div class="d-flex flex-column gap-2 pt-1">
                       <button
                         type="button"
                         class="btn btn-sm btn-outline-success w-100 py-1 small fw-bold"
@@ -898,6 +955,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
+import { parsearTextoPermiso, evaluarCamposExtraidos } from '../services/parserPermisosOcr.js'
 import adjuntosOffline from '../../../services/adjuntosOffline.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
@@ -1158,30 +1216,37 @@ const formData = reactive({
   observaciones: ''
 })
 
-// ─── HORARIO DEL PERMISO ─────────────────────────────────────────────────────
-// Jornada laboral Acuasan: lunes a jueves 07:30 a 18:00, viernes 07:30 a
-// 17:30. Sábados y domingos NO hay jornada regular: solo labora personal en
-// horas extras, por lo que el horario se registra manualmente.
-// El horario resultante (formData.horasCalculadas) sigue siendo editable a
-// mano, pero lo normal es construirlo con el interruptor de Jornada Completa
-// (según el día de la fecha del permiso) o con los dos relojes:
-// 08:00 + 12:00 → "08:00 a 12:00 (4 horas)", el formato del radicado/historial.
+// ─── HORARIO DEL PERMISO — JORNADAS LABORALES INSTITUCIONALES ACUASAN ────────
+// Lunes a Jueves: 7:30 a.m. a 12:00 m. y 2:00 p.m. a 6:00 p.m. (8.5 horas)
+// Viernes: 7:30 a.m. a 12:00 m. y 2:00 p.m. a 5:30 p.m. (8 horas)
+// Sábados y domingos: No hay jornada regular (solo horas extras manuales).
 const JORNADAS_ACUASAN = {
-  lunesAJueves: { inicio: '07:30', fin: '18:00' },
-  viernes: { inicio: '07:30', fin: '17:30' },
+  lunesAJueves: {
+    inicio: '07:30',
+    fin: '18:00',
+    horas: 8.5,
+    descripcionCorta: 'Lun-Jue: 7:30 a.m. - 12:00 m. / 2:00 p.m. - 6:00 p.m. (8.5h)',
+    descripcionDetallada: '7:30 a.m. a 12:00 p.m. y 2:00 p.m. a 6:00 p.m. (8.5 horas)'
+  },
+  viernes: {
+    inicio: '07:30',
+    fin: '17:30',
+    horas: 8.0,
+    descripcionCorta: 'Viernes: 7:30 a.m. - 12:00 m. / 2:00 p.m. - 5:30 p.m. (8h)',
+    descripcionDetallada: '7:30 a.m. a 12:00 p.m. y 2:00 p.m. a 5:30 p.m. (8 horas)'
+  },
 }
 const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 
-// Relojes del permiso: única entrada del horario. Cuando las horas coinciden
-// exactamente con la jornada del día (según la fecha), esJornadaCompleta se
-// activa solo: se muestra la alerta y queda marcado en el historial.
+// Relojes del permiso: hora de inicio y hora de fin
 const horaInicioPermiso = ref('')
 const horaFinPermiso = ref('')
 
 // Día de la semana (0=domingo … 6=sábado) de una fecha DD/MM/YYYY válida
 const diaSemanaDeFecha = (textoFecha) => {
   if (!esFechaValida(textoFecha)) return null
-  const m = textoFecha.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  const m = String(textoFecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!m) return null
   return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10)).getDay()
 }
 
@@ -1194,22 +1259,25 @@ const esFinDeSemana = computed(() => {
 // Las horas elegidas coinciden con la jornada completa del día de la fecha
 const esJornadaCompleta = computed(() => {
   const dia = diaSemanaDeFecha(formData.fechaInicio)
-  if (dia === null || dia === 0 || dia === 6) return false
+  if (dia === null || dia === 0 || dia === 6) {
+    return horaInicioPermiso.value === '07:30' && (horaFinPermiso.value === '18:00' || horaFinPermiso.value === '17:30')
+  }
   const j = dia === 5 ? JORNADAS_ACUASAN.viernes : JORNADAS_ACUASAN.lunesAJueves
   return horaInicioPermiso.value === j.inicio && horaFinPermiso.value === j.fin
 })
 
-// Texto de la alerta: la jornada que se reconoció, p. ej. "07:30 a 18:00 · lunes"
+// Texto descriptivo detallado de la jornada completa según el día
 const textoJornadaResumen = computed(() => {
   const dia = diaSemanaDeFecha(formData.fechaInicio)
-  if (dia === null) return ''
-  const j = dia === 5 ? JORNADAS_ACUASAN.viernes : JORNADAS_ACUASAN.lunesAJueves
-  return `${j.inicio} a ${j.fin} · ${DIAS_SEMANA[dia]}`
+  if (dia === 5) {
+    return JORNADAS_ACUASAN.viernes.descripcionCorta
+  }
+  return JORNADAS_ACUASAN.lunesAJueves.descripcionCorta
 })
 
-// Referencia de la jornada (tooltip de la alerta, no ocupa espacio en pantalla)
+// Referencia institucional completa
 const tituloJornadaBoton =
-  'Jornada Acuasan: lunes a jueves 07:30 a 18:00 · viernes 07:30 a 17:30 · fines de semana solo personal en horas extras.'
+  'Jornada laboral Acuasan: Lunes a Jueves de 7:30 a.m. a 12:00 m. y 2:00 p.m. a 6:00 p.m. (8.5h) · Viernes de 7:30 a.m. a 12:00 m. y 2:00 p.m. a 5:30 p.m. (8h).'
 
 const minutosDeHora = (hhmm) => {
   const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/)
@@ -1219,16 +1287,42 @@ const minutosDeHora = (hhmm) => {
   return h * 60 + min
 }
 
-// Escribe formData.horasCalculadas a partir de los relojes. Si las horas no
-// forman un rango válido (falta una o el fin es menor/igual al inicio) no se
-// toca el campo: queda disponible para diligenciamiento manual.
+// Aplica automáticamente la jornada completa institucional según el día de la semana
+const aplicarJornadaCompletaSegunFecha = (fecha = formData.fechaInicio) => {
+  const dia = diaSemanaDeFecha(fecha)
+  if (dia === 5) {
+    horaInicioPermiso.value = JORNADAS_ACUASAN.viernes.inicio
+    horaFinPermiso.value = JORNADAS_ACUASAN.viernes.fin
+    formData.horasCalculadas = JORNADAS_ACUASAN.viernes.descripcionDetallada
+  } else {
+    horaInicioPermiso.value = JORNADAS_ACUASAN.lunesAJueves.inicio
+    horaFinPermiso.value = JORNADAS_ACUASAN.lunesAJueves.fin
+    formData.horasCalculadas = JORNADAS_ACUASAN.lunesAJueves.descripcionDetallada
+  }
+  formData.horaDetalle = formData.horasCalculadas
+}
+
+// Construye formData.horasCalculadas a partir de los relojes
 const construirHorario = () => {
   const ini = minutosDeHora(horaInicioPermiso.value)
   const fin = minutosDeHora(horaFinPermiso.value)
   if (ini === null || fin === null || fin <= ini) return
+
+  const dia = diaSemanaDeFecha(formData.fechaInicio)
+  if (esJornadaCompleta.value) {
+    if (dia === 5) {
+      formData.horasCalculadas = JORNADAS_ACUASAN.viernes.descripcionDetallada
+    } else {
+      formData.horasCalculadas = JORNADAS_ACUASAN.lunesAJueves.descripcionDetallada
+    }
+    formData.horaDetalle = formData.horasCalculadas
+    return
+  }
+
   const horas = (fin - ini) / 60
   const horasTexto = Number.isInteger(horas) ? String(horas) : horas.toFixed(1).replace('.', ',')
   formData.horasCalculadas = `${horaInicioPermiso.value} a ${horaFinPermiso.value} (${horasTexto} horas)`
+  formData.horaDetalle = formData.horasCalculadas
 }
 
 const reiniciarHorarioPermiso = () => {
@@ -1366,6 +1460,54 @@ const contarRegistrosPorDia = (dia) => {
 
 const seleccionarDia = (dia) => {
   diaSeleccionado.value = diaSeleccionado.value === dia ? null : dia
+}
+
+// 📅 Detección exacta de HOY (el día en el que estamos)
+const esDiaHoy = (dia) => {
+  return dia === diaActual &&
+         mesNumSeleccionado.value === mesActual &&
+         anioSeleccionado.value === anioActual
+}
+
+// 📅 Detección del día de permiso del funcionario que está activo en el formulario OCR/Verificación
+const diaPermisoUsuario = computed(() => {
+  if (!formData.fechaInicio) return null
+  const str = String(formData.fechaInicio).trim().split(' ')[0]
+  if (str.includes('/')) {
+    const parts = str.split('/')
+    if (parts.length >= 3) {
+      const d = parseInt(parts[0], 10)
+      const m = parseInt(parts[1], 10)
+      const a = parseInt(parts[2], 10)
+      if (a === anioSeleccionado.value && m === mesNumSeleccionado.value) return d
+    }
+  } else if (str.includes('-')) {
+    const parts = str.split('-')
+    if (parts.length >= 3) {
+      const a = parseInt(parts[0], 10)
+      const m = parseInt(parts[1], 10)
+      const d = parseInt(parts[2], 10)
+      if (a === anioSeleccionado.value && m === mesNumSeleccionado.value) return d
+    }
+  }
+  return null
+})
+
+// Función para ir directamente al periodo actual (Hoy)
+const irAHoy = () => {
+  anioSeleccionado.value = anioActual
+  mesNumSeleccionado.value = mesActual
+  diaSeleccionado.value = diaActual
+}
+
+// Tooltip informativo descriptivo por día
+const construirTooltipDia = (dia) => {
+  const partes = []
+  if (esDiaHoy(dia)) partes.push('Hoy (Día en el que estamos)')
+  if (dia === diaPermisoUsuario.value) partes.push(`Solicitud activa de ${formData.nombreFuncionario || 'este funcionario'}`)
+  const cant = contarRegistrosPorDia(dia)
+  if (cant > 0) partes.push(`${cant} permiso(s) en historial`)
+  return partes.length > 0 ? partes.join(' • ') : `Día ${dia}`
 }
 
 const seleccionarTodoElMes = () => {
@@ -1561,7 +1703,10 @@ const base64ToUint8 = (dataUrl) => {
 
 // (initPdfWorker se define en el módulo de extracción OCR)
 
-// Mejora de imagen para OCR: escala de grises + stretch de histograma
+// Mejora de imagen para OCR: escala de grises + stretch de histograma y,
+// solo cuando el escaneo tiene muchos tonos medios (letra borrosa, fondo
+// sucio), una binarización Otsu que afila el borde de la tinta. En imágenes
+// limpias (render digital nítido) no se binariza: el antialiasing ayuda.
 const mejorarImagenParaOCR = (srcCanvas) => {
   const w = srcCanvas.width, h = srcCanvas.height
   const out = document.createElement('canvas')
@@ -1580,403 +1725,45 @@ const mejorarImagenParaOCR = (srcCanvas) => {
     const v = Math.min(255, Math.round(((px[i] - min) / rng) * 255))
     px[i] = px[i+1] = px[i+2] = v; px[i+3] = 255
   }
+
+  // ─── Binarización Otsu condicional ───
+  // Umbral óptimo por varianza entre clases; se aplica únicamente si más del
+  // 25% de los píxeles quedaron en la zona media del histograma (escaneo
+  // borroso). Un documento nítido es casi blanco/negro puro y se respeta.
+  const total = Math.floor(px.length / 4)
+  const hist = new Array(256).fill(0)
+  for (let i = 0; i < px.length; i += 4) hist[px[i]]++
+  let sumaTotal = 0
+  for (let t = 0; t < 256; t++) sumaTotal += t * hist[t]
+  let sumaB = 0, pesoB = 0, maxVar = -1, umbral = 128
+  for (let t = 0; t < 256; t++) {
+    pesoB += hist[t]
+    if (pesoB === 0) continue
+    const pesoF = total - pesoB
+    if (pesoF === 0) break
+    sumaB += t * hist[t]
+    const mB = sumaB / pesoB
+    const mF = (sumaTotal - sumaB) / pesoF
+    const varianza = pesoB * pesoF * (mB - mF) * (mB - mF)
+    if (varianza > maxVar) { maxVar = varianza; umbral = t }
+  }
+  let zonaMedia = 0
+  for (let t = 51; t < 204; t++) zonaMedia += hist[t]
+  if (total > 0 && zonaMedia / total > 0.25) {
+    for (let i = 0; i < px.length; i += 4) {
+      const v = px[i] <= umbral ? 0 : 255
+      px[i] = px[i+1] = px[i+2] = v
+    }
+  }
+
   ctx.putImageData(d, 0, 0)
   return out
 }
 
-// Normalizar texto OCR: corregir confusiones típicas de escaneo
-const normalizarTextoOCR = (texto) => (texto || '')
-  .replace(/\r\n?/g, '\n').replace(/[ \t]{2,}/g, ' ')
-  .replace(/[\u2013\u2014\u2012]/g, '-')
-  .replace(/(\d)O(\d)/g, '$10$2')
-  .replace(/O(\d{1,2}[-\/.])(\d)/g, '0$1$2')
-  .replace(/(\d[-\/.])O(\d)/g, '$10$2')
-  .replace(/(\d)l(\d)/g, '$11$2')
-  .replace(/(\d{1,2})[\.\-\/]\s+(\d{1,2})/g, '$1-$2')
-  .replace(/([0-9])(am|pm)\b/gi, '$1 $2')
-  .replace(/(\d)\.(\d{2})\s*(am|pm)/gi, '$1:$2$3')
-
-// Diccionario y normalizador de cargos y áreas de Acuasan
-const normalizarCargoYDependencia = (texto) => {
-  const c = (texto || '').toLowerCase()
-  if (c.includes('potabiliz') || c.includes('lider') || c.includes('líder') || c.includes('planta') || c.includes('tratam')) {
-    return { cargo: 'Líder de Potabilización', dependencia: 'Planta de Tratamiento / Potabilización' }
-  }
-  if (c.includes('aux') && (c.includes('adt') || c.includes('adm') || c.includes('ada') || c.includes('tivo'))) {
-    return { cargo: 'Auxiliar Administrativo', dependencia: 'Administrativa' }
-  }
-  if (c.includes('fontan')) {
-    return { cargo: 'Fontanero', dependencia: 'Distribución y Redes' }
-  }
-  if (c.includes('alcant') || c.includes('redes')) {
-    return { cargo: 'Operario de Alcantarillado', dependencia: 'Alcantarillado' }
-  }
-  if (c.includes('conduct')) {
-    return { cargo: 'Conductor Operativo', dependencia: 'Operativa' }
-  }
-  if (c.includes('analist') || c.includes('fact')) {
-    return { cargo: 'Analista de Facturación y Cartera', dependencia: 'Comercial y Facturación' }
-  }
-  return { cargo: 'Funcionario Acuasan', dependencia: 'Operativa' }
-}
-
-// Limpiar y formatear nombre en mayúsculas limpias
-const limpiarNombreCompleto = (nombreRaw) => {
-  if (!nombreRaw) return ''
-  let n = nombreRaw
-    .replace(/^PERMISO\s+/i, '')
-    .replace(/202[0-9]{5,}.*$/i, '')
-    .replace(/\.pdf$/i, '')
-    .replace(/[0-9_\-\.\:\;\,\(\)]+/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
-  
-  if (n.length < 5) return ''
-  return n.toUpperCase()
-}
-
-// Parser de alta precisión para Formularios Acuasan + Órdenes EPS / Certificados Electorales
-const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagina1 = '') => {
-  const texto = normalizarTextoOCR(textoCompleto)
-  const p1 = normalizarTextoOCR(textoPagina1 || textoCompleto)
-  const campos = {}
-
-  console.groupCollapsed('[OCR texto multi-página extraído]')
-  console.log('--- PÁGINA 1 (SOLICITUD) ---', p1)
-  console.log('--- TEXTO COMPLETO ---', texto)
-  console.groupEnd()
-
-  const nombresMes = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-  // 1. NOMBRE DEL TRABAJADOR
-  let nombreEncontrado = ''
-
-  // A. De la orden médica o anexo EPS
-  const mPaciente = texto.match(/(?:Paciente|PACIENTE|Usuario|USUARIO|Afiliado|Ciudadano)[:\s]+([A-ZÁÉÍÓÚÑa-z\s]{6,55})(?=\s*ID|\s*CC|\s*Contrato|\s*Edad|\s*Plan|\n|$)/i)
-  if (mPaciente) {
-    const pNombre = limpiarNombreCompleto(mPaciente[1])
-    if (pNombre.split(' ').length >= 2) nombreEncontrado = pNombre
-  }
-
-  // B. Del nombre del archivo (ej: "PERMISO ANGELICA SANDRIT MORALES ROJAS...")
-  if (!nombreEncontrado && nombreArchivo) {
-    const pArch = limpiarNombreCompleto(nombreArchivo)
-    if (pArch.split(' ').length >= 2) nombreEncontrado = pArch
-  }
-
-  // C. De la Página 1 (NOMBRE: ...)
-  if (!nombreEncontrado) {
-    const mNombre = p1.match(/NOMBRE[:\s*]+([^\n]{5,65})(?=\s*CARGO|\s*FECHA|\n|$)/i)
-    if (mNombre) {
-      const raw = mNombre[1].replace(/\s*CARGO[:\s].*/i, '').trim()
-      const nLimpio = limpiarNombreCompleto(raw)
-      if (nLimpio.length >= 5) nombreEncontrado = nLimpio
-    }
-  }
-
-  if (nombreEncontrado) campos.nombreFuncionario = nombreEncontrado
-
-  // 2. CÉDULA DE CIUDADANÍA — SOLO con evidencia explícita del documento.
-  // El membrete de Acuasan trae el NIT 68.679.000 impreso; el OCR suele mal
-  // leerlo (p. ej. "58679000") y antes se reportaba como si fuera la cédula.
-  // Estrategia: primero etiquetas ("CÉDULA:", "documento No."), y el fallback
-  // de número suelto RECHAZA números rodeados de contexto empresarial (NIT,
-  // membrete) o que parecen teléfono/año. Sin evidencia: campo vacío.
-  const numerosAExcluir = ['890120175', '8901201757', '68679000', '1686790001', '2640000', '2610000']
-  let cedulaDetectada = ''
-
-  // Valida que una secuencia de dígitos pueda ser una cédula colombiana
-  const esCedulaPlausible = (digitos) => {
-    if (!/^[0-9]{6,11}$/.test(digitos)) return false
-    if (numerosAExcluir.includes(digitos)) return false
-    if (/^20(1[5-9]|2[0-9])$/.test(digitos)) return false        // año suelto
-    if (/^20(1[5-9]|2[0-9])[0-9]{4}$/.test(digitos)) return false // aaaamm
-    if (/^(30|31|32)[0-9]{8}$/.test(digitos)) return false        // celular
-    return true
-  }
-
-  // El texto previo a un número delata si es un dato empresarial, no la cédula
-  const contextoEsEmpresarial = (textoPrevio) =>
-    /(nit|n\.?\s*i\.?\s*t|registro|empresa|acueducto|alcantarillado|acuasan|e\.?\s?s\.?\s?p|tel[eé]fono|pbx)/i.test(textoPrevio || '')
-
-  // A. Etiquetas del formulario de solicitud y del certificado electoral E-18
-  const patronesCedula = [
-    /\b(?:CEDULA|C[eÉ]DULA)\s*(?:DE\s*CIUDADANIA)?\s*[:\-]?\s*N?o?\.?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi,
-    /\bC\.?\s?C\.?\s*(?:No\.?|#)?\s*[:\-]?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi,
-    /\bdocumento\s*(?:No\.?|n[uú]mero|#)?\s*[:\-]?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi,
-    /\bidentificad[oa]\s*(?:con)?\s*(?:el)?\s*(?:documento|c[eé]dula)?\s*(?:No\.?|#)?\s*([0-9][0-9\.,\s]{4,16}?)(?=[^\d\.,\s]|$)/gi
-  ]
-  for (const rx of patronesCedula) {
-    for (const m of texto.matchAll(rx)) {
-      const digitos = (m[1] || '').trim().replace(/[^\d]/g, '')
-      // Para un número ETIQUETADO la etiqueta es la evidencia; NO se aplica el
-      // guard de contexto (el membrete "ACUASAN..." queda a pocas decenas de
-      // caracteres de los campos del propio formulario y los rechazaría).
-      if (esCedulaPlausible(digitos)) {
-        cedulaDetectada = digitos
-        break
-      }
-    }
-    if (cedulaDetectada) break
-  }
-
-  // B. Último recurso: número suelto FUERA de contexto empresarial
-  if (!cedulaDetectada) {
-    for (const m of texto.matchAll(/\b[0-9][0-9\.,]{5,14}\b/g)) {
-      const digitos = (m[0] || '').replace(/[^\d]/g, '')
-      const previo = texto.slice(Math.max(0, m.index - 45), m.index)
-      if (esCedulaPlausible(digitos) && !contextoEsEmpresarial(previo)) {
-        cedulaDetectada = digitos
-        break
-      }
-    }
-  }
-
-  if (cedulaDetectada) campos.cedula = cedulaDetectada
-
-  // 3. CARGO & ÁREA / DEPENDENCIA
-  const mCargo =
-    texto.match(/\b(?:CARGO|PUESTO|OFICIO)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i) ||
-    p1.match(/\b(?:CARGO|PUESTO|OFICIO)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i)
-
-  if (mCargo) {
-    const cargoLiteral = mCargo[1].replace(/\s{2,}/g, ' ').trim()
-    const info = normalizarCargoYDependencia(cargoLiteral)
-    campos.cargo = info.cargo !== 'Funcionario Acuasan' ? info.cargo : cargoLiteral
-    if (!campos.dependencia && info.dependencia) campos.dependencia = info.dependencia
-  }
-
-  const mDependencia =
-    texto.match(/\b(?:DEPENDENCIA|ÁREA|AREA)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i) ||
-    p1.match(/\b(?:DEPENDENCIA|ÁREA|AREA)\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\t ]{2,50})/i)
-
-  if (mDependencia) {
-    const depLiteral = mDependencia[1].replace(/\s{2,}/g, ' ').trim()
-    const info = normalizarCargoYDependencia(depLiteral)
-    campos.dependencia = info.dependencia !== 'Operativa' ? info.dependencia : depLiteral
-  }
-
-  // Fallback inteligente para cargos de Acuasan reconocidos en el documento
-  if (!campos.cargo) {
-    if (/potabiliz|planta|tratam/i.test(texto)) {
-      campos.cargo = 'Líder de Potabilización'
-      campos.dependencia = 'Planta de Tratamiento / Potabilización'
-    } else if (/fontan/i.test(texto)) {
-      campos.cargo = 'Fontanero'
-      campos.dependencia = 'Distribución y Redes'
-    } else if (/alcant/i.test(texto)) {
-      campos.cargo = 'Operario de Alcantarillado'
-      campos.dependencia = 'Redes de Alcantarillado'
-    } else if (/conduct/i.test(texto)) {
-      campos.cargo = 'Conductor Operativo'
-      campos.dependencia = 'Transporte y Maquinaria'
-    } else if (/analist/i.test(texto)) {
-      campos.cargo = 'Analista de Facturación y Cartera'
-      campos.dependencia = 'Comercial y Facturación'
-    } else if (/auxiliar/i.test(texto)) {
-      campos.cargo = 'Auxiliar Administrativo'
-      campos.dependencia = 'Administrativa'
-    }
-  }
-
-  // 4. FECHA DEL PERMISO (PÁGINA 1 Y DOCUMENTO)
-  let dd = '', mm = '', aa = ''
-
-  const mesesVariaciones = {
-    enero: 1, ene: 1,
-    febrero: 2, feb: 2,
-    marzo: 3, mar: 3,
-    abril: 4, abr: 4,
-    mayo: 5, may: 5,
-    junio: 6, jun: 6,
-    julio: 7, jul: 7,
-    agosto: 8, ago: 8, agos: 8, agoslo: 8, agto: 8, agost: 8,
-    septiembre: 9, setiembre: 9, sep: 9, sept: 9,
-    octubre: 10, oct: 10,
-    noviembre: 11, nov: 11,
-    diciembre: 12, dic: 12
-  }
-
-  // A. Buscar en P1 o texto completo formato textual: "18 de Agosto 2026", "18 de Agoslo 2026", "FECHA PERMISO: 18 de Agosto 2026"
-  const mP1Texto =
-    p1.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO|SOLICITUD|San\s*Gil)?[\s\:\.\-\,\_]*?([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})(?:\s+de|\s+del\s+a[nñ]o|\s+de\s+)?\s*(202\d)/i) ||
-    texto.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO)?[\s\:\.\-\,\_]*?([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})(?:\s+de|\s+del\s+a[nñ]o|\s+de\s+)?\s*(202\d)/i) ||
-    p1.match(/\b([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})\s+(?:de\s+)?(202\d)\b/i) ||
-    texto.match(/\b([0-3]?[0-9])\s+de\s+([a-záéíóúñ]{3,12})\s+(?:de\s+)?(202\d)\b/i)
-
-  if (mP1Texto) {
-    const dVal = parseInt(mP1Texto[1], 10)
-    const mStr = mP1Texto[2].toLowerCase()
-    let mVal = null
-    for (const [k, v] of Object.entries(mesesVariaciones)) {
-      if (mStr.startsWith(k) || k.startsWith(mStr)) { mVal = v; break }
-    }
-    if (dVal >= 1 && dVal <= 31 && mVal) {
-      dd = String(dVal).padStart(2, '0')
-      mm = String(mVal).padStart(2, '0')
-      aa = mP1Texto[3]
-    }
-  }
-
-  // B. Buscar formato numérico: "18/08/2026", "18-08-2026", "18.08.2026"
-  if (!dd || !mm || !aa) {
-    const mP1Num =
-      p1.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO|SOLICITUD)?[\s\:\.\-]*?([0-3]?[0-9])\s*[\/\-\._]\s*([0-1]?[0-9])\s*[\/\-\._]\s*(202\d)/i) ||
-      texto.match(/(?:FECHA\s*(?:DEL\s*)?PERMISO|FECHA\s*(?:DE\s*)?SOLICITUD|FECHA|PERMISO)?[\s\:\.\-]*?([0-3]?[0-9])\s*[\/\-\._]\s*([0-1]?[0-9])\s*[\/\-\._]\s*(202\d)/i)
-
-    if (mP1Num) {
-      const dVal = parseInt(mP1Num[1], 10), mVal = parseInt(mP1Num[2], 10)
-      if (dVal >= 1 && dVal <= 31 && mVal >= 1 && mVal <= 12) {
-        dd = String(dVal).padStart(2, '0')
-        mm = String(mVal).padStart(2, '0')
-        aa = mP1Num[3]
-      }
-    }
-  }
-
-  // C. Asignar fecha normalizada
-  if (dd && mm && aa) {
-    campos.fechaInicio = `${dd}/${mm}/${aa}`
-    campos.fechaFin = `${dd}/${mm}/${aa}`
-    campos.fechaPermisoTexto = `${parseInt(dd, 10)} de ${nombresMes[parseInt(mm, 10)] || ''} de ${aa}`
-  } else {
-    campos.fechaInicio = ''
-    campos.fechaFin = ''
-    campos.fechaPermisoTexto = ''
-  }
-
-  // 5. HORARIO: Detectar jornada laboral completa o rangos de horas
-  if (/jornada\s*laboral|jornada\s*completa|todo\s*el\s*d[ií]a|8\s*horas?/i.test(texto)) {
-    campos.horaInicio = '07:30'
-    campos.horaFin = '18:00'
-    campos.horaDetalle = '07:30 a 18:00 (Jornada Laboral Completa)'
-    campos.horasCalculadas = '8.0'
-    campos.jornadaCompleta = true
-  } else {
-    const mHoras = texto.match(/([0-1]?[0-9]|2[0-3])[:\.]?([0-5][0-9])?\s*(?:am|pm)?\s*(?:a|hasta|-)\s*([0-1]?[0-9]|2[0-3])[:\.]?([0-5][0-9])?\s*(?:am|pm)?/i)
-    if (mHoras) {
-      campos.horaDetalle = mHoras[0].trim()
-      campos.horasCalculadas = '4.0'
-    } else {
-      campos.horaDetalle = ''
-      campos.horasCalculadas = ''
-    }
-  }
-
-  // 6. TIPO DE PERMISO & CASILLAS [X]
-  let tipoDetectado = ''
-
-  const rxCompMarcado = /[Cc]ompensatori[ao]\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]ompensatori[ao]/
-  const hayEvidenciaElectoral = /registradur|jurament|jurado|electoral|votaci[oó]n|E-18|E\.?18/i.test(texto)
-  if (rxCompMarcado.test(p1) && hayEvidenciaElectoral) {
-    tipoDetectado = 'Compensatorio'
-  }
-
-  const rxMedicoMarcado = /M[eé]dic[ao]\*?\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*M[eé]dic[ao]\*?/
-  if (!tipoDetectado && rxMedicoMarcado.test(p1)) {
-    tipoDetectado = 'Cita Médica'
-  }
-
-  if (!tipoDetectado) {
-    if (rxCompMarcado.test(p1)) {
-      tipoDetectado = 'Compensatorio'
-    }
-  }
-
-  if (!tipoDetectado) {
-    const rxPersonalMarcado = /[Pp]ersonal\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Pp]ersonal/
-    if (rxPersonalMarcado.test(p1)) {
-      tipoDetectado = 'Personal'
-    }
-  }
-
-  if (!tipoDetectado) {
-    const rxCalaMarcado = /[Cc]alamidad\s*[\[\(]?[xX✓✗☑]\s*[\]\)]?|[\[\(]?[xX✓✗☑][\]\)]?\s*[Cc]alamidad/
-    if (rxCalaMarcado.test(p1)) {
-      tipoDetectado = 'Calamidad Doméstica'
-    }
-  }
-
-  if (!tipoDetectado) {
-    const rxEstudioMarcado = /[Ee]studio|[Cc]apacitaci[oó]n\s*[\[\(]?[xX✓✗☑]/
-    if (rxEstudioMarcado.test(p1)) {
-      tipoDetectado = 'Estudio / Capacitación'
-    }
-  }
-
-  if (!tipoDetectado) {
-    const hayMedico = /m[eé]dic[ao]|cita\s*m[eé]dic|eps|cardiolog|urolog|ortoped|remisi[oó]n|especialista|orden\s*m[eé]dic|diagn[oó]stico/i.test(texto)
-    const hayJurado = /jurado|consulta\s*popular|votaci[oó]n|electoral|certificado\s*electoral|registradur|jurament/i.test(texto)
-    const hayCalamidad = /calamidad|fallecimiento|inundaci[oó]n|accidente\s*familiar/i.test(texto)
-    const hayEstudio = /universidad|capacitaci[oó]n|seminario|congreso|examen\s*acad[eé]mico/i.test(texto)
-
-    if (hayJurado) tipoDetectado = 'Compensatorio'
-    else if (hayMedico) tipoDetectado = 'Cita Médica'
-    else if (hayCalamidad) tipoDetectado = 'Calamidad Doméstica'
-    else if (hayEstudio) tipoDetectado = 'Estudio / Capacitación'
-  }
-
-  campos.tipoPermiso = tipoDetectado
-
-  // 7. MOTIVO / JUSTIFICACIÓN
-  let motivoExtraido = ''
-
-  const rxMotivoLinea = /MOTIVO[\s\:\*]*(?:Compensatorio|M[eé]dic[ao]\*?|Personal|Calamidad)?[\s\[\]\(\)xXoO\*]*([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\/\s\,\.\-\(\)]{6,120})/i
-  const mMotivoLinea = p1.match(rxMotivoLinea)
-  if (mMotivoLinea) {
-    let trabajo = mMotivoLinea[1]
-      .replace(/en caso de cita.*/i, '')
-      .replace(/\*en caso.*/i, '')
-      .replace(/firma.*/i, '')
-      .replace(/solicitante.*/i, '')
-      .replace(/jefe.*/i, '')
-      .replace(/[_|~]{2,}/g, ' ')
-
-    trabajo = trabajo
-      .replace(/[\[\]\(\)\{\}]/g, ' ')
-      .replace(/[xX✓✗☑☒☐]{1,2}/g, ' ')
-      .replace(/\b(?:compensatorio|m[eé]dic[oa]\*?|calamidad|personal|estudio|capacitaci[oó]n)\b/gi, ' ')
-
-    const rxRuidoInicial = /^(?:[^\wáéíóúñ]+|\b[a-záéíóúñ]{1,2}\b|\b\d{1,2}\b)\s*/i
-    let estable = false
-    while (!estable) {
-      const recorte = trabajo.replace(rxRuidoInicial, '')
-      estable = recorte === trabajo
-      trabajo = recorte
-    }
-    trabajo = trabajo.replace(/\s{2,}/g, ' ').trim()
-
-    if (trabajo.length >= 5 && /[a-záéíóúñ]{3,}/i.test(trabajo)) {
-      motivoExtraido = trabajo
-    }
-  }
-
-  if (!motivoExtraido || motivoExtraido.length < 5) {
-    const rxCitaManuscrita = /c[\/\.]?ta\s+m[eé]dic[ao][a-z\s\/\,\.]{0,60}/i
-    const mCita = texto.match(rxCitaManuscrita)
-    if (mCita) {
-      motivoExtraido = mCita[0].replace(/\s+/g, ' ').trim()
-    }
-  }
-
-  if (!motivoExtraido || motivoExtraido.length < 5) {
-    if (/registradur|jurament|jurado|electoral|votaci[oó]n|E-18/i.test(texto)) {
-      motivoExtraido = 'Compensatorio por función electoral (certificado E-18 / Registraduría adjunto)'
-    } else if (/cardiolog/i.test(texto)) {
-      motivoExtraido = 'Cita médica - Consulta especialista Cardiología'
-      if (/reclamar|medicam/i.test(texto)) motivoExtraido += ' / Reclamar medicamentos'
-    } else if (/urolog/i.test(texto)) {
-      motivoExtraido = 'Cita médica - Consulta especialista Urología'
-    } else if (/reclamar|medicam/i.test(texto)) {
-      motivoExtraido = 'Cita médica - Reclamar medicamentos (EPS)'
-    }
-  }
-
-  campos.motivo = motivoExtraido || ''
-  campos.motivoManuscrito = motivoExtraido || ''
-
-  return campos
-}
+// Normalizar texto OCR y parsear los campos del permiso: el motor completo
+// (etiquetas des-OCRizadas, rangos horarios con guardas, regla de oro «el dato
+// sale del documento o el campo queda vacío») vive en services/parserPermisosOcr.js,
+// módulo puro que se prueba directo desde Node con el corpus de documentos.
 
 // Aplicar campos al formulario Vue
 const aplicarCampos = (campos) => {
@@ -1990,7 +1777,12 @@ const aplicarCampos = (campos) => {
   formData.tipoPermiso = campos.tipoPermiso || ''
   formData.horaDetalle = campos.horaDetalle || ''
   formData.horasCalculadas = campos.horasCalculadas || ''
-  if (campos.horaInicio && campos.horaFin) {
+  if (campos.jornadaCompleta && campos.fechaInicio) {
+    // El documento marca jornada completa: la jornada real depende del día de
+    // la semana de la fecha extraída (el viernes termina 5:30 p.m., no 6:00).
+    // fechaInicio ya quedó asignado unas líneas arriba.
+    aplicarJornadaCompletaSegunFecha(campos.fechaInicio)
+  } else if (campos.horaInicio && campos.horaFin) {
     horaInicioPermiso.value = campos.horaInicio
     horaFinPermiso.value = campos.horaFin
     construirHorario()
@@ -2072,7 +1864,8 @@ const extraerTextoPaginaEncargado = async (page) => {
 }
 
 // Worker de Tesseract persistente: se crea una sola vez por sesión y se
-// reutiliza en todas las páginas y documentos.
+// reutiliza en todas las páginas y documentos. El modo de segmentación se
+// ajusta por página en ejecutarOCR (multi-pase).
 let _ocrWorkerTesseract = null
 const obtenerWorkerOCR = async () => {
   if (_ocrWorkerTesseract) return _ocrWorkerTesseract
@@ -2093,26 +1886,56 @@ const terminarWorkerOCR = async () => {
   }
 }
 
-// Ejecutar Tesseract sobre un canvas con timeout seguro de 40s
+// Ejecutar Tesseract sobre un canvas con timeout seguro de 40s por intento.
+// MULTI-PASE: cada PDF escaneado llega con un layout distinto (formato en
+// bloque, casillas en columnas, membretes dispersos). El primer pase usa PSM 6
+// (bloque uniforme); si la confianza queda baja (<65) o el texto es escaso
+// (<40 caracteres útiles), se re-intenta con PSM 4 (columnas) y PSM 11 (texto
+// disperso) y se conserva el mejor resultado de los tres.
+const PASES_OCR = [
+  { psm: '6', nombre: 'bloque uniforme' },
+  { psm: '4', nombre: 'columnas' },
+  { psm: '11', nombre: 'texto disperso' }
+]
+
 const ejecutarOCR = async (canvas) => {
   try {
     const canvasMejorado = mejorarImagenParaOCR(canvas)
     const worker = await obtenerWorkerOCR()
 
-    const ocrTask = worker.recognize(canvasMejorado)
-    const timeoutTask = new Promise((resolve) =>
-      setTimeout(() => resolve({ agotado: true }), 40000)
-    )
+    let mejor = { texto: '', confianza: 0, agotado: false }
+    for (const pase of PASES_OCR) {
+      await worker.setParameters({
+        tessedit_pageseg_mode: pase.psm,
+        preserve_interword_spaces: '1'
+      })
 
-    const res = await Promise.race([ocrTask, timeoutTask])
-    if (res && res.agotado) {
-      console.warn('[OCR] Tiempo agotado para esta página')
-      return { texto: '', confianza: 0, agotado: true }
+      const ocrTask = worker.recognize(canvasMejorado)
+      const timeoutTask = new Promise((resolve) =>
+        setTimeout(() => resolve({ agotado: true }), 40000)
+      )
+      const res = await Promise.race([ocrTask, timeoutTask])
+
+      if (res && res.agotado) {
+        // Esta página es demasiado pesada para el tiempo disponible: no tiene
+        // caso quemar otros dos pases con el mismo destino.
+        console.warn('[OCR] Tiempo agotado para esta página')
+        return { ...mejor, agotado: true }
+      }
+
+      const texto = (res && res.data && res.data.text) ? res.data.text : ''
+      const confianza = (res && res.data && typeof res.data.confidence === 'number') ? res.data.confidence : 0
+      console.info(`[OCR pase ${pase.psm} (${pase.nombre})] ${texto.length} caracteres (confianza: ${confianza})`)
+
+      if (texto.trim().length > mejor.texto.trim().length ||
+          (texto.trim().length === mejor.texto.trim().length && confianza > mejor.confianza)) {
+        mejor = { texto, confianza, agotado: false }
+      }
+
+      // Lectura suficiente: no se gastan más pases
+      if (confianza >= 65 && texto.replace(/\s/g, '').length >= 40) break
     }
-    const texto = (res && res.data && res.data.text) ? res.data.text : ''
-    const confianza = (res && res.data && typeof res.data.confidence === 'number') ? res.data.confidence : null
-    console.info(`[OCR Resultado] ${texto.length} caracteres reconocidos (confianza: ${confianza ?? 'n/d'})`)
-    return { texto, confianza, agotado: false }
+    return mejor
   } catch (e) {
     console.warn('[OCR Bypass]', e)
     await terminarWorkerOCR()
@@ -2280,20 +2103,25 @@ const handleScannedFileUpload = async (e) => {
     try {
       const { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas } =
         await procesarDocumentoCompleto(event.target.result, isPdfFile.value)
+
+      console.groupCollapsed('[OCR texto multi-página extraído]')
+      console.log('--- PÁGINA 1 (SOLICITUD) ---', textoPagina1)
+      console.log('--- TEXTO COMPLETO ---', textoCompleto)
+      console.groupEnd()
+
       const campos = parsearTextoPermiso(textoCompleto, file.name, textoPagina1)
       aplicarCampos(campos)
 
-      // Confianza REAL: % de campos clave con evidencia en el documento.
-      const clavesRevision = [
-        ['nombreFuncionario', 'Nombre'],
-        ['cedula', 'Cédula'],
-        ['fechaInicio', 'Fecha'],
-        ['tipoPermiso', 'Tipo'],
-        ['motivo', 'Motivo']
-      ]
-      const faltantes = clavesRevision.filter(([k]) => !String(formData[k] || '').trim())
-      confianzaOcrReal.value = Math.round(((clavesRevision.length - faltantes.length) / clavesRevision.length) * 100)
-      camposFaltantesOcr.value = faltantes.map(([, etiqueta]) => etiqueta)
+      // Confianza REAL: % de las 9 áreas del formulario con evidencia en el
+      // documento (Nombre, Cédula, Cargo, Área, Fecha, Hora Inicio, Hora Fin,
+      // Tipo y Motivo). Las horas viven en los relojes, no en formData.
+      const { faltantes, confianza } = evaluarCamposExtraidos({
+        ...formData,
+        horaInicio: horaInicioPermiso.value,
+        horaFin: horaFinPermiso.value
+      })
+      confianzaOcrReal.value = confianza
+      camposFaltantesOcr.value = faltantes
 
       ocrProgress.value = 100
       ocrStepMessage.value = '¡Lectura completada!'
@@ -2314,8 +2142,8 @@ const handleScannedFileUpload = async (e) => {
       } else {
         lanzarAlertaBootstrap(
           'warning',
-          `OCR parcial (${confianzaOcrReal.value}%) — ${faltantes.length} campo(s) pendiente(s)`,
-          `El documento se leyó, pero no se pudo confirmar en el PDF: ${faltantes.map(([, etiqueta]) => etiqueta).join(', ')}. Diligencie esos campos manualmente. ${paginasOCRAgotadas > 0 ? `(${paginasOCRAgotadas} página(s) tardaron demasiado en leerse).` : ''}`,
+          `OCR parcial (${confianza}%) — ${faltantes.length} área(s) pendiente(s)`,
+          `El documento se leyó, pero no se pudo confirmar en el PDF: ${faltantes.join(', ')}. Diligencie esas áreas manualmente. ${paginasOCRAgotadas > 0 ? `(${paginasOCRAgotadas} página(s) tardaron demasiado en leerse).` : ''}`,
           9000
         )
       }
@@ -2673,6 +2501,95 @@ const confirmarYEnviar = async () => {
   transform: translateY(-6px);
 }
 
+/* 📅 Estilos del Calendario y Señalización de Hoy / Permisos */
+.btn-cal-dia {
+  height: 30px !important;
+  font-size: 0.76rem !important;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-cal-dia:hover {
+  filter: brightness(0.95);
+  transform: scale(1.04);
+  z-index: 2;
+}
+
+/* Señalización destacada de HOY (el día en el que estamos) */
+.cal-dia-hoy {
+  outline: 2px solid #004884 !important;
+  outline-offset: -1px;
+  font-weight: 800 !important;
+  position: relative;
+}
+.cal-dia-hoy:not(.btn-primary):not(.btn-info-subtle):not(.btn-warning-subtle) {
+  background-color: #f0f7ff !important;
+  color: #004884 !important;
+}
+.cal-dia-hoy.btn-primary {
+  outline: 2px solid #38bdf8 !important;
+  outline-offset: -2px;
+  box-shadow: 0 0 0 3px rgba(0, 72, 132, 0.35) !important;
+}
+
+/* Indicador de punto inferior exclusivo de HOY (coexiste con badges y colores de permiso) */
+.indicador-hoy-dot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #004884;
+  pointer-events: none;
+}
+.btn-primary .indicador-hoy-dot {
+  background: #ffffff;
+}
+.btn-info-subtle .indicador-hoy-dot {
+  background: #0284c7;
+}
+.btn-warning-subtle .indicador-hoy-dot {
+  background: #d97706;
+}
+
+/* Señalización del día de permiso del usuario cargado en el formulario */
+.cal-dia-permiso-usuario:not(.btn-primary):not(.btn-info-subtle) {
+  background-color: #fef3c7 !important;
+  border-color: #f59e0b !important;
+  color: #78350f !important;
+  font-weight: 800 !important;
+}
+
+/* Leyenda del calendario */
+.legend-ring-hoy {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 2px solid #004884;
+  background: #f0f7ff;
+  display: inline-block;
+}
+.legend-badge-perm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #dc3545;
+  color: #ffffff;
+  font-size: 0.5rem;
+  font-weight: 700;
+}
+.legend-pin-func {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
 /* Acuasan form controls styling */
 .form-control:focus,
 .form-select:focus {
@@ -2810,12 +2727,15 @@ const confirmarYEnviar = async () => {
   font-weight: 400;
 }
 
-/* Relojes del permiso: dígitos tabulares y área de click cómoda */
+/* Relojes del permiso: dígitos tabulares, compactos y perfectamente nivelados a 28px */
 .permiso-form input[type='time'] {
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.2px;
   cursor: pointer;
-  min-height: 34px;
+  height: 28px !important;
+  min-height: 28px !important;
+  font-size: 0.74rem !important;
+  padding: 2px 6px !important;
 }
 
 /* Avisos compactos del horario: píldoras, no alertas gigantes */
