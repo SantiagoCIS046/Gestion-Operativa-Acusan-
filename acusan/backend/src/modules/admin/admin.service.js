@@ -97,8 +97,21 @@ export const AdminService = {
 
   /**
    * Eliminar un usuario del sistema (operación irreversible)
+   * Cada login del usuario dejó un RegistroAcceso con relación requerida
+   * (onDelete: Restrict por defecto) que bloquea el delete con P2003.
+   * Se eliminan sus accesos primero, en la misma transacción.
    */
   async eliminarUsuario(id) {
-    return prisma.usuario.delete({ where: { id } })
+    try {
+      await prisma.$transaction([
+        prisma.registroAcceso.deleteMany({ where: { usuarioId: id } }),
+        prisma.usuario.delete({ where: { id } })
+      ])
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw { status: 404, message: 'El usuario no existe (puede haber sido eliminado previamente).' }
+      }
+      throw error
+    }
   }
 }

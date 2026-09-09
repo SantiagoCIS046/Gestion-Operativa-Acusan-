@@ -74,8 +74,9 @@ export const AdminController = {
 
       res.json({ success: true, message: 'Usuario eliminado correctamente del sistema' })
     } catch (error) {
+      const status = error.status || 500
       logger.error('SISTEMA', 'ADMIN ERR', `eliminarUsuario ID ${req.params.id} — ${error.message}`)
-      res.status(500).json({ success: false, message: 'Error al eliminar usuario', error: error.message })
+      res.status(status).json({ success: false, message: error.message || 'Error al eliminar usuario' })
     }
   }
 }
