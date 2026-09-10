@@ -228,6 +228,95 @@ const CASOS = [
     nombre: '18. Plan B: ENTRADA/SALIDA separadas',
     texto: 'ENTRADA: 8:00  SALIDA: 12:00',
     expect: { horaInicio: '08:00', horaFin: '12:00' }
+  },
+  {
+    nombre: '19. TIPO DE PERMISO rotulado con valor que las keywords no ven',
+    texto: [
+      'SOLICITUD DE PERMISO LABORAL',
+      'NOMBRE: SANDRA MILENA RUEDA',
+      'TIPO DE PERMISO: Estudio'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'SANDRA MILENA RUEDA',
+      tipoPermiso: 'Estudio / Capacitación'
+    }
+  },
+  {
+    nombre: '20. TIPO DE PERMISO: Calamidad Doméstica (rotulado y keyword)',
+    texto: [
+      'NOMBRE: CAMILO ANDRES NIÑO',
+      'TIPO DE PERMISO: Calamidad Doméstica',
+      'FECHA: 30/10/2026'
+    ].join('\n'),
+    expect: {
+      fechaInicio: '30/10/2026',
+      tipoPermiso: 'Calamidad Doméstica'
+    }
+  },
+  {
+    nombre: '21. TIPO DE PERMISO: Estudio/Capacitacion (sin tildes, con barra)',
+    texto: [
+      'NOMBRE: DIANA PATRICIA SOTO',
+      'TIPO DE PERMISO: Estudio/Capacitacion',
+      'FECHA: 05/11/2026'
+    ].join('\n'),
+    expect: {
+      fechaInicio: '05/11/2026',
+      tipoPermiso: 'Estudio / Capacitación'
+    }
+  },
+  {
+    nombre: '22. Meridianos literales: "2:00 de la tarde a 4:00 de la tarde"',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: PEDRO ALFONSO MORA',
+      'FECHA: 25/09/2026',
+      'HORA: 2:00 de la tarde a 4:00 de la tarde'
+    ].join('\n'),
+    expect: {
+      fechaInicio: '25/09/2026',
+      horaInicio: '14:00',
+      horaFin: '16:00'
+    }
+  },
+  {
+    nombre: '23. Etiqueta DESCRIPCION como rótulo del motivo',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: LAURA VARGAS',
+      'DESCRIPCION: cita control medico'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'LAURA VARGAS',
+      tipoPermiso: 'Cita Médica',
+      motivo: 'cita control medico'
+    }
+  },
+  {
+    nombre: '24. Columna rota: valor del CARGO en la línea siguiente',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: JUAN DAVID AVENDAÑO',
+      'CARGO:',
+      'Auxiliar Administrativo'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'JUAN DAVID AVENDAÑO',
+      cargo: 'Auxiliar Administrativo',
+      dependencia: 'Administrativa'
+    }
+  },
+  {
+    nombre: '25. Mes truncado por el OCR: "18 de novbre de 2026"',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: MIGUEL ESPITIA',
+      'FECHA: 18 de novbre de 2026'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'MIGUEL ESPITIA',
+      fechaInicio: '18/11/2026'
+    }
   }
 ]
 
@@ -240,6 +329,7 @@ const CASOS_RANGO = [
   ['11 a.m. a 1 p.m.', '11:00', '13:00'],
   ['11 a.m. a 1', '11:00', '13:00'],
   ['07:30-18:00', '07:30', '18:00'],
+  ['2:00 de la tarde a 4:00 de la tarde', '14:00', '16:00'],
   ['Página 1 a 2', null, null],
   ['01-12-2026', null, null],
   ['del 8 al 10 de agosto de 2026', null, null],

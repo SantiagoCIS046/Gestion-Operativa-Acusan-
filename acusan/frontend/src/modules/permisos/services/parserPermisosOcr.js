@@ -118,6 +118,29 @@ export const normalizarCargoYDependencia = (texto) => {
   return { cargo: 'Funcionario Acuasan', dependencia: 'Operativa' }
 }
 
+/**
+ * Mapea el valor rotulado "TIPO DE PERMISO: …" al nombre EXACTO del select del
+ * formulario (VistaEncargado): un valor que el select no reconoce dejaría el
+ * campo desalineado aunque el dato sí esté en el documento. Acepta variaciones
+ * de escritura (con/sin tildes, "Estudio/Capacitación", "asunto propio") y
+ * devuelve '' si el valor rotulado no corresponde a ningún tipo conocido —
+ * regla de oro: la etiqueta es evidencia, pero el valor no se adivina.
+ */
+export const mapearTipoPermiso = (valor) => {
+  const v = String(valor || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!v) return ''
+  if (v.includes('compensatori') || v.includes('votacion') || v.includes('electoral')) return 'Compensatorio'
+  if (v.includes('medic') || v.includes('salud') || v.includes('eps')) return 'Cita Médica'
+  if (v.includes('calamidad')) return 'Calamidad Doméstica'
+  if (v.includes('estudio') || v.includes('capacitacion') || v.includes('academ')) return 'Estudio / Capacitación'
+  if (v.includes('personal') || v.includes('asunto')) return 'Personal'
+  return ''
+}
+
 // ─── Fechas ──────────────────────────────────────────────────────────────────
 
 const MESES_VARIACIONES = {
@@ -222,7 +245,13 @@ const hhmm = (h, min) => `${String(h).padStart(2, '0')}:${String(min).padStart(2
  */
 export const extraerRangoHorario = (texto) => {
   if (!texto) return null
+  // Meridianos literales colombianos: "2:00 de la tarde a 4:00 de la tarde".
+  // RX_RANGO solo entiende a.m./p.m., así que se traducen ANTES del matching:
+  // "de la mañana" es a.m.; "de la tarde" y "de la noche" son p.m.
   const t = texto
+    .replace(/(\d)\s+de\s+la\s+ma[nñ]ana\b/gi, '$1 a.m.')
+    .replace(/(\d)\s+de\s+la\s+tarde\b/gi, '$1 p.m.')
+    .replace(/(\d)\s+de\s+la\s+noche\b/gi, '$1 p.m.')
 
   // Guardas del final del rango:
   //   (?!\d)          — no es cola de un número mayor (cédulas, NIT)
@@ -531,11 +560,16 @@ export const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagi
     if (rxCalaMarcado.test(p1)) tipoDetectado = 'Calamidad Doméstica'
   }
   if (!tipoDetectado) {
-    // "Personal" escrito como valor rotulado ("TIPO DE PERMISO: Personal",
-    // "PERMISO PERSONAL"). La palabra suelta no cuenta: aparece en frases como
-    // "personal administrativo" y sembraría un tipo que el documento no dice.
-    const rxPersonalLabeled = /tipo\s+de\s+permiso\s*[:\-]\s*personal|permiso\s+personal|asunto\s+propio/i
-    if (rxPersonalLabeled.test(texto)) tipoDetectado = 'Personal'
+    // Valor rotulado genérico: "TIPO DE PERMISO: Cita Médica" — con o sin
+    // tildes, "Estudio/Capacitación", "Compensación electoral", etc. El valor
+    // se mapea al nombre EXACTO del select del formulario; si el rótulo trae
+    // algo que no corresponde a un tipo conocido, queda vacío (no se adivina).
+    const mTipoRotulado = texto.match(/\btipo\s+de\s+permiso\s*[:\-]\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ\/\s]{3,40})/i)
+    if (mTipoRotulado) tipoDetectado = mapearTipoPermiso(mTipoRotulado[1])
+    // "PERMISO PERSONAL" / "asunto propio" como frase natural del documento.
+    // La palabra "personal" suelta no cuenta: aparece en frases como "personal
+    // administrativo" y sembraría un tipo que el documento no dice.
+    if (!tipoDetectado && /permiso\s+personal|asunto\s+propio/i.test(texto)) tipoDetectado = 'Personal'
   }
   if (!tipoDetectado) {
     const rxEstudioMarcado = /[Ee]studio|[Cc]apacitaci[oó]n\s*[\[\(]?[xX✓✗☑]/
@@ -556,8 +590,10 @@ export const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagi
   // ═══ 8. MOTIVO Y JUSTIFICACIÓN EXTRAÍDA ═══
   let motivoExtraido = ''
 
+  // Etiquetas alternas del motivo según el formato del formulario: algunos
+  // rotulan la casilla como DESCRIPCIÓN (DEL MOTIVO) o JUSTIFICACIÓN.
   const rxMotivoLinea = new RegExp(
-    String.raw`MOTIVO[\s\:\*]*(?:Compensatorio|M[eé]dic[oa]\*?|Personal|Calamidad)?[\s\[\]\(\)\{\}xX✓✗☑☒☐\*]*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\/\s\,\.\-\(\)]{6,140}?)(?=\s{2,}|\s*\b${ETIQUETAS_CORTE}\b\s*[:.\-]?|[.\n]|$)`,
+    String.raw`(?:MOTIVO|DESCRIPC[IÍ]ON(?:\s+DEL\s+MOTIVO)?|JUSTIFICACI[oÓ]N)[\s\:\*]*(?:Compensatorio|M[eé]dic[oa]\*?|Personal|Calamidad)?[\s\[\]\(\)\{\}xX✓✗☑☒☐\*]*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\/\s\,\.\-\(\)]{6,140}?)(?=\s{2,}|\s*\b${ETIQUETAS_CORTE}\b\s*[:.\-]?|[.\n]|$)`,
     'i'
   )
   const mMotivoLinea = p1.match(rxMotivoLinea)
@@ -657,6 +693,7 @@ export default {
   desOcrizarEtiquetas,
   limpiarNombreCompleto,
   normalizarCargoYDependencia,
+  mapearTipoPermiso,
   esFechaReal,
   extraerRangoHorario,
   duracionHoras,

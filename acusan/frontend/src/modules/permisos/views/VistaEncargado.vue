@@ -1873,7 +1873,8 @@ const obtenerWorkerOCR = async () => {
   const worker = await createWorker('spa', '1', { logger: () => {} })
   await worker.setParameters({
     tessedit_pageseg_mode: '6',      // bloque de texto uniforme (formatos)
-    preserve_interword_spaces: '1'
+    preserve_interword_spaces: '1',
+    user_defined_dpi: '300'          // sin esto Tesseract asume DPI bajos y desestabiliza PSM 6
   })
   _ocrWorkerTesseract = worker
   return worker
@@ -1927,8 +1928,12 @@ const ejecutarOCR = async (canvas) => {
       const confianza = (res && res.data && typeof res.data.confidence === 'number') ? res.data.confidence : 0
       console.info(`[OCR pase ${pase.psm} (${pase.nombre})] ${texto.length} caracteres (confianza: ${confianza})`)
 
-      if (texto.trim().length > mejor.texto.trim().length ||
-          (texto.trim().length === mejor.texto.trim().length && confianza > mejor.confianza)) {
+      // Puntaje combinado: un texto más largo NO gana si su confianza es baja
+      // (PSM 11 suelta texto disperso verborrágico pero poco confiable).
+      const utiles = texto.replace(/\s/g, '').length
+      const puntaje = confianza * Math.log10(10 + utiles)
+      const puntajeMejor = mejor.confianza * Math.log10(10 + mejor.texto.replace(/\s/g, '').length)
+      if (puntaje > puntajeMejor) {
         mejor = { texto, confianza, agotado: false }
       }
 
@@ -2004,7 +2009,7 @@ const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
         // Si la página tiene poco o ningún texto digital (< 25 caracteres), hacemos OCR con Tesseract
         if (textoPag.replace(/\s/g, '').length < 25) {
           try {
-            const viewport = page.getViewport({ scale: 2.6 })
+            const viewport = page.getViewport({ scale: 3.0 })
             const canvas = document.createElement('canvas')
             canvas.width = viewport.width
             canvas.height = viewport.height
