@@ -350,7 +350,7 @@ const esLineaSaludo = (l) => {
   return /[.:(]$/.test(n) || n.length <= 7
 }
 
-const MUNICIPIOS_ZONA = 'San Gil|Pinchote|Socorro|Bucaramanga|Bogot[aá]|Charal[aá]|Curit[ií]|Oiba|Barichara|Villanueva|Piedecuesta|Floridablanca|Gir[oó]n'
+const MUNICIPIOS_ZONA = 'San Gil|Pinchote|Socorro|Bucaramanga|Bogot[aá]|Charal[aá]|Curit[ií]|Oiba|Barichara|Villanueva|Piedecuesta|Floridablanca|Gir[oó]n|Barbosa|Onzaga|Encino|P[aá]ramo|Valle de San Jos[eé]|Contrataci[oó]n'
 
 const esNombreValido = (s) => {
   if (!s || typeof s !== 'string') return false
@@ -433,6 +433,29 @@ const _extraerNombreDeFirma = (lineas) => {
     }
   }
   return ''
+}
+
+// Clasificación textual de la petición (Ley 1755/2015) para sugerir el término
+// de respuesta cuando el documento no declara plazo propio. Solo señales
+// textuales claras — el sustantivo "Solicitud" de un asunto NO cuenta, hace
+// falta el verbo en primera persona — y sin señal → días null: el término
+// queda a decisión del operador, no se adivina.
+const _inferirTipoPeticion = (texto) => {
+  const t = String(texto || '')
+  // Información, documentos y copias: 10 días (art. 14)
+  if (/\b(?:informaci[oó]n|documentos?|certificaci[oó]n|copias?|expediente)\b/i.test(t)) {
+    return { tipo: 'Información / Documentos', dias: 10 }
+  }
+  // Consulta, queja y reclamo: 15 días (arts. 21-22)
+  if (/\b(?:consulta|queja|reclamo|reclamaci[oó]n|denuncia)\b/i.test(t)) {
+    return { tipo: 'Consulta / Queja / Reclamo', dias: 15 }
+  }
+  // Petición general: verbo de petición en primera persona (art. 13)
+  if (/\b(?:solicito|solicitamos|me dirijo|me permito|pido|pedimos)\b/i.test(t) ||
+      /por medio de la presente/i.test(t)) {
+    return { tipo: 'Petición General', dias: 15 }
+  }
+  return { tipo: '', dias: null }
 }
 
 // Campos que viajan al cliente: el documento Base64 jamás viaja en listados
@@ -1013,6 +1036,25 @@ export const RadicadosService = {
           resultado.peticionario = mConstancia[1].trim()
         }
       }
+
+      // SUSCRITO/A: fórmula jurídica de tutelas y peticiones ("SUSCRITA:
+      // MARÍA RÍOS, mayor de edad"). El nombre exige un corte con evidencia —
+      // coma, "identificad…", "mayor de edad" o la cédula — para no tragarse
+      // la prosa que sigue.
+      if (!resultado.peticionario || !esNombreValido(resultado.peticionario) || esFraseDeCuerpo(resultado.peticionario)) {
+        const mSuscrito = texto.match(/\bSUSCRIT[OA]S?\s*\(?\s*[AO]?\s*\)?\s*[:：.,\s]\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-zñáéíóú\s.']{5,60}?)(?=[,;]|\s+identificad|\s+mayor\s+de\s+edad|\s+con\s+c\.?\s*c\.?)/i)
+        if (mSuscrito && !esFraseDeCuerpo(mSuscrito[1]) && esNombreValido(mSuscrito[1])) {
+          resultado.peticionario = limpiarNombrePersona(mSuscrito[1])
+        }
+      }
+
+      // Firma final: cartas donde el nombre solo aparece en la firma, tras la
+      // despedida ("Atentamente," → nombre). Reutiliza el helper del firmante
+      // de oficios de respuesta — el bloque de firma es el mismo en ambas.
+      if (!resultado.peticionario || !esNombreValido(resultado.peticionario) || esFraseDeCuerpo(resultado.peticionario)) {
+        const deFirma = _extraerNombreDeFirma(lineas)
+        if (deFirma && esNombreValido(deFirma)) resultado.peticionario = limpiarNombrePersona(deFirma)
+      }
     } // fin !peticionarioDeSticker
 
     // 5b. DESTINATARIO sin etiqueta — a quién va dirigida la carta, en orden
@@ -1113,8 +1155,11 @@ export const RadicadosService = {
     // 8. CONTEXTO — el párrafo sustantivo de la carta (recortado a 450 cars)
     resultado.contexto = this._extraerContexto(texto, lineas)
 
-    // 9. DÍAS DE TÉRMINO LEGAL según lo que pide la carta
+    // 9. DÍAS DE TÉRMINO LEGAL según lo que pide la carta. tipoPeticion es
+    // informativo (resumen de lectura); el término final respeta la prioridad
+    // plazo explícito > tutela > clasificación de la petición.
     resultado.diasParaVencer = this._inferirDias(texto)
+    resultado.tipoPeticion = _inferirTipoPeticion(texto).tipo
 
     // 10. CORRECCIÓN ORTOGRÁFICA DE RUIDO OCR Y FORMATEO ELEGANTE ("MODALES")
     if (resultado.peticionario) resultado.peticionario = formatearNombrePersona(resultado.peticionario)
@@ -1181,10 +1226,13 @@ export const RadicadosService = {
   },
 
   /**
-   * Término legal en días: SOLO cuando el documento lo declara expresamente
-   * ("dentro de los 15 días…"), o cuando es tutela (término fijo de 3 días por
-   * la ley 1755/2015 y el decreto 2591). Sin plazo explícito devuelve null:
-   * el operador conserva el término que eligió — no se adivina del contenido.
+   * Término legal en días, por prioridad:
+   *   1. El plazo que el documento declara expresamente ("dentro de los 15 días…")
+   *   2. Tutela: término fijo de 3 días (ley 1755/2015 y decreto 2591)
+   *   3. Clasificación textual de la petición (Ley 1755/2015): información y
+   *      documentos 10 días; consulta, queja, reclamo y petición general 15.
+   * Sin ninguna señal devuelve null: el operador conserva el término que
+   * eligió — no se adivina del contenido.
    */
   _inferirDias(texto) {
     // Acepta el número con palabra y paréntesis ("quince (15) días"), el
@@ -1203,6 +1251,9 @@ export const RadicadosService = {
       return 30
     }
     if (/\btutela\b/i.test(texto)) return 3
+    // Sin plazo propio: la clasificación de la petición sugiere el término
+    const porTipo = _inferirTipoPeticion(texto)
+    if (porTipo.dias != null) return porTipo.dias
     return null
   },
 

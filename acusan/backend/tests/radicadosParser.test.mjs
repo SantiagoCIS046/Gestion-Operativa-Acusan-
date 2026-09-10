@@ -81,7 +81,8 @@ const CASOS_ENTRADA = [
       destinatario: 'Empresa de Acueducto, Alcantarillado y Aseo de San Gil ACUASAN E.S.P. - Gerente General',
       asunto: '',
       contexto: 'Me dirijo a ustedes para solicitar la revisión de mi factura correspondiente al mes de julio de 2026. Yo, ANA MARIA RIOS, identificada con C.C. 42.657.890.',
-      diasParaVencer: null
+      // "Me dirijo" (verbo de petición en primera persona) → petición general: 15 días
+      diasParaVencer: 15
     }
   },
   {
@@ -117,7 +118,7 @@ const CASOS_ENTRADA = [
     }
   },
   {
-    nombre: 'E5. Sin señal de plazo ni tutela → el término queda en manos del operador',
+    nombre: 'E5. Petición general por verbo en primera persona ("Solicito…") → 15 días',
     texto: [
       'San Gil, 3 de marzo de 2026',
       '',
@@ -129,7 +130,7 @@ const CASOS_ENTRADA = [
     expect: {
       lugarFecha: 'San Gil, 3 de marzo de 2026',
       peticionario: '',
-      diasParaVencer: null
+      diasParaVencer: 15
     }
   },
   {
@@ -146,7 +147,119 @@ const CASOS_ENTRADA = [
     expect: {
       lugarFecha: 'San Gil, 5 de mayo de 2026',
       peticionario: '',
-      diasParaVencer: null
+      // "Por medio de la presente" → petición general: 15 días
+      diasParaVencer: 15
+    }
+  },
+  {
+    nombre: 'E7. Solicitud de información → 10 días (art. 14, Ley 1755/2015)',
+    texto: [
+      'San Gil, 8 de abril de 2026',
+      '',
+      'Señores',
+      'ACUASAN',
+      '',
+      'Solicito amablemente información sobre el estado de mi contrato de acueducto.'
+    ].join('\n'),
+    expect: {
+      lugarFecha: 'San Gil, 8 de abril de 2026',
+      fechaDocumento: '8 de abril de 2026',
+      dependencia: NOMBRE_INSTITUCIONAL,
+      peticionario: '',
+      tipoPeticion: 'Información / Documentos',
+      diasParaVencer: 10
+    }
+  },
+  {
+    nombre: 'E8. Queja → 15 días (arts. 21-22, Ley 1755/2015)',
+    texto: [
+      'San Gil, 9 de abril de 2026',
+      '',
+      'Señores',
+      'ACUASAN',
+      '',
+      'Presento queja por el cobro repetido de la factura de marzo.'
+    ].join('\n'),
+    expect: {
+      lugarFecha: 'San Gil, 9 de abril de 2026',
+      fechaDocumento: '9 de abril de 2026',
+      dependencia: NOMBRE_INSTITUCIONAL,
+      peticionario: '',
+      tipoPeticion: 'Consulta / Queja / Reclamo',
+      diasParaVencer: 15
+    }
+  },
+  {
+    nombre: 'E9. Petición general ("pido") sin señal de información ni queja → 15 días',
+    texto: [
+      'San Gil, 10 de abril de 2026',
+      '',
+      'Señores',
+      'ACUASAN',
+      '',
+      'Respetuosamente pido la revisión de las obras del acueducto veredal.'
+    ].join('\n'),
+    expect: {
+      lugarFecha: 'San Gil, 10 de abril de 2026',
+      fechaDocumento: '10 de abril de 2026',
+      dependencia: NOMBRE_INSTITUCIONAL,
+      peticionario: '',
+      tipoPeticion: 'Petición General',
+      diasParaVencer: 15
+    }
+  },
+  {
+    nombre: 'E10. Fórmula SUSCRITA: con corte por "mayor de edad" → peticionario',
+    texto: [
+      'San Gil, 12 de agosto de 2026',
+      '',
+      'SUSCRITA:',
+      'MARIA FERNANDA GOMEZ PEREZ, mayor de edad, identificada con C.C. 65.876.543,',
+      'presento petición para la revisión del cobro del mes de junio.'
+    ].join('\n'),
+    expect: {
+      lugarFecha: 'San Gil, 12 de agosto de 2026',
+      peticionario: 'María Fernanda Gómez Pérez'
+    }
+  },
+  {
+    nombre: 'E11. Firma final: el nombre solo aparece tras "Atentamente,"',
+    texto: [
+      'San Gil, 20 de agosto de 2026',
+      '',
+      'Señores',
+      'ACUASAN E.S.P.',
+      '',
+      'Solicito la reconexión del servicio de mi residencia.',
+      '',
+      'Atentamente,',
+      '',
+      'LUZ MARINA RUIZ SUAREZ',
+      'C.C. 43.210.987'
+    ].join('\n'),
+    expect: {
+      lugarFecha: 'San Gil, 20 de agosto de 2026',
+      fechaDocumento: '20 de agosto de 2026',
+      peticionario: 'Luz Marina Ruiz Suárez',
+      diasParaVencer: 15
+    }
+  },
+  {
+    nombre: 'E12. Lugar de la Provincia Comunera: "Valle de San José, …"',
+    texto: [
+      'Valle de San José, 15 de septiembre de 2026',
+      '',
+      'Señores',
+      'ACUASAN',
+      '',
+      'Solicito información sobre los proyectos de acueducto del municipio.'
+    ].join('\n'),
+    expect: {
+      lugarFecha: 'Valle de San José, 15 de septiembre de 2026',
+      fechaDocumento: '15 de septiembre de 2026',
+      dependencia: NOMBRE_INSTITUCIONAL,
+      tipoPeticion: 'Información / Documentos',
+      diasParaVencer: 10
     }
   }
 ]
@@ -270,7 +383,12 @@ const CASOS_DIAS = [
   ['con un término de diez (10) días', 10],
   ['plazo de 3 días', 3],
   ['ACCIÓN DE TUTELA', 3],
-  ['Sin ninguna señal de plazo', null]
+  ['Sin ninguna señal de plazo', null],
+  // Clasificación textual (Ley 1755/2015) sin plazo declarado:
+  ['Solicito información sobre el estado de mi contrato', 10],
+  ['Se expide certificación de copias del expediente', 10],
+  ['Presento queja formal por el cobro duplicado', 15],
+  ['Respetuosamente pido la revisión del cobro', 15]
 ]
 
 // ─── Runner ──────────────────────────────────────────────────────────────────

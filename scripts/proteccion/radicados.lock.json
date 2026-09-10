@@ -3,7 +3,7 @@
   "descripcion": "Módulo Radicados congelado — estado estable verificado",
   "algoritmo": "sha256",
   "normalizacion": "crlf-a-lf",
-  "generado": "2026-09-10T15:33:55.788Z",
+  "generado": "2026-09-10T15:57:32.619Z",
   "archivos": {
     "acusan/frontend/src/modules/radicados/components/PanelRespuestas.vue": "bc2346a22ec28652627c2531168b8abdb8de9ad396205740ae95d53a80db9e75",
     "acusan/frontend/src/modules/radicados/PROTEGIDO-LEER.md": "c9ec8947de31e631943668b5384279426494803d7f0310ea5ad60b9dc4faa620",
@@ -17,6 +17,6 @@
     "acusan/backend/src/modules/radicados/PROTEGIDO-LEER.md": "19a73dcc968e0d082b7b77b25245db6ce2faa06e946453818716f186e57dcd1e",
     "acusan/backend/src/modules/radicados/radicados.controller.js": "d88837ee2a212e0e89f22db63f1588616a76d3532c67577ad4049f0de86389e8",
     "acusan/backend/src/modules/radicados/radicados.routes.js": "ff4996aab2b6a7b681af5e92c549be55f5413306f05d3fce44338cb035eca0ae",
-    "acusan/backend/src/modules/radicados/radicados.service.js": "29b93e6d57008b1ec14d6e0634a3e6c47dfb4725d8c67ea50c4884ea92846da4"
+    "acusan/backend/src/modules/radicados/radicados.service.js": "1e1c1ac109bd73571f5a8adaa90270c36b9552bbb8cb6345219a05be76d2a2a7"
   }
 }
