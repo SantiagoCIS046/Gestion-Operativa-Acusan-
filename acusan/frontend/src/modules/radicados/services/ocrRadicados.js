@@ -11,7 +11,9 @@
  *   2. PDF escaneado (sin texto / < 40 chars útiles) → pdfjs renderiza a
  *      canvas con escala alta y tesseract.js hace OCR en español con PSM 6
  *      (bloque de texto uniforme) para sellos y PSM 11 (texto disperso)
- *      como respaldo.
+ *      como respaldo. Si ninguna página trae patrón de radicado, un pase
+ *      extra PSM bloque sobre el 38% superior de la página 1 recupera el
+ *      sello físico de radicación.
  *   3. Imágenes PNG/JPG → OCR directo con preprocesamiento de contraste.
  *
  * El texto resultante viaja a /api/radicados/extraer-campos donde el parser
@@ -21,7 +23,7 @@
  */
 
 const MAX_PAGINAS = 4; // Páginas a leer: el sello siempre está en la 1ª
-const ESCALA_OCR = 2.7; // Factor de zoom y ampliación de resolución para leer sellos con letra pequeña (6-8pt)
+const ESCALA_OCR = 3.0; // Factor de zoom y ampliación de resolución para leer sellos con letra pequeña (6-8pt)
 const TOLERANCIA_Y = 4; // pt: diferencia de Y para considerar misma línea
 
 let pdfjsCache = null;
@@ -122,7 +124,7 @@ const crearWorker = async (psm, onProgreso) => {
 
 const ocrCanvas = async (worker, canvas) => {
   const { data } = await worker.recognize(canvas);
-  return (data?.text || "").trim();
+  return { texto: (data?.text || "").trim(), confianza: Number(data?.confidence) || 0 };
 };
 
 /**
@@ -176,16 +178,20 @@ const ocrMultimodo = async (canvas, onProgreso) => {
     worker = await crearWorker("auto", (status, p) =>
       onProgreso?.(`OCR: ${status}`, p)
     );
-    const texto = await ocrCanvas(worker, canvas);
-    const chars = (texto || "").replace(/\s/g, "").length;
-    if (chars >= 20) return texto;
+    const auto = await ocrCanvas(worker, canvas);
+    const chars = auto.texto.replace(/\s/g, "").length;
+    if (chars >= 20) return auto.texto;
 
-    // Respaldo rápido solo si la primera pasada dio muy poco texto
+    // Respaldo rápido solo si la primera pasada dio muy poco texto. Si ambas
+    // traen algo, gana la de MAYOR CONFIANZA: PSM disperso suelta texto
+    // verborrágico pero poco confiable, y lo verboso no es lo correcto.
     await worker.terminate().catch(() => {});
     worker = await crearWorker("disperso", (status, p) =>
       onProgreso?.(`OCR disperso: ${status}`, p)
     );
-    return await ocrCanvas(worker, canvas);
+    const disperso = await ocrCanvas(worker, canvas);
+    if (auto.texto && auto.confianza > disperso.confianza) return auto.texto;
+    return disperso.texto;
   } finally {
     if (worker) await worker.terminate().catch(() => {});
   }
@@ -344,7 +350,37 @@ export const ocrRadicados = {
           }
         }
 
-        const textoFinal = (textoDigital.trim() ? `${textoDigital.trim()}\n\n` : "") + textoOcr.trim();
+        // ── Pase del sello: si ninguna página trajo patrón de radicado, el
+        // sticker físico pudo quedar ilegible en el OCR de página completa. Un
+        // pase extra con PSM bloque sobre el 38% superior de la página 1 (donde
+        // vive el sello) es barato y recupera el número; solo corre bajo
+        // demanda y su texto solo se antepone si trae el patrón.
+        const PATRON_RADICADO = /(?:radicad|2[0-9OolI|]{8,10})/i;
+        let textoFinal = (textoDigital.trim() ? `${textoDigital.trim()}\n\n` : "") + textoOcr.trim();
+        if (!PATRON_RADICADO.test(textoFinal)) {
+          reportar("Buscando el sello de radicación…", 0.96);
+          const page1 = await doc.getPage(1);
+          try {
+            const canvasSello = await renderizarEncabezadoACanvas(page1);
+            const procesadoSello = preprocesarCanvasParaOCR(canvasSello);
+            canvasSello.width = 0;
+            let workerSello = null;
+            try {
+              workerSello = await crearWorker("bloque", (status, p) =>
+                reportar(`Sello: ${status}`, 0.96 + p * 0.03)
+              );
+              const sello = await ocrCanvas(workerSello, procesadoSello);
+              procesadoSello.width = 0;
+              if (sello.texto && PATRON_RADICADO.test(sello.texto)) {
+                textoFinal = `${sello.texto.trim()}\n\n${textoFinal}`;
+              }
+            } finally {
+              if (workerSello) await workerSello.terminate().catch(() => {});
+            }
+          } finally {
+            page1.cleanup();
+          }
+        }
         reportar("Lectura completa", 1);
         return {
           texto: textoFinal.trim(),
