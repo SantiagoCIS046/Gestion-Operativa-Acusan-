@@ -354,6 +354,13 @@
               placeholder="Ej: San Gil, 1 de Septiembre de 2026">
           </div>
 
+          <div class="form-group">
+            <label>Firmante / Remitente Oficial</label>
+            <input type="text" v-model="formRespuesta.firmante"
+              :class="['form-control', 'form-control-sm', campoOcrClase('firmante')]"
+              placeholder="Quien suscribe el oficio (nombre y cargo)">
+          </div>
+
           <!-- Sección 3: Destinatario y Asunto -->
           <div class="form-section-label">👥 Destinatario y Asunto de la Respuesta</div>
           <div class="form-group">
@@ -1025,6 +1032,7 @@ const formRespuesta = reactive({
   numeroOficio: '',
   fechaDocumento: '',
   lugarFecha: '',
+  firmante: '',
   destinatario: '',
   asunto: '',
   observaciones: '',
@@ -1187,6 +1195,7 @@ const onFileSelected = async (event) => {
   formRespuesta.numeroOficio = ''
   formRespuesta.fechaDocumento = ''
   formRespuesta.lugarFecha = ''
+  formRespuesta.firmante = ''
   formRespuesta.destinatario = ''
   formRespuesta.asunto = ''
   formRespuesta.observaciones = ''
@@ -1388,6 +1397,7 @@ const campoOcrClase = (campo) => {
     numeroOficio: ['N° de oficio'],
     fechaDocumento: ['fecha del sello', 'fecha del oficio'],
     lugarFecha: ['lugar y fecha de la carta', 'lugar y fecha'],
+    firmante: ['firmante'],
     peticionario: ['peticionario'],
     dependencia: ['empresa destinataria'],
     destinatario: ['destinatario'],
@@ -1435,6 +1445,13 @@ const aplicarCamposRespuestaExtraidos = (campos, metodo, textoCompleto = '') => 
   if (campos.lugarFecha) {
     formRespuesta.lugarFecha = campos.lugarFecha
     leidos.push('lugar y fecha')
+  }
+
+  if (campos.firmante) {
+    formRespuesta.firmante = campos.firmante
+    leidos.push('firmante')
+  } else {
+    faltantes.push('firmante')
   }
 
   if (campos.destinatario) {
@@ -1555,6 +1572,7 @@ const guardarRespuesta = async () => {
       numeroOficio: formRespuesta.numeroOficio,
       fechaDocumento: formRespuesta.fechaDocumento,
       lugarFecha: formRespuesta.lugarFecha,
+      firmante: formRespuesta.firmante,
       destinatario: formRespuesta.destinatario,
       asunto: formRespuesta.asunto,
       observaciones: formRespuesta.observaciones,
@@ -1579,6 +1597,7 @@ const guardarRespuesta = async () => {
     formRespuesta.numeroOficio = ''
     formRespuesta.fechaDocumento = ''
     formRespuesta.lugarFecha = ''
+    formRespuesta.firmante = ''
     formRespuesta.destinatario = ''
     formRespuesta.asunto = ''
     formRespuesta.observaciones = ''

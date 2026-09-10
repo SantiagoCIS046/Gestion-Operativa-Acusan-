@@ -310,6 +310,8 @@ model RespuestaRadicado {
   asunto         String?
   fechaDocumento String?
   lugarFecha     String?
+  // Funcionario que firma el oficio (nombre + cargo), del bloque de firma
+  firmante       String?
   observaciones  String?
 
   // Documento escaneado de la respuesta (data URL base64, igual que radicados)

@@ -363,6 +363,78 @@ const esNombreValido = (s) => {
   return true
 }
 
+// Extrae el funcionario que firma un oficio (nombre + cargo) de las líneas del
+// documento. El bloque de firma colombiano típico: despedida ("Atentamente,")
+// → nombre → cargo. Estrategias, de mayor a menor certeza:
+//   a) Etiqueta explícita: Firmante: / Firma: / Suscribe: / Suscrito por:
+//   b) Bloque tras la despedida (Atentamente/Cordialmente/Respetuosamente):
+//      primera línea de nombre en las 5 siguientes; si la línea posterior casa
+//      con CARGO_RE, se concatena " - cargo".
+//   c) Encabezado: nombre propio y cargo en la MISMA línea.
+// Regla de oro: sin respaldo claro devuelve '' (una firma ilegible no se adivina).
+const _extraerNombreDeFirma = (lineas) => {
+  if (!Array.isArray(lineas) || !lineas.length) return ''
+
+  // Línea que parece un nombre de persona: 2-6 palabras alfabéticas (vale el
+  // punto de las iniciales), arranca en mayúscula, sin dígitos/correos/años,
+  // sin municipios de la zona, sin cargo y sin ser frase de cuerpo.
+  const esLineaNombre = (l) => {
+    const palabras = l.split(/\s+/).filter(Boolean)
+    if (palabras.length < 2 || palabras.length > 6) return false
+    if (!/^[A-ZÁÉÍÓÚÜÑ]/.test(l)) return false
+    if (/\d|@|www\.|http/i.test(l)) return false
+    if (new RegExp(`^(?:${MUNICIPIOS_ZONA})\\b`, 'i').test(l)) return false
+    if (CARGO_RE.test(l)) return false
+    if (esFraseDeCuerpo(l)) return false
+    return palabras.every((p) => /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ.]+$/.test(p))
+  }
+
+  const limpiarCargo = (l) => l.replace(/[.,;:]+$/, '').replace(/\s+/g, ' ').trim()
+
+  // a) Etiqueta explícita (la evidencia más fuerte)
+  for (const l of lineas) {
+    const m = l.match(/^(?:Firmante|Firma|Suscribe|Suscrito por|Remitente)\s*[:：]\s*(.+)$/i)
+    if (m) {
+      const v = m[1].trim()
+      if (esLineaNombre(v)) return v
+      // El valor puede traer nombre y cargo: "Wbeimar Pérez - Gerente General"
+      const mNC = v.match(/^(.{4,60}?)\s*[-–—,]\s*(.{3,50})$/)
+      if (mNC && esLineaNombre(mNC[1].trim()) && CARGO_RE.test(mNC[2])) {
+        return `${mNC[1].trim()} - ${limpiarCargo(mNC[2])}`
+      }
+    }
+  }
+
+  // b) Bloque de firma tras la despedida
+  const DESPEDIDA = /^(?:Atentamente|Cordialmente|Respetuosamente|Sinceramente)[,.]?$/i
+  for (let i = 0; i < lineas.length; i++) {
+    if (!DESPEDIDA.test(lineas[i])) continue
+    for (let j = i + 1; j < Math.min(i + 6, lineas.length); j++) {
+      const l = lineas[j]
+      if (/\bASUNTO\b|\bREFERENCIA\b/i.test(l)) break
+      if (/^\(?\s*firma/i.test(l)) continue // "(firma ilegible)"
+      if (CARGO_RE.test(l)) break // llegó el cargo sin nombre: firma sin nombre legible
+      if (esLineaNombre(l)) {
+        const sig = lineas[j + 1]
+        if (sig && CARGO_RE.test(sig) && !esLineaNombre(sig)) {
+          return `${l} - ${limpiarCargo(sig)}`
+        }
+        return l
+      }
+    }
+  }
+
+  // c) Encabezado: nombre y cargo comparten línea ("WBEIMAR PEREZ BELTRAN - Gerente General")
+  for (const l of lineas) {
+    if (!CARGO_RE.test(l)) continue
+    const mNC = l.match(/^([A-Za-zÁÉÍÓÚÜÑáéíóúüñ.\s]{6,60}?)\s*[-–—,]\s*(.{3,50})$/)
+    if (mNC && esLineaNombre(mNC[1].trim()) && CARGO_RE.test(mNC[2])) {
+      return `${mNC[1].trim()} - ${limpiarCargo(mNC[2])}`
+    }
+  }
+  return ''
+}
+
 // Campos que viajan al cliente: el documento Base64 jamás viaja en listados
 // ni en respuestas de creación (pesa MBs; se sirve por /:id/archivo).
 const SELECT_PUBLICO = {
@@ -1151,6 +1223,7 @@ export const RadicadosService = {
     asunto: true,
     fechaDocumento: true,
     lugarFecha: true,
+    firmante: true,
     observaciones: true,
     archivoNombre: true,
     registradoPor: true,
@@ -1217,7 +1290,7 @@ export const RadicadosService = {
       throw Object.assign(new Error('El radicado al que responde no existe'), { status: 404 })
     }
 
-    const { numeroOficio, destinatario, asunto, fechaDocumento, lugarFecha,
+    const { numeroOficio, destinatario, asunto, fechaDocumento, lugarFecha, firmante,
       observaciones, registradoPor, archivoNombre, archivoBase64 } = datos
 
     const respuesta = await prisma.respuestaRadicado.create({
@@ -1229,6 +1302,7 @@ export const RadicadosService = {
         asunto: asunto ? limpiar(asunto) : null,
         fechaDocumento: fechaDocumento ? limpiar(fechaDocumento) : null,
         lugarFecha: lugarFecha ? limpiar(lugarFecha) : null,
+        firmante: firmante ? limpiar(firmante) : null,
         observaciones: observaciones ? limpiar(observaciones) : null,
         registradoPor: registradoPor || null,
         archivoNombre: archivoNombre || null,
@@ -1298,6 +1372,7 @@ export const RadicadosService = {
       lugarFecha: '',
       destinatario: '',
       asunto: '',
+      firmante: '',           // Funcionario que suscribe el oficio
       radicadoReferencia: ''  // Número del radicado padre detectado en el texto
     }
     if (!texto || !texto.trim()) return resultado
@@ -1514,9 +1589,17 @@ export const RadicadosService = {
       }
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // 6. FIRMANTE — funcionario que suscribe el oficio. Del bloque de firma
+    //    ("Atentamente," → nombre → cargo), de una etiqueta explícita o del
+    //    encabezado con nombre y cargo en la misma línea. Firma ilegible = ''.
+    // ════════════════════════════════════════════════════════════════════════
+    resultado.firmante = _extraerNombreDeFirma(lineas)
+
     // CORRECCIÓN OCR Y FORMATEO ELEGANTE EN CAMPOS DEL OFICIO DE RESPUESTA
     if (resultado.destinatario) resultado.destinatario = formatearNombrePersona(resultado.destinatario)
     if (resultado.asunto)       resultado.asunto       = formatearAsunto(resultado.asunto)
+    if (resultado.firmante)     resultado.firmante     = formatearNombrePersona(resultado.firmante)
 
     return resultado
   }

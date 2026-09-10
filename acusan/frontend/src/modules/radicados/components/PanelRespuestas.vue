@@ -107,6 +107,10 @@
           <label class="etiqueta-campo">Destinatario (a quién se responde)</label>
           <input v-model.trim="form.destinatario" type="text" class="form-control form-control-sm" style="font-size: 0.68rem;" placeholder="Peticionario original" />
         </div>
+        <div class="col-12 col-md-6">
+          <label class="etiqueta-campo">Firmante / Remitente oficial</label>
+          <input v-model.trim="form.firmante" type="text" class="form-control form-control-sm" style="font-size: 0.68rem;" placeholder="Quien suscribe el oficio" />
+        </div>
         <div class="col-12">
           <label class="etiqueta-campo">Asunto</label>
           <input v-model.trim="form.asunto" type="text" class="form-control form-control-sm" style="font-size: 0.68rem;" placeholder="Asunto del oficio de respuesta" />
@@ -173,6 +177,7 @@
         <div v-if="r.asunto" class="asunto-linea">{{ r.asunto }}</div>
         <div class="meta-linea">
           <span v-if="r.destinatario" title="Destinatario">👤 {{ r.destinatario }}</span>
+          <span v-if="r.firmante" title="Firmante / Remitente oficial">✍️ {{ r.firmante }}</span>
           <span v-if="r.fechaDocumento" title="Fecha del oficio">📅 {{ r.fechaDocumento }}</span>
           <span v-if="r.lugarFecha" title="Lugar y fecha">📍 {{ r.lugarFecha }}</span>
           <span v-if="r.observaciones" title="Observaciones">📝 {{ r.observaciones }}</span>
@@ -307,7 +312,7 @@ const formAbierto = ref(false)
 const guardando = ref(false)
 const form = reactive({
   numeroOficio: '', destinatario: '', asunto: '',
-  fechaDocumento: '', lugarFecha: '', observaciones: ''
+  fechaDocumento: '', lugarFecha: '', firmante: '', observaciones: ''
 })
 const archivoDataUrl = ref('')
 const archivoNombre = ref('')
@@ -333,6 +338,7 @@ const CAMPOS_LEIBLES = [
   ['numeroOficio', 'número de oficio'],
   ['fechaDocumento', 'fecha del oficio'],
   ['destinatario', 'destinatario'],
+  ['firmante', 'firmante'],
   ['asunto', 'asunto'],
   ['lugarFecha', 'lugar y fecha']
 ]
@@ -465,6 +471,7 @@ const archivar = async () => {
       asunto: form.asunto,
       fechaDocumento: form.fechaDocumento,
       lugarFecha: form.lugarFecha,
+      firmante: form.firmante,
       observaciones: form.observaciones,
       archivoNombre: archivoNombre.value,
       archivoBase64: archivoDataUrl.value,

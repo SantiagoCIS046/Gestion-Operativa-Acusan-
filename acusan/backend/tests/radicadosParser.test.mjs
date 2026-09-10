@@ -184,7 +184,8 @@ const CASOS_RESPUESTA = [
       lugarFecha: 'San Gil, 16 de junio de 2026',
       fechaDocumento: '16 de junio de 2026',
       destinatario: 'José Pérez Gómez',
-      asunto: 'Respuesta a Solicitud de Revisión de Facturación'
+      asunto: 'Respuesta a Solicitud de Revisión de Facturación',
+      firmante: 'Wbeimar Hernando Pérez Beltrán - Gerente General'
     }
   },
   {
@@ -208,7 +209,8 @@ const CASOS_RESPUESTA = [
       numeroOficio: '2620000123',
       lugarFecha: '',
       fechaDocumento: '16 de septiembre de 2026',
-      asunto: 'Constancia de No Cobro'
+      asunto: 'Constancia de No Cobro',
+      firmante: ''   // "(firma ilegible)": regla de oro, no se adivina
     }
   },
   {
@@ -231,7 +233,32 @@ const CASOS_RESPUESTA = [
       radicadoReferencia: '2610000736',
       numeroOficio: 'OF-2026-104',
       lugarFecha: 'Bogotá, junio 16 de 2026',
-      fechaDocumento: '16 de junio de 2026'
+      fechaDocumento: '16 de junio de 2026',
+      firmante: 'Wbeimar Hernando Pérez Beltrán - Gerente General'
+    }
+  },
+  {
+    nombre: 'R4. Etiqueta explícita "Firmante:" con nombre y cargo en el valor',
+    texto: [
+      'EMPRESA DE ACUEDUCTO Y ASEO DE SAN GIL ACUASAN',
+      'Oficio No. OF-2026-105',
+      '',
+      'San Gil, 20 de enero de 2026',
+      '',
+      'Asunto: Certificación de deuda',
+      '',
+      'Cordial saludo.',
+      '',
+      'Se expide la presente certificación a solicitud del interesado.',
+      '',
+      'Firmante: Wbeimar Perez Beltran - Gerente General'
+    ].join('\n'),
+    expect: {
+      numeroOficio: 'OF-2026-105',
+      lugarFecha: 'San Gil, 20 de enero de 2026',
+      fechaDocumento: '20 de enero de 2026',
+      asunto: 'Certificación de Deuda',
+      firmante: 'Wbeimar Pérez Beltrán - Gerente General'
     }
   }
 ]
