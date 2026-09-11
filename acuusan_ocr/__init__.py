@@ -6,4 +6,4 @@ Radicados. REGLA DE ORO compartida: el dato sale del documento o el campo
 queda vacío; jamás se inventa contenido que el PDF no respalde.
 """
 
-__all__ = ["parser_permisos", "parser_radicados", "deteccion_documental", "motor_ocr"]
+__all__ = ["parser_permisos", "parser_radicados", "deteccion_documental"]
