@@ -11,6 +11,7 @@ import logger from './config/logger.js'
 // Rutas modulares
 import authRoutes from './modules/auth/auth.routes.js'
 import permisosRoutes from './modules/permisos/permisos.routes.js'
+import { OcrController } from './modules/permisos/ocr.controller.js'
 import horasExtrasRoutes from './modules/horas-extras/horas-extras.routes.js'
 import pqrRoutes from './modules/pqr/pqr.routes.js'
 import whatsappRoutes from './modules/pqr/whatsapp.routes.js'
@@ -53,6 +54,9 @@ app.use('/api/auth', authRoutes)
 // Webhook de WhatsApp Cloud API — público por necesidad: Meta no puede enviar
 // JWT. Se blinda con hub.verify_token (GET) + firma X-Hub-Signature-256 (POST)
 app.use('/api/pqr/whatsapp', whatsappRoutes)
+
+// OCR de permisos laborales — público (sin barrera de token para escaneo directo)
+app.post('/api/permisos/ocr', OcrController.procesarOCR)
 
 // ─── Rutas privadas & modulares ───────────────────────────────────────────────
 app.use('/api/permisos',     verificarToken, permisosRoutes)

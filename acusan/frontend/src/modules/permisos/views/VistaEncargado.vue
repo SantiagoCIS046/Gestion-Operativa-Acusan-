@@ -2076,12 +2076,10 @@ const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
 // Si el servidor no está disponible, se cae al pipeline Tesseract local.
 const procesarConBackendOCR = async (dataUrl, fileName, mimeType) => {
   const headers = { 'Content-Type': 'application/json' }
-  // Intentar incluir el token de autenticación si existe
-  try {
-    const { default: authService } = await import('../../auth/services/authService.js')
-    const authHeader = authService.getAuthHeader()
-    if (authHeader && authHeader.Authorization) headers['Authorization'] = authHeader.Authorization
-  } catch (_) {}
+  const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || ''
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
@@ -2097,7 +2095,7 @@ const procesarConBackendOCR = async (dataUrl, fileName, mimeType) => {
   if (!res.ok) throw new Error(`Backend OCR HTTP ${res.status}`)
   const data = await res.json()
   if (!data.success) throw new Error(data.message || 'Backend OCR sin éxito')
-  return data // { campos, confianza, faltantes }
+  return data // { campos, confianza, faltantes, textoExtraido }
 }
 
 // 🎯 MANEJADOR PRINCIPAL RESILIENTE CON RESPUESTA INMEDIATA
@@ -2147,6 +2145,18 @@ const handleScannedFileUpload = async (e) => {
         const resultado = await procesarConBackendOCR(event.target.result, file.name, file.type || '')
         camposBackend = resultado.campos
 
+        // 📋 Debug: Texto extraído por el servidor (visible en consola del navegador)
+        if (resultado.textoExtraido) {
+          console.groupCollapsed('[OCR Backend] Texto extraído del documento')
+          console.log(resultado.textoExtraido)
+          console.groupEnd()
+        } else {
+          console.warn('[OCR Backend] El servidor no devolvió texto extraído — el PDF puede ser escaneado o protegido')
+        }
+
+        console.log('[OCR Backend] Campos extraídos:', resultado.campos)
+        console.log('[OCR Backend] Confianza:', resultado.confianza + '%', '| Faltantes:', resultado.faltantes)
+
         aplicarCampos(camposBackend)
 
         confianzaOcrReal.value = resultado.confianza
@@ -2180,6 +2190,7 @@ const handleScannedFileUpload = async (e) => {
         // Continúa al pipeline local (fallback)
       }
     }
+
 
     // ── INTENTO 2: PIPELINE LOCAL (TESSERACT.JS EN NAVEGADOR) ────────────────
     try {

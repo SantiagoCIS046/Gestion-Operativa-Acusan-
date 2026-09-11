@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """Detección documental — corpus del motor de puntaje (porte de VistaRadicados.vue)."""
 
+import os
+import sys
+
+# Asegurar importación de acuusan_ocr desde acusan/backend
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 import pytest
 
 from acuusan_ocr.deteccion_documental import detectar_tipo_documental

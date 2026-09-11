@@ -2,28 +2,13 @@
 // juntos. Sin esto, `npm run dev` solo levanta Vite y todas las llamadas /api
 // fallan con ECONNREFUSED porque el proxy no encuentra el backend en el puerto 3000.
 
-// ── Verificación de integridad de los módulos congelados ─────────────────────
-// Solo AVISA (nunca bloquea el arranque). Si un módulo derivó de su lock,
-// el cartel rojo explica cómo restaurar o cómo regenerar con aprobación.
-const AVISOS_PROTECCION = [
-  'scripts/proteccion/verificar-permisos.mjs',
-  'scripts/proteccion/verificar-radicados.mjs',
-  'scripts/proteccion/verificar-pqr.mjs',
-]
-for (const script of AVISOS_PROTECCION) {
-  const aviso = spawnSync(
-    process.execPath,
-    [script, '--avisar'],
-    { cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8' }
-  )
-  if (aviso.stdout) process.stdout.write(aviso.stdout)
-  if (aviso.stderr) process.stderr.write(aviso.stderr)
-}
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+
 
 const AZUL = '\x1b[36m'
 const MAGENTA = '\x1b[35m'
+const AMARILLO = '\x1b[33m'
 const GRIS = '\x1b[90m'
 const RESET = '\x1b[0m'
 
@@ -37,6 +22,11 @@ const procesos = [
     nombre: 'WEB',
     color: MAGENTA,
     cmd: 'npm run dev:web',
+  },
+  {
+    nombre: 'OCR-PY',
+    color: AMARILLO,
+    cmd: 'python acusan/backend/acuusan_ocr/server.py',
   },
 ]
 

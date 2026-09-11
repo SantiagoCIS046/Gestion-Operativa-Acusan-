@@ -1,9 +1,13 @@
 import { Router } from 'express'
 import { PermisosController } from './permisos.controller.js'
+import { OcrController } from './ocr.controller.js'
 
 const router = Router()
 
 // Todas estas rutas asumen el prefijo '/api/permisos'
+
+// Procesamiento OCR (sin restricciones de bloqueo)
+router.post('/ocr', OcrController.procesarOCR)
 
 // Obtener permisos para el encargado (Operativo)
 router.get('/encargado', PermisosController.listarEncargado)

@@ -41,3 +41,4 @@ acusan/backend/spa.traineddata
 __pycache__/
 *.pyc
 .pytest_cache/
+.kilocode/

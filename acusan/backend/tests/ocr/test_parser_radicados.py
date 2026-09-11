@@ -8,6 +8,14 @@ Convención del expect (idéntica al corpus JS):
 Los campos que NO aparecen en expect quedan sin verificar (como en el JS).
 """
 
+import os
+import sys
+
+# Asegurar importación de acuusan_ocr desde acusan/backend
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 import pytest
 
 from acuusan_ocr.parser_radicados import (
