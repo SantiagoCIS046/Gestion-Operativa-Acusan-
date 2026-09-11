@@ -723,9 +723,9 @@
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                   </button>
-                  <!-- Botón eliminar: solo encargada de Radicados -->
-                  <button 
-                    v-if="esEncargadaRadicados"
+                  <!-- Botón eliminar: exclusivo del ADMIN (DELETE /:id exige verificarRol('ADMIN')) -->
+                  <button
+                    v-if="esAdmin"
                     class="btn-action btn-action-delete" 
                     @click="solicitarEliminar(rad)" 
                     title="Eliminar radicado"
@@ -1632,7 +1632,10 @@ const confirmarMarcarResuelto = async (rad) => {
   }
 }
 
-// ── Control de eliminación (solo encargada de Radicados) ──
+// ── Control de eliminación ──
+// El backend exige verificarRol('ADMIN') en DELETE /api/radicados/:id:
+// solo el Administrador ve el botón (Eliana/Ramón recibían 403 silencioso).
+const esAdmin = computed(() => authService.getUsuarioActual()?.rol === 'ADMIN')
 const esEncargadaRadicados = computed(() => authService.getUsuarioActual()?.rol === 'RADICADOS')
 
 const modalEliminar = reactive({

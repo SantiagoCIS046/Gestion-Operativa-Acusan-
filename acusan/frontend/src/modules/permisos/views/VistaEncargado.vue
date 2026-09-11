@@ -955,7 +955,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
-import { parsearTextoPermiso, evaluarCamposExtraidos } from '../services/parserPermisosOcr.js'
 import adjuntosOffline from '../../../services/adjuntosOffline.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
@@ -1761,9 +1760,9 @@ const mejorarImagenParaOCR = (srcCanvas) => {
 }
 
 // Normalizar texto OCR y parsear los campos del permiso: el motor completo
-// (etiquetas des-OCRizadas, rangos horarios con guardas, regla de oro «el dato
-// sale del documento o el campo queda vacío») vive en services/parserPermisosOcr.js,
-// módulo puro que se prueba directo desde Node con el corpus de documentos.
+// vive en el paquete Python del backend (acuusan_ocr); esta vista solo
+// previsualiza el documento y la regla de oro se mantiene: «el dato sale
+// del documento o el campo queda vacío» — nunca se inventa un valor.
 
 // Aplicar campos al formulario Vue
 const aplicarCampos = (campos) => {
@@ -1863,403 +1862,29 @@ const extraerTextoPaginaEncargado = async (page) => {
     .join('\n')
 }
 
-// Worker de Tesseract persistente: se crea una sola vez por sesión y se
-// reutiliza en todas las páginas y documentos. El modo de segmentación se
-// ajusta por página en ejecutarOCR (multi-pase).
-let _ocrWorkerTesseract = null
-const obtenerWorkerOCR = async () => {
-  if (_ocrWorkerTesseract) return _ocrWorkerTesseract
-  const { createWorker } = await import('tesseract.js')
-  const worker = await createWorker('spa', '1', { logger: () => {} })
-  await worker.setParameters({
-    tessedit_pageseg_mode: '6',      // bloque de texto uniforme (formatos)
-    preserve_interword_spaces: '1',
-    user_defined_dpi: '300'          // sin esto Tesseract asume DPI bajos y desestabiliza PSM 6
-  })
-  _ocrWorkerTesseract = worker
-  return worker
-}
-
-const terminarWorkerOCR = async () => {
-  if (_ocrWorkerTesseract) {
-    try { await _ocrWorkerTesseract.terminate() } catch (e) {}
-    _ocrWorkerTesseract = null
-  }
-}
-
-// Ejecutar Tesseract sobre un canvas con timeout seguro de 40s por intento.
-// MULTI-PASE: cada PDF escaneado llega con un layout distinto (formato en
-// bloque, casillas en columnas, membretes dispersos). El primer pase usa PSM 6
-// (bloque uniforme); si la confianza queda baja (<65) o el texto es escaso
-// (<40 caracteres útiles), se re-intenta con PSM 4 (columnas) y PSM 11 (texto
-// disperso) y se conserva el mejor resultado de los tres.
-const PASES_OCR = [
-  { psm: '6', nombre: 'bloque uniforme' },
-  { psm: '4', nombre: 'columnas' },
-  { psm: '11', nombre: 'texto disperso' }
-]
-
-const ejecutarOCR = async (canvas) => {
-  try {
-    const canvasMejorado = mejorarImagenParaOCR(canvas)
-    const worker = await obtenerWorkerOCR()
-
-    let mejor = { texto: '', confianza: 0, agotado: false }
-    for (const pase of PASES_OCR) {
-      await worker.setParameters({
-        tessedit_pageseg_mode: pase.psm,
-        preserve_interword_spaces: '1'
-      })
-
-      const ocrTask = worker.recognize(canvasMejorado)
-      const timeoutTask = new Promise((resolve) =>
-        setTimeout(() => resolve({ agotado: true }), 40000)
-      )
-      const res = await Promise.race([ocrTask, timeoutTask])
-
-      if (res && res.agotado) {
-        // Esta página es demasiado pesada para el tiempo disponible: no tiene
-        // caso quemar otros dos pases con el mismo destino.
-        console.warn('[OCR] Tiempo agotado para esta página')
-        return { ...mejor, agotado: true }
-      }
-
-      const texto = (res && res.data && res.data.text) ? res.data.text : ''
-      const confianza = (res && res.data && typeof res.data.confidence === 'number') ? res.data.confidence : 0
-      console.info(`[OCR pase ${pase.psm} (${pase.nombre})] ${texto.length} caracteres (confianza: ${confianza})`)
-
-      // Puntaje combinado: un texto más largo NO gana si su confianza es baja
-      // (PSM 11 suelta texto disperso verborrágico pero poco confiable).
-      const utiles = texto.replace(/\s/g, '').length
-      const puntaje = confianza * Math.log10(10 + utiles)
-      const puntajeMejor = mejor.confianza * Math.log10(10 + mejor.texto.replace(/\s/g, '').length)
-      if (puntaje > puntajeMejor) {
-        mejor = { texto, confianza, agotado: false }
-      }
-
-      // Lectura suficiente: no se gastan más pases
-      if (confianza >= 65 && texto.replace(/\s/g, '').length >= 40) break
-    }
-    return mejor
-  } catch (e) {
-    console.warn('[OCR Bypass]', e)
-    await terminarWorkerOCR()
-    return { texto: '', confianza: 0, agotado: false }
-  }
-}
-
-// 🎯 PROCESAMIENTO MULTI-PÁGINA INTELIGENTE CON PROTECCIÓN TOTAL
-const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
-  let textoPagina1 = ''
-  let textoCompleto = ''
-  let ocrDocumentoIlegible = false
-  let paginasOCRAgotadas = 0
-
-  // --- WORD / ODT: extraccion de texto con mammoth ---
-  if (isWordFile.value) {
-    try {
-      ocrStepMessage.value = 'Leyendo documento de Word...'
-      ocrProgress.value = 40
-      const mammoth = await import('mammoth')
-      const arr = base64ToUint8(dataUrl)
-      const arrayBuffer = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength)
-      const resultado = await mammoth.extractRawText({ arrayBuffer })
-      textoCompleto = (resultado && resultado.value) ? resultado.value : ''
-      textoPagina1 = textoCompleto.split(/\n\s*\n/)[0] || textoCompleto
-      textoDocumentoExtraido.value = textoCompleto
-    } catch (wordErr) {
-      console.warn('[Word Extract Warning]', wordErr)
-      textoDocumentoExtraido.value = ''
-    }
-  } else if (isTextFile.value) {
-    // --- TXT / texto plano: decodificacion directa UTF-8 ---
-    try {
-      ocrStepMessage.value = 'Leyendo archivo de texto...'
-      ocrProgress.value = 40
-      textoCompleto = new TextDecoder('utf-8').decode(base64ToUint8(dataUrl))
-      textoPagina1 = textoCompleto
-      textoDocumentoExtraido.value = textoCompleto
-    } catch (txtErr) {
-      console.warn('[TXT Extract Warning]', txtErr)
-    }
-  } else if (isPdf) {
-    try {
-      const pdfjs = await getPdfjsEncargado()
-      ocrStepMessage.value = 'Abriendo documento PDF...'
-      ocrProgress.value = 20
-
-      const loadingTask = pdfjs.getDocument({ data: base64ToUint8(dataUrl), useSystemFonts: true })
-      const pdfDoc = await loadingTask.promise
-      const totalPaginas = pdfDoc.numPages
-      console.info(`[PDF] Páginas detectadas: ${totalPaginas}`)
-
-      for (let pNum = 1; pNum <= totalPaginas; pNum++) {
-        ocrStepMessage.value = `Procesando página ${pNum} de ${totalPaginas}...`
-        ocrProgress.value = Math.round(25 + (pNum / totalPaginas) * 60)
-
-        const page = await pdfDoc.getPage(pNum)
-
-        let textoPag = ''
-        try {
-          textoPag = await extraerTextoPaginaEncargado(page)
-        } catch (e) {
-          console.warn(`[Page ${pNum} Text Extract Warn]`, e)
-        }
-
-        // Si la página tiene poco o ningún texto digital (< 25 caracteres), hacemos OCR con Tesseract
-        if (textoPag.replace(/\s/g, '').length < 25) {
-          try {
-            const viewport = page.getViewport({ scale: 3.0 })
-            const canvas = document.createElement('canvas')
-            canvas.width = viewport.width
-            canvas.height = viewport.height
-            const ctx = canvas.getContext('2d')
-            ctx.fillStyle = '#ffffff'
-            ctx.fillRect(0, 0, canvas.width, canvas.height)
-            await page.render({ canvas, viewport }).promise
-
-            ocrStepMessage.value = `Extrayendo datos de página ${pNum} (OCR)...`
-            const ocrPag = await ejecutarOCR(canvas)
-            if (ocrPag.texto && ocrPag.texto.trim()) {
-              textoPag = ocrPag.texto
-            }
-            if (ocrPag.agotado) paginasOCRAgotadas++
-          } catch (renderErr) {
-            console.warn(`[Page ${pNum} Render Warn]`, renderErr)
-          }
-        }
-
-        try { page.cleanup() } catch (_) {}
-
-        if (pNum === 1) {
-          textoPagina1 = textoPag
-        }
-        textoCompleto += `\n--- PÁGINA ${pNum} ---\n` + textoPag
-      }
-    } catch (pdfErr) {
-      console.warn('[PDF Process Warning — documento no legible]', pdfErr)
-      ocrDocumentoIlegible = true
-      textoCompleto = ''
-      textoPagina1 = ''
-    }
-  } else {
-    try {
-      ocrStepMessage.value = 'Procesando imagen escaneada...'
-      ocrProgress.value = 40
-      const img = new Image()
-      img.src = dataUrl
-      await new Promise(r => { img.onload = r; img.onerror = r })
-      const canvas = document.createElement('canvas')
-      canvas.width = img.naturalWidth * 2
-      canvas.height = img.naturalHeight * 2
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-      const ocrImg = await ejecutarOCR(canvas)
-      textoCompleto = ocrImg.texto
-      textoPagina1 = textoCompleto
-      if (ocrImg.agotado) paginasOCRAgotadas++
-    } catch (imgErr) {
-      console.warn('[Image OCR Error]', imgErr)
-    }
-  }
-
-  ocrStepMessage.value = 'Interpretando campos con Inteligencia OCR...'
-  ocrProgress.value = 95
-  await new Promise(r => setTimeout(r, 150))
-
-  return { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas }
-}
-
-// ─── OCR VÍA BACKEND ─────────────────────────────────────────────────────────
-// Envía el archivo al endpoint /api/permisos/ocr del servidor.
-// El servidor usa pdf-parse (instantáneo para PDFs con texto) o Tesseract Node.
-// Devuelve los 9 campos listos para aplicarCampos().
-// Si el servidor no está disponible, se cae al pipeline Tesseract local.
-const procesarConBackendOCR = async (dataUrl, fileName, mimeType) => {
-  const headers = { 'Content-Type': 'application/json' }
-  const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || ''
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
-
-  const res = await fetch('/api/permisos/ocr', {
-    method: 'POST',
-    headers,
-    signal: controller.signal,
-    body: JSON.stringify({ archivoBase64: dataUrl, nombreArchivo: fileName, mimeType })
-  })
-  clearTimeout(timeoutId)
-
-  if (!res.ok) throw new Error(`Backend OCR HTTP ${res.status}`)
-  const data = await res.json()
-  if (!data.success) throw new Error(data.message || 'Backend OCR sin éxito')
-  return data // { campos, confianza, faltantes, textoExtraido }
-}
-
-// 🎯 MANEJADOR PRINCIPAL RESILIENTE CON RESPUESTA INMEDIATA
-// Estrategia de dos vías:
-//   1. Backend OCR (/api/permisos/ocr): pdf-parse + Tesseract Node — más rápido y preciso
-//   2. Fallback local (Tesseract.js en navegador): si el backend falla o no responde
+// 🎯 CARGA DE ARCHIVO ESCANEADO — Preparado para el nuevo motor de escaneo en Python
 const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
-  // Reiniciar el input de archivo para permitir subir el mismo archivo nuevamente
   if (e && e.target) e.target.value = ''
   if (!file) return
 
-  // Limpiar los campos de la carga anterior para no mezclar informacion
   resetFormData()
-
-  // Detectar el tipo real de archivo cargado (PDF / Word / TXT / Imagen)
   const tipoArchivo = detectarTipoArchivo(file)
   aplicarTipoArchivoAlVisor(tipoArchivo, file.type || '')
   textoDocumentoExtraido.value = ''
 
-  if (tipoArchivo.esDocAntiguo) {
-    lanzarAlertaBootstrap('warning', 'Formato Word Antiguo', 'El archivo .doc (Word 97-2003) puede no leerse completo. Se recomienda guardarlo como .docx o PDF.')
-  }
-
   documentFileName.value = file.name
   documentLoaded.value = true
-  isScanningOCR.value = true
-  ocrProgress.value = 10
-  ocrStepMessage.value = `Cargando ${file.name}...`
+  isScanningOCR.value = false
+  ocrProgress.value = 0
+  ocrStepMessage.value = ''
   confianzaOcrReal.value = 0
   camposFaltantesOcr.value = []
 
   const reader = new FileReader()
   reader.onload = async (event) => {
-    // Almacenar siempre en Base64 para que la base de datos pueda guardar el archivo real
     customFileUrl.value = event.target.result
-
-    // ── INTENTO 1: OCR VÍA BACKEND ──────────────────────────────────────────
-    // Solo para PDFs e imágenes (Word y TXT los procesa el pipeline local directamente)
-    let camposBackend = null
-    const puedeUsarBackend = tipoArchivo.esPdf || tipoArchivo.esImagen
-    if (puedeUsarBackend) {
-      try {
-        ocrStepMessage.value = '🔍 Extrayendo datos con servidor OCR...'
-        ocrProgress.value = 30
-
-        const resultado = await procesarConBackendOCR(event.target.result, file.name, file.type || '')
-        camposBackend = resultado.campos
-
-        // 📋 Debug: Texto extraído por el servidor (visible en consola del navegador)
-        if (resultado.textoExtraido) {
-          console.groupCollapsed('[OCR Backend] Texto extraído del documento')
-          console.log(resultado.textoExtraido)
-          console.groupEnd()
-        } else {
-          console.warn('[OCR Backend] El servidor no devolvió texto extraído — el PDF puede ser escaneado o protegido')
-        }
-
-        console.log('[OCR Backend] Campos extraídos:', resultado.campos)
-        console.log('[OCR Backend] Confianza:', resultado.confianza + '%', '| Faltantes:', resultado.faltantes)
-
-        aplicarCampos(camposBackend)
-
-        confianzaOcrReal.value = resultado.confianza
-        camposFaltantesOcr.value = resultado.faltantes || []
-        ocrProgress.value = 100
-        ocrStepMessage.value = '¡Lectura completada!'
-
-        const { confianza, faltantes } = resultado
-        if (faltantes.length === 0) {
-          lanzarAlertaBootstrap(
-            'success',
-            '✅ Datos del Permiso Extraídos',
-            `Solicitud de ${formData.nombreFuncionario || 'el funcionario'} — ${formData.tipoPermiso || 'permiso'} (${formData.fechaInicio || 'fecha por verificar'}). Revise que los datos coincidan con el PDF antes de radicar.`
-          )
-        } else {
-          lanzarAlertaBootstrap(
-            'warning',
-            `OCR ${confianza}% — ${faltantes.length} campo(s) por completar`,
-            `No se encontró en el PDF: ${faltantes.join(', ')}. Diligencie manualmente esos campos antes de radicar.`,
-            9000
-          )
-        }
-
-        isScanningOCR.value = false
-        ocrProgress.value = 0
-        return // ✅ Éxito con backend — no se usa el pipeline local
-      } catch (backendErr) {
-        console.warn('[OCR Backend] No disponible, usando pipeline local:', backendErr.message)
-        ocrStepMessage.value = 'Servidor OCR no disponible — procesando localmente...'
-        ocrProgress.value = 15
-        // Continúa al pipeline local (fallback)
-      }
-    }
-
-
-    // ── INTENTO 2: PIPELINE LOCAL (TESSERACT.JS EN NAVEGADOR) ────────────────
-    try {
-      const { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas } =
-        await procesarDocumentoCompleto(event.target.result, isPdfFile.value)
-
-      console.groupCollapsed('[OCR texto multi-página extraído]')
-      console.log('--- PÁGINA 1 (SOLICITUD) ---', textoPagina1)
-      console.log('--- TEXTO COMPLETO ---', textoCompleto)
-      console.groupEnd()
-
-      const campos = parsearTextoPermiso(textoCompleto, file.name, textoPagina1)
-      aplicarCampos(campos)
-
-      // Confianza REAL: % de las 9 áreas del formulario con evidencia en el
-      // documento (Nombre, Cédula, Cargo, Área, Fecha, Hora Inicio, Hora Fin,
-      // Tipo y Motivo). Las horas viven en los relojes, no en formData.
-      const { faltantes, confianza } = evaluarCamposExtraidos({
-        ...formData,
-        horaInicio: horaInicioPermiso.value,
-        horaFin: horaFinPermiso.value
-      })
-      confianzaOcrReal.value = confianza
-      camposFaltantesOcr.value = faltantes
-
-      ocrProgress.value = 100
-      ocrStepMessage.value = '¡Lectura completada!'
-
-      if (ocrDocumentoIlegible) {
-        lanzarAlertaBootstrap(
-          'warning',
-          'Documento no legible automáticamente',
-          `No fue posible leer el contenido de "${file.name}" (puede estar dañado o protegido). El documento queda en el visor: diligencie los campos manualmente antes de radicar.`,
-          9000
-        )
-      } else if (faltantes.length === 0) {
-        lanzarAlertaBootstrap(
-          'success',
-          '✅ Datos del Permiso Extraídos',
-          `Se cargó la solicitud de ${formData.nombreFuncionario} para permiso de ${formData.tipoPermiso} (${formData.fechaInicio}). Verifique que los datos coincidan con el PDF antes de radicar.`
-        )
-      } else {
-        lanzarAlertaBootstrap(
-          'warning',
-          `OCR parcial (${confianza}%) — ${faltantes.length} área(s) pendiente(s)`,
-          `El documento se leyó, pero no se pudo confirmar en el PDF: ${faltantes.join(', ')}. Diligencie esas áreas manualmente. ${paginasOCRAgotadas > 0 ? `(${paginasOCRAgotadas} página(s) tardaron demasiado en leerse).` : ''}`,
-          9000
-        )
-      }
-    } catch (err) {
-      console.error('[OCR ERROR]', err)
-      lanzarAlertaBootstrap(
-        'info',
-        'Documento Cargado',
-        `El archivo "${file.name}" fue cargado en el visor, pero la extracción automática falló (${err.message || 'error desconocido'}). Diligencie los campos manualmente.`,
-        9000
-      )
-    } finally {
-      isScanningOCR.value = false
-      ocrProgress.value = 0
-    }
   }
-
-  reader.onerror = () => {
-    isScanningOCR.value = false
-    ocrProgress.value = 0
-    lanzarAlertaBootstrap('warning', 'Archivo Cargado', 'El archivo fue cargado en el visor.')
-  }
-
   reader.readAsDataURL(file)
 }
 
@@ -2419,8 +2044,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('storage', onStorageChange)
-  // Liberar el worker de Tesseract al salir de la vista
-  terminarWorkerOCR()
 })
 
 // Confirm and Send to Gerencia (Guardar en Base de Datos MongoDB & Formato 24h)

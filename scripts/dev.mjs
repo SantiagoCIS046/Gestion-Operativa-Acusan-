@@ -23,11 +23,6 @@ const procesos = [
     color: MAGENTA,
     cmd: 'npm run dev:web',
   },
-  {
-    nombre: 'OCR-PY',
-    color: AMARILLO,
-    cmd: 'python acusan/backend/acuusan_ocr/server.py',
-  },
 ]
 
 // shell: true es necesario en Windows para resolver npm.cmd (y en *nix no molesta).

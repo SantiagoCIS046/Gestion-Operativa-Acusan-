@@ -51,7 +51,9 @@ export const AuthController = {
 
   /**
    * POST /api/auth/recuperar-password
-   * Solicita el envío de código de verificación al correo
+   * Registra la solicitud; el restablecimiento lo media el Administrador
+   * (no hay canal de correo para un código, y devolverlo por HTTP lo
+   * expondría a un atacante).
    */
   async solicitarRecuperacion(req, res) {
     try {
@@ -60,35 +62,13 @@ export const AuthController = {
       res.json({
         success: true,
         message: resultado.message,
-        data: resultado
+        data: { email: resultado.email }
       })
     } catch (error) {
       const status = error.status || 400
       res.status(status).json({
         success: false,
         message: error.message || 'Error al procesar la solicitud de recuperación'
-      })
-    }
-  },
-
-  /**
-   * POST /api/auth/reset-password
-   * Restablece e integra la nueva contraseña en la BD
-   */
-  async resetearPassword(req, res) {
-    try {
-      const { email, nuevaPassword } = req.body
-      const resultado = await AuthService.resetearPassword({ email, nuevaPassword })
-      res.json({
-        success: true,
-        message: resultado.message,
-        data: resultado
-      })
-    } catch (error) {
-      const status = error.status || 400
-      res.status(status).json({
-        success: false,
-        message: error.message || 'Error al actualizar la contraseña'
       })
     }
   },

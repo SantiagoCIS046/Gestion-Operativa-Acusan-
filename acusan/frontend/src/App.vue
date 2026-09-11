@@ -204,31 +204,8 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- RADICADOS (Eliana y similares): solo su área -->
-          <div v-if="tieneAcceso(['RADICADOS'])" class="nav-group">
-            <button
-              class="nav-group-header"
-              :class="{ 'group-active': menuExpandido.radicados }"
-              @click="toggleMenu('radicados')"
-            >
-              <span class="nav-icon">📁</span>
-              <span class="nav-text">Radicados</span>
-              <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.radicados }">›</span>
-            </button>
-            <transition name="slide-down">
-              <div v-if="menuExpandido.radicados" class="nav-group-children">
-                <router-link to="/radicados/gestion" class="nav-child" active-class="child-active">
-                  <span class="child-icon">🖥️</span> Panel de Radicados
-                </router-link>
-                <router-link to="/radicados/expedientes" class="nav-child" active-class="child-active">
-                  <span class="child-icon">🔗</span> Radicado ↔ Respuesta
-                </router-link>
-              </div>
-            </transition>
-          </div>
-
-          <!-- ENCARGADO con acceso a radicados: solo su área -->
-          <div v-if="tieneAcceso(['ENCARGADO'])" class="nav-group">
+          <!-- RADICADOS (Eliana y Ramón): su área operativa -->
+          <div v-if="tieneAcceso(['RADICADOS', 'ENCARGADO'])" class="nav-group">
             <button
               class="nav-group-header"
               :class="{ 'group-active': menuExpandido.radicados }"
@@ -472,10 +449,11 @@ const tieneAcceso = (roles) => {
 // Etiqueta y clase del rol para el header
 const rolLabel = computed(() => {
   switch (usuario.value?.rol) {
-    case 'ENCARGADO': return 'Encargado de RRHH'
+    case 'ENCARGADO': return 'Encargado de RRHH & Radicados'
+    case 'RADICADOS': return 'Encargada de Radicaciones'
     case 'GERENCIA':  return 'Gerencia General'
     case 'OPERATIVO': return 'Operativo PQR'
-    case 'ADMIN':     return 'Administrador'
+    case 'ADMIN':     return 'Administrador del Sistema'
     default: return 'Sistema Activo'
   }
 })
@@ -483,8 +461,10 @@ const rolLabel = computed(() => {
 const rolClass = computed(() => {
   switch (usuario.value?.rol) {
     case 'ENCARGADO': return 'role-encargado'
+    case 'RADICADOS': return 'role-radicados'
     case 'GERENCIA':  return 'role-gerencia'
     case 'OPERATIVO': return 'role-operativo'
+    case 'ADMIN':     return 'role-admin'
     default: return 'role-default'
   }
 })
@@ -877,8 +857,10 @@ const confirmarCerrarSesion = () => {
 }
 
 .role-encargado { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+.role-radicados { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
 .role-gerencia  { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
 .role-operativo { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.role-admin     { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 .role-default   { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
 
 .role-badge .dot {

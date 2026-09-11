@@ -80,9 +80,12 @@ export const permisosService = {
       if (filtros.cedula) params.append("cedula", filtros.cedula);
       if (filtros.tipo) params.append("tipo", filtros.tipo);
 
+      // GET / admite ENCARGADO, GERENCIA y ADMIN: la misma fuente la consumen
+      // VistaEncargado (Ramón) y VistaGerenciaPermisos (Gerencia); /encargado
+      // quedó exclusivo de ENCARGADO.
       const url = params.toString()
-        ? `${API_BASE_URL}/encargado?${params.toString()}`
-        : `${API_BASE_URL}/encargado`;
+        ? `${API_BASE_URL}?${params.toString()}`
+        : `${API_BASE_URL}`;
       const res = await fetch(url, {
         method: "GET",
         headers: getHeaders(),
@@ -94,6 +97,12 @@ export const permisosService = {
         authService.logout();
         window.location.href = "/login";
         return [];
+      }
+
+      // Un 403 no expulsa la sesión pero tampoco debe ser invisible: deja
+      // rastro en consola antes de caer al espejo local.
+      if (res.status === 403) {
+        console.error("[permisos] Acceso denegado al historial (403):", res.statusText);
       }
 
       if (res.ok) {

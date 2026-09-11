@@ -224,7 +224,10 @@
           </div>
         </template>
 
-        <!-- ==================== MODO 3: SOLICITAR RECUPERACIÓN DE CONTRASEÑA ==================== -->
+        <!-- ==================== MODO 3: RECUPERACIÓN MEDIADA POR EL ADMINISTRADOR ==================== -->
+        <!-- Sin canal de correo institucional, un código devuelto por HTTP lo vería
+             también un atacante: el restablecimiento lo gestiona el ADMIN desde
+             la Gestión de Usuarios (ver PROTECCION de auth en el backend). -->
         <template v-else-if="modo === 'recuperar'">
           <div class="form-header">
             <div class="brand-emblem-badge bg-amber">
@@ -234,7 +237,7 @@
             </div>
             <span class="portal-eyebrow">RECUPERACIÓN DE CUENTA</span>
             <h2 class="form-title">¿Olvidó su Contraseña?</h2>
-            <p class="form-subtitle">Ingrese su correo institucional para recibir el código</p>
+            <p class="form-subtitle">El restablecimiento es gestionado por el Administrador del Sistema</p>
           </div>
 
           <transition name="shake-fade">
@@ -243,25 +246,13 @@
             </div>
           </transition>
 
-          <form @submit.prevent="handleSolicitarRecuperacion" class="login-form" novalidate>
-            <div class="field-group">
-              <label class="field-label">Correo Electrónico Registrado</label>
-              <div class="field-input-wrapper">
-                <span class="field-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                    <polyline points="22,6 12,13 2,6"></polyline>
-                  </svg>
-                </span>
-                <input v-model="formRecuperar.email" type="email" class="field-input" placeholder="ejemplo@acuasan.com" required />
-              </div>
-            </div>
-
-            <button type="submit" class="btn-login btn-amber" :disabled="cargando">
-              <span v-if="cargando" class="spinner"></span>
-              <span v-else>Enviar Código al Correo</span>
-            </button>
-          </form>
+          <div class="security-notice">
+            <span>
+              🔐 Contacte al Administrador del Sistema (<strong>admin@acuasan.com</strong>) solicitando el
+              restablecimiento de su clave. Él la reestablece desde la Gestión de Usuarios y le entrega una
+              clave temporal de forma presencial o telefónica, nunca por este medio.
+            </span>
+          </div>
 
           <div class="bottom-action-container">
             <button type="button" class="action-link-subtle" @click="cambiarModo('login')">
@@ -270,103 +261,8 @@
           </div>
         </template>
 
-        <!-- ==================== MODO 4: ACTUALIZAR CONTRASEÑA E INTEGRAR A BD ==================== -->
-        <template v-else-if="modo === 'reset-password'">
-          <div class="form-header">
-            <div class="brand-emblem-badge bg-blue">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-            </div>
-            <span class="portal-eyebrow">ACTUALIZACIÓN DE CLAVE</span>
-            <h2 class="form-title">Nueva Contraseña</h2>
-            <p class="form-subtitle">Establezca su nueva clave para <strong>{{ formReset.email }}</strong></p>
-          </div>
-
-          <transition name="shake-fade">
-            <div v-if="errorMsg" class="error-alert" role="alert">
-              <span>{{ errorMsg }}</span>
-            </div>
-          </transition>
-
-          <form @submit.prevent="handleResetearPassword" class="login-form" novalidate>
-            <!-- Código simulado enviándolo al correo -->
-            <div class="field-group">
-              <label class="field-label">Código de Verificación (Enviado al correo)</label>
-              <input v-model="formReset.codigo" type="text" class="field-input" placeholder="ej. 849201" required />
-            </div>
-
-            <!-- Nueva Contraseña -->
-            <div class="field-group">
-              <label class="field-label">Nueva Contraseña</label>
-              <div class="field-input-wrapper">
-                <input
-                  v-model="formReset.nuevaPassword"
-                  :type="mostrarPassword ? 'text' : 'password'"
-                  class="field-input"
-                  placeholder="Mínimo 6 caracteres"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="mostrarPassword = !mostrarPassword"
-                  title="Mostrar / Ocultar contraseña"
-                >
-                  <svg v-if="!mostrarPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                  <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Confirmar Contraseña -->
-            <div class="field-group">
-              <label class="field-label">Confirmar Nueva Contraseña</label>
-              <div class="field-input-wrapper">
-                <input
-                  v-model="formReset.confirmarPassword"
-                  :type="mostrarPassword ? 'text' : 'password'"
-                  class="field-input"
-                  placeholder="Repita la clave"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="mostrarPassword = !mostrarPassword"
-                  title="Mostrar / Ocultar contraseña"
-                >
-                  <svg v-if="!mostrarPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                  <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-
-            <button type="submit" class="btn-login" :disabled="cargando">
-              <span v-if="cargando" class="spinner"></span>
-              <span v-else>Guardar Nueva Contraseña en BD</span>
-            </button>
-          </form>
-
-          <div class="bottom-action-container">
-            <button type="button" class="action-link-subtle" @click="cambiarModo('login')">
-              ← Cancelar y volver al Login
-            </button>
-          </div>
-        </template>
+        <!-- (MODO 4 reset-password ELIMINADO: el restablecimiento de clave lo media
+             el Administrador desde Gestión de Usuarios; ver MODO 3) -->
 
         <!-- Footer -->
         <div class="form-footer">
@@ -462,7 +358,7 @@ import GradientWaves from '@/components/GradientWaves.vue'
 const router = useRouter()
 const currentYear = new Date().getFullYear()
 
-// Modos: 'login' | 'registro' | 'recuperar' | 'reset-password'
+// Modos: 'login' | 'registro' | 'recuperar' (informativo: el reset lo media el ADMIN)
 const modo = ref('login')
 
 const cargando = ref(false)
@@ -486,22 +382,11 @@ const formLogin = reactive({
 const formRegistro = reactive({
   nombre: '',
   cedula: '',
-  cargo: '',
-  rol: 'ENCARGADO',
   email: '',
   password: ''
 })
-
-const formRecuperar = reactive({
-  email: ''
-})
-
-const formReset = reactive({
-  email: '',
-  codigo: '',
-  nuevaPassword: '',
-  confirmarPassword: ''
-})
+// NOTA: el autoregistro NO envía rol — el backend asigna SIEMPRE
+// 'OPERATIVO' (la asignación de roles la hace el ADMIN en Gestión de Usuarios).
 
 const errores = reactive({
   email: '',
@@ -554,62 +439,13 @@ const handleRegistro = async () => {
 
   cargando.value = true
   try {
-    const res = await authService.registro(formRegistro)
+    await authService.registro(formRegistro)
     // Tras registrar con éxito, iniciar sesión automáticamente con su nuevo usuario
     const loginRes = await authService.login(formRegistro.email, formRegistro.password)
     const rutaInicio = authService.getRutaInicioPorRol(loginRes.usuario.rol)
     await router.replace(rutaInicio)
   } catch (error) {
     errorMsg.value = error.message || 'Error al registrar el usuario en el sistema.'
-  } finally {
-    cargando.value = false
-  }
-}
-
-// 3. Manejo de Solicitud de Recuperación por Correo
-const handleSolicitarRecuperacion = async () => {
-  errorMsg.value = ''
-  if (!formRecuperar.email.trim()) {
-    errorMsg.value = 'Ingrese su correo electrónico institucional.'
-    return
-  }
-
-  cargando.value = true
-  try {
-    const res = await authService.solicitarRecuperacion(formRecuperar.email)
-    formReset.email = formRecuperar.email
-    formReset.codigo = res.codigoVerificacion || '849201'
-    cambiarModo('reset-password')
-    successMsg.value = `Código de verificación enviado al correo ${formRecuperar.email}. Ingrese su nueva clave.`
-  } catch (error) {
-    errorMsg.value = error.message || 'No se encontró ninguna cuenta con ese correo.'
-  } finally {
-    cargando.value = false
-  }
-}
-
-// 4. Manejo de Reseteo y Actualización de Contraseña en BD
-const handleResetearPassword = async () => {
-  errorMsg.value = ''
-  if (!formReset.nuevaPassword || formReset.nuevaPassword.length < 6) {
-    errorMsg.value = 'La nueva contraseña debe tener al menos 6 caracteres.'
-    return
-  }
-  if (formReset.nuevaPassword !== formReset.confirmarPassword) {
-    errorMsg.value = 'Las contraseñas no coinciden.'
-    return
-  }
-
-  cargando.value = true
-  try {
-    await authService.resetearPassword(formReset.email, formReset.nuevaPassword)
-    // Redirigir al modo Login con aviso de éxito
-    formLogin.email = formReset.email
-    formLogin.password = ''
-    cambiarModo('login')
-    successMsg.value = '✔ Contraseña actualizada correctamente en la BD de Acuasan. Ya puede ingresar con su nueva clave.'
-  } catch (error) {
-    errorMsg.value = error.message || 'Error al actualizar la contraseña.'
   } finally {
     cargando.value = false
   }

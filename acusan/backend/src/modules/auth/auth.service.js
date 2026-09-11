@@ -171,14 +171,25 @@ export const AuthService = {
   },
 
   /**
-   * Registrar nuevo usuario en el sistema
+   * Registrar nuevo usuario en el sistema (autoregistro público)
+   *
+   * Regla de seguridad institucional: el autoregistro SIEMPRE crea un
+   * Funcionario Operativo. Cualquier rol enviado en el body se ignora —
+   * la asignación de roles (ENCARGADO, GERENCIA, RADICADOS, ADMIN) la
+   * hace exclusivamente el Administrador desde /api/admin/usuarios.
+   * Tampoco devuelve JWT: el cliente inicia sesión aparte con /login.
    */
   async registrarUsuario(datos) {
-    const { nombre, email, password, rol, cedula, cargo } = datos
+    const { nombre, email, password, cedula } = datos
 
-    if (!nombre || !email || !password || !rol) {
-      throw { status: 400, message: 'Nombre, correo, contraseña y rol son obligatorios.' }
+    if (!nombre || !email || !password) {
+      throw { status: 400, message: 'Nombre, correo y contraseña son obligatorios.' }
     }
+
+    if (datos.rol && String(datos.rol).toUpperCase().trim() !== 'OPERATIVO') {
+      logger.warn('AUTH', 'REGISTRO', `Ignorado rol solicitado "${datos.rol}": el autoregistro siempre es OPERATIVO`)
+    }
+    const rol = 'OPERATIVO'
 
     const emailFormateado = email.toLowerCase().trim()
 
@@ -191,13 +202,6 @@ export const AuthService = {
       throw { status: 400, message: 'El correo electrónico ya se encuentra registrado en el sistema.' }
     }
 
-    const rolesValidos = ['ENCARGADO', 'GERENCIA', 'OPERATIVO', 'ADMIN', 'RADICADOS']
-    const rolNormalizado = rol.toUpperCase().trim()
-
-    if (!rolesValidos.includes(rolNormalizado)) {
-      throw { status: 400, message: `Rol no válido. Los roles permitidos son: ${rolesValidos.join(', ')}` }
-    }
-
     const hashPassword = await bcrypt.hash(password, 10)
 
     const nuevoUsuario = await prisma.usuario.create({
@@ -205,9 +209,9 @@ export const AuthService = {
         nombre: nombre.trim(),
         email: emailFormateado,
         password: hashPassword,
-        rol: rolNormalizado,
+        rol,
         cedula: cedula ? cedula.trim() : null,
-        cargo: cargo ? cargo.trim() : `Funcionario ${rolNormalizado}`,
+        cargo: datos.cargo ? datos.cargo.trim() : 'Funcionario Operativo',
         activo: true
       }
     })
@@ -215,23 +219,10 @@ export const AuthService = {
     logger.success(
       'AUTH',
       'REGISTRO',
-      `Nuevo usuario: ${nuevoUsuario.email} | Rol: ${rolNormalizado} | Cargo: ${nuevoUsuario.cargo}`
+      `Nuevo usuario: ${nuevoUsuario.email} | Rol: ${rol} (autoregistro) | Cargo: ${nuevoUsuario.cargo}`
     )
 
-    const payload = {
-      id: nuevoUsuario.id,
-      nombre: nuevoUsuario.nombre,
-      email: nuevoUsuario.email,
-      rol: nuevoUsuario.rol,
-      cargo: nuevoUsuario.cargo
-    }
-
-    const token = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN || '8h'
-    })
-
     return {
-      token,
       usuario: {
         id: nuevoUsuario.id,
         nombre: nuevoUsuario.nombre,
@@ -244,7 +235,12 @@ export const AuthService = {
   },
 
   /**
-   * Solicitar recuperación de contraseña (Genera código de recuperación)
+   * Solicitar recuperación de contraseña.
+   *
+   * El restablecimiento es mediado por el Administrador: no existe canal de
+   * correo institucional, y un código devuelto en la propia respuesta HTTP
+   * sería visible también para un atacante. El ADMIN restablece la clave
+   * desde Gestión de Usuarios (/api/admin/usuarios).
    */
   async solicitarRecuperacion(email) {
     if (!email) {
@@ -260,50 +256,11 @@ export const AuthService = {
       throw { status: 404, message: 'No existe ningún usuario registrado con ese correo electrónico.' }
     }
 
-    const codigoVerificacion = Math.floor(100000 + Math.random() * 900000).toString()
-
-    logger.info('AUTH', 'RECUP. PWD', `Código de recuperación generado para: ${emailFormateado}`)
+    logger.warn('AUTH', 'RESET SOLICITADO', `Solicitud de restablecimiento para: ${emailFormateado}`)
 
     return {
       email: usuario.email,
-      codigoVerificacion,
-      message: `Se ha enviado el código de verificación al correo ${usuario.email}.`
-    }
-  },
-
-  /**
-   * Resetear contraseña e integrarla actualizada a la BD
-   */
-  async resetearPassword({ email, nuevaPassword }) {
-    if (!email || !nuevaPassword) {
-      throw { status: 400, message: 'El correo y la nueva contraseña son obligatorios.' }
-    }
-
-    if (nuevaPassword.length < 6) {
-      throw { status: 400, message: 'La contraseña debe tener al menos 6 caracteres.' }
-    }
-
-    const emailFormateado = email.toLowerCase().trim()
-    const usuario = await prisma.usuario.findUnique({
-      where: { email: emailFormateado }
-    })
-
-    if (!usuario) {
-      throw { status: 404, message: 'Usuario no encontrado.' }
-    }
-
-    const hashNuevaPassword = await bcrypt.hash(nuevaPassword, 10)
-
-    await prisma.usuario.update({
-      where: { id: usuario.id },
-      data: { password: hashNuevaPassword }
-    })
-
-    logger.success('AUTH', 'RESET PWD', `Contraseña actualizada para: ${emailFormateado}`)
-
-    return {
-      email: usuario.email,
-      message: 'Contraseña actualizada correctamente en la base de datos de Acuasan. Ya puede ingresar con su nueva clave.'
+      message: 'Solicitud registrada. Contacte al Administrador del Sistema (admin@acuasan.com): él restablece su contraseña desde la Gestión de Usuarios.'
     }
   },
 

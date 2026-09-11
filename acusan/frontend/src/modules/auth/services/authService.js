@@ -35,7 +35,16 @@ const USUARIOS_FALLBACK = [
   },
   {
     id: 'u-roman-02',
-    nombre: 'Román',
+    nombre: 'Ramón',
+    email: 'ramon@acuasan.com',
+    password: 'acuasan2026',
+    rol: 'ENCARGADO',
+    cargo: 'Encargado de Permisos, Horas Extras y Radicados',
+    cedula: '11009002'
+  },
+  {
+    id: 'u-roman-alt',
+    nombre: 'Ramón',
     email: 'roman@acuasan.com',
     password: 'acuasan2026',
     rol: 'ENCARGADO',
@@ -150,41 +159,9 @@ export const authService = {
     return data.data
   },
 
-  /**
-   * Solicita el código de recuperación de contraseña vía correo
-   */
-  async solicitarRecuperacion(email) {
-    const res = await fetch(`${API_BASE}/recuperar-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim().toLowerCase() })
-    })
-
-    const data = await res.json()
-    if (!res.ok || !data.success) {
-      throw new Error(data.message || 'Error al procesar solicitud de recuperación')
-    }
-
-    return data.data
-  },
-
-  /**
-   * Restablece la contraseña en la BD
-   */
-  async resetearPassword(email, nuevaPassword) {
-    const res = await fetch(`${API_BASE}/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), nuevaPassword })
-    })
-
-    const data = await res.json()
-    if (!res.ok || !data.success) {
-      throw new Error(data.message || 'Error al actualizar la contraseña')
-    }
-
-    return data
-  },
+  // NOTA: solicitarRecuperacion/resetearPassword fueron ELIMINADOS junto con
+  // los endpoints /recuperar-password y /reset-password del backend. El
+  // restablecimiento de clave lo media el ADMIN desde Gestión de Usuarios.
 
   /**
    * Cierra sesión de forma reactiva limpiando el estado y localStorage
