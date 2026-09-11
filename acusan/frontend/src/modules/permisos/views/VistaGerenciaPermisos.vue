@@ -6,7 +6,18 @@
     <transition name="toast-slide">
       <div
         v-if="alertaBootstrap.visible"
-        :class="['alert', `alert-${alertaBootstrap.tipo}`, 'alert-dismissible', 'fade', 'show', 'd-flex', 'align-items-center', 'shadow-sm', 'mb-3', 'rounded-3']"
+        :class="[
+          'alert',
+          `alert-${alertaBootstrap.tipo}`,
+          'alert-dismissible',
+          'fade',
+          'show',
+          'd-flex',
+          'align-items-center',
+          'shadow-sm',
+          'mb-3',
+          'rounded-3',
+        ]"
         role="alert"
       >
         <div class="me-2 fs-5">
@@ -68,7 +79,9 @@
         <div class="kpi-icon">⏱️</div>
         <div class="kpi-data">
           <span class="kpi-label">Horas Acumuladas Personal</span>
-          <span class="kpi-val text-purple">{{ totalHorasAcumuladasGlobal }}h</span>
+          <span class="kpi-val text-purple"
+            >{{ totalHorasAcumuladasGlobal }}h</span
+          >
           <span class="kpi-sub">Total horas en {{ mesNombreActual }}</span>
         </div>
       </div>
@@ -112,20 +125,27 @@
         <!-- Month & Year Selector -->
         <div class="month-selector">
           <button class="nav-month-btn" @click="cambiarMes(-1)">◄</button>
-          <span class="month-display">{{ mesNombreActual }} {{ anioSeleccionado }}</span>
+          <span class="month-display"
+            >{{ mesNombreActual }} {{ anioSeleccionado }}</span
+          >
           <button class="nav-month-btn" @click="cambiarMes(1)">►</button>
         </div>
       </div>
 
       <div class="toolbar-right">
         <!-- Botón de Sincronización Manual Profesional -->
-        <button 
+        <button
           class="btn-sync-action"
           @click="cargarPermisos()"
           :disabled="cargando"
           title="Forzar sincronización de datos con la nube"
         >
-          <span v-if="cargando" class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+          <span
+            v-if="cargando"
+            class="spinner-border spinner-border-sm text-primary"
+            role="status"
+            aria-hidden="true"
+          ></span>
           <span v-else class="btn-sync-icon">🔄</span>
           <span>Sincronizar Nube</span>
         </button>
@@ -139,7 +159,14 @@
             class="search-input"
             placeholder="Buscar por funcionario, cédula o radicado..."
           />
-          <button v-if="busqueda" class="clear-search" @click="busqueda = ''" title="Limpiar búsqueda">✕</button>
+          <button
+            v-if="busqueda"
+            class="clear-search"
+            @click="busqueda = ''"
+            title="Limpiar búsqueda"
+          >
+            ✕
+          </button>
         </div>
       </div>
     </div>
@@ -152,9 +179,15 @@
       <div class="excel-header-stripe">
         <div class="excel-stripe-left">
           <span class="excel-icon-logo">📊</span>
-          <span class="excel-tag">Acuasan_Control_Permisos_{{ mesNombreActual }}_{{ anioSeleccionado }}.xlsx</span>
+          <span class="excel-tag"
+            >Acuasan_Control_Permisos_{{ mesNombreActual }}_{{
+              anioSeleccionado
+            }}.xlsx</span
+          >
         </div>
-        <span class="excel-meta">Total Registros en Hoja: {{ permisosFiltrados.length }}</span>
+        <span class="excel-meta"
+          >Total Registros en Hoja: {{ permisosFiltrados.length }}</span
+        >
       </div>
 
       <!-- Excel Formula Bar (fx) -->
@@ -162,7 +195,12 @@
         <div class="cell-name-box">A1</div>
         <div class="fx-icon">fx</div>
         <div class="formula-input">
-          <span class="formula-text">=SUMA_HORAS_MES({{ mesNombreActual }}) &rarr; <strong>{{ totalHorasAcumuladasGlobal }} Horas Acumuladas</strong> | Permisos Registrados: <strong>{{ permisosFiltrados.length }}</strong></span>
+          <span class="formula-text"
+            >=SUMA_HORAS_MES({{ mesNombreActual }}) &rarr;
+            <strong>{{ totalHorasAcumuladasGlobal }} Horas Acumuladas</strong> |
+            Permisos Registrados:
+            <strong>{{ permisosFiltrados.length }}</strong></span
+          >
         </div>
       </div>
 
@@ -204,7 +242,8 @@
           <tbody>
             <tr v-if="permisosFiltrados.length === 0">
               <td colspan="12" class="text-center py-4 text-muted font-mono">
-                [Hoja vacía] No se encontraron registros de permisos para {{ mesNombreActual }} {{ anioSeleccionado }}.
+                [Hoja vacía] No se encontraron registros de permisos para
+                {{ mesNombreActual }} {{ anioSeleccionado }}.
               </td>
             </tr>
             <tr
@@ -214,21 +253,25 @@
             >
               <!-- Excel Row Number Header Column -->
               <td class="col-excel-index">{{ index + 1 }}</td>
-              
+
               <!-- A: Radicado -->
               <td class="col-radicado">#{{ item.radicado }}</td>
 
               <!-- B: Funcionario & Cargo -->
               <td>
                 <div class="cell-user">
-                  <span class="user-name">{{ item.funcionario || item.nombreFuncionario }}</span>
+                  <span class="user-name">{{
+                    item.funcionario || item.nombreFuncionario
+                  }}</span>
                   <span class="user-sub">{{ item.cargo }}</span>
                 </div>
               </td>
 
               <!-- C: Dependencia -->
               <td>
-                <span class="cell-dep">{{ item.dependencia || 'Planta Operativa' }}</span>
+                <span class="cell-dep">{{
+                  item.dependencia || "Planta Operativa"
+                }}</span>
               </td>
 
               <!-- D: Tipo Permiso -->
@@ -240,14 +283,20 @@
               <td>
                 <div class="cell-datetime">
                   <span class="date-main">📅 {{ item.fechaInicio }}</span>
-                  <span class="time-sub">⏰ {{ item.hora24 }} | {{ item.duracion }}</span>
+                  <span class="time-sub"
+                    >⏰ {{ item.hora24 }} | {{ item.duracion }}</span
+                  >
                 </div>
               </td>
 
               <!-- F: Solicitudes del empleado en el mes -->
               <td class="text-center">
                 <span class="freq-badge">
-                  {{ item.solicitudesMesEmpleado }} {{ item.solicitudesMesEmpleado === 1 ? 'permiso' : 'permisos' }} en el mes
+                  {{ item.solicitudesMesEmpleado }}
+                  {{
+                    item.solicitudesMesEmpleado === 1 ? "permiso" : "permisos"
+                  }}
+                  en el mes
                 </span>
               </td>
 
@@ -261,24 +310,52 @@
               <!-- H: OCR Score -->
               <td class="text-center">
                 <div class="ocr-score-bar justify-content-center">
-                  <span class="score-text">{{ item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95) }}%</span>
+                  <span class="score-text"
+                    >{{
+                      item.ocrScore ||
+                      (item.ocrConfidence
+                        ? Math.round(item.ocrConfidence * 100)
+                        : 95)
+                    }}%</span
+                  >
                   <div class="progress-bar-bg">
-                    <div class="progress-bar-fill" :style="{ width: (item.ocrScore || (item.ocrConfidence ? Math.round(item.ocrConfidence * 100) : 95)) + '%' }"></div>
+                    <div
+                      class="progress-bar-fill"
+                      :style="{
+                        width:
+                          (item.ocrScore ||
+                            (item.ocrConfidence
+                              ? Math.round(item.ocrConfidence * 100)
+                              : 95)) + '%',
+                      }"
+                    ></div>
                   </div>
                 </div>
               </td>
 
               <!-- I: Motivo / Observaciones -->
               <td>
-                <span class="cell-motivo text-truncate d-block" style="max-width: 220px;" :title="item.motivo || item.observaciones">
-                  {{ item.motivo || item.observaciones || 'Sin observaciones' }}
+                <span
+                  class="cell-motivo text-truncate d-block"
+                  style="max-width: 220px"
+                  :title="item.motivo || item.observaciones"
+                >
+                  {{ item.motivo || item.observaciones || "Sin observaciones" }}
                 </span>
               </td>
 
               <!-- J: Estado -->
               <td class="text-center">
-                <span :class="['badge', item.estado === 'Aprobado' ? 'bg-success' : 'bg-warning text-dark']" style="font-size: 0.68rem;">
-                  {{ item.estado || 'Aprobado' }}
+                <span
+                  :class="[
+                    'badge',
+                    item.estado === 'Aprobado'
+                      ? 'bg-success'
+                      : 'bg-warning text-dark',
+                  ]"
+                  style="font-size: 0.68rem"
+                >
+                  {{ item.estado || "Aprobado" }}
                 </span>
               </td>
 
@@ -302,9 +379,15 @@
     <!-- ========================================== -->
     <!-- VISTA 2: CALENDARIO INTERACTIVO MENSUAL -->
     <!-- ========================================== -->
-    <div v-else-if="vistaModo === 'calendario'" class="calendar-container shadow-sm">
+    <div
+      v-else-if="vistaModo === 'calendario'"
+      class="calendar-container shadow-sm"
+    >
       <div class="calendar-header-bar">
-        <h3 class="calendar-title">📅 Programación de Permisos — {{ mesNombreActual }} {{ anioSeleccionado }}</h3>
+        <h3 class="calendar-title">
+          📅 Programación de Permisos — {{ mesNombreActual }}
+          {{ anioSeleccionado }}
+        </h3>
       </div>
 
       <!-- Days of Week Header -->
@@ -324,11 +407,16 @@
           v-for="dia in diasDelMesGrid"
           :key="dia.id"
           class="calendar-cell"
-          :class="{ 'cell-other-month': !dia.esMesActual, 'cell-today': dia.esHoy }"
+          :class="{
+            'cell-other-month': !dia.esMesActual,
+            'cell-today': dia.esHoy,
+          }"
         >
           <div class="cell-day-num">
             <span>{{ dia.numeroDia }}</span>
-            <span v-if="dia.permisos.length > 0" class="badge-day-count">{{ dia.permisos.length }}</span>
+            <span v-if="dia.permisos.length > 0" class="badge-day-count">{{
+              dia.permisos.length
+            }}</span>
           </div>
 
           <!-- Permisos chips for this day -->
@@ -341,12 +429,16 @@
               :title="`${p.funcionario} - ${p.tipo} (${p.hora24})`"
             >
               <div class="chip-top">
-                <span class="chip-name">{{ shortName(p.funcionario || p.nombreFuncionario) }}</span>
+                <span class="chip-name">{{
+                  shortName(p.funcionario || p.nombreFuncionario)
+                }}</span>
                 <span class="chip-time">{{ p.hora24 }}</span>
               </div>
               <div class="chip-sub">
                 <span class="chip-type-text">{{ p.tipo }}</span>
-                <span class="chip-accum">{{ p.horasAcumuladasMesEmpleado }}h/mes</span>
+                <span class="chip-accum"
+                  >{{ p.horasAcumuladasMesEmpleado }}h/mes</span
+                >
               </div>
             </div>
           </div>
@@ -357,10 +449,18 @@
     <!-- ========================================== -->
     <!-- VISTA 3: RESUMEN ACUMULADO POR EMPLEADO -->
     <!-- ========================================== -->
-    <div v-else-if="vistaModo === 'resumen'" class="excel-grid-container shadow-sm">
+    <div
+      v-else-if="vistaModo === 'resumen'"
+      class="excel-grid-container shadow-sm"
+    >
       <div class="excel-header-stripe bg-purple">
-        <span class="excel-tag">Consolidado Mensual de Permisos Acumulados por Funcionario</span>
-        <span class="excel-meta">Total Funcionarios con Permiso en {{ mesNombreActual }}: {{ resumenEmpleadosAcumulado.length }}</span>
+        <span class="excel-tag"
+          >Consolidado Mensual de Permisos Acumulados por Funcionario</span
+        >
+        <span class="excel-meta"
+          >Total Funcionarios con Permiso en {{ mesNombreActual }}:
+          {{ resumenEmpleadosAcumulado.length }}</span
+        >
       </div>
       <div class="table-responsive">
         <table class="excel-table">
@@ -394,16 +494,24 @@
               <td>{{ emp.dependencia }}</td>
               <td class="text-center">
                 <span class="freq-badge text-lg">
-                  {{ emp.totalSolicitudesMes }} {{ emp.totalSolicitudesMes === 1 ? 'solicitud' : 'solicitudes' }}
+                  {{ emp.totalSolicitudesMes }}
+                  {{
+                    emp.totalSolicitudesMes === 1 ? "solicitud" : "solicitudes"
+                  }}
                 </span>
               </td>
               <td class="text-center">
-                <span class="hours-accum-badge text-lg bg-purple-subtle text-purple">
+                <span
+                  class="hours-accum-badge text-lg bg-purple-subtle text-purple"
+                >
                   ⚡ {{ emp.totalHorasAcumuladas }} Horas Acumuladas
                 </span>
               </td>
               <td class="text-center">
-                <button class="btn btn-xs btn-outline-primary" @click="verDetallesEmpleado(emp)">
+                <button
+                  class="btn btn-xs btn-outline-primary"
+                  @click="verDetallesEmpleado(emp)"
+                >
                   🔍 Ver {{ emp.totalSolicitudesMes }} permisos
                 </button>
               </td>
@@ -418,21 +526,36 @@
     <!-- ========================================== -->
     <div v-else-if="vistaModo === 'expedientes'" class="expedientes-container">
       <div class="card border shadow-sm rounded-3 bg-white mb-3">
-        <div class="card-header bg-navy text-white py-2 px-3 d-flex justify-content-between align-items-center rounded-top">
+        <div
+          class="card-header bg-navy text-white py-2 px-3 d-flex justify-content-between align-items-center rounded-top"
+        >
           <div class="d-flex align-items-center gap-2">
             <span class="fs-5">📁</span>
             <div>
-              <strong class="text-white" style="font-size: 0.95rem;">Módulo 4: Expedientes Digitales & Permisos Escaneados Reales</strong>
-              <span class="badge bg-success text-white ms-2 small">Soportes Validados OCR</span>
+              <strong class="text-white" style="font-size: 0.95rem"
+                >Módulo 4: Expedientes Digitales & Permisos Escaneados
+                Reales</strong
+              >
+              <span class="badge bg-success text-white ms-2 small"
+                >Soportes Validados OCR</span
+              >
             </div>
           </div>
-          <span class="badge bg-white text-navy fw-bold">Total Expedientes: {{ permisosFiltrados.length }}</span>
+          <span class="badge bg-white text-navy fw-bold"
+            >Total Expedientes: {{ permisosFiltrados.length }}</span
+          >
         </div>
 
         <div class="card-body p-3">
-          <div v-if="permisosFiltrados.length === 0" class="text-center py-5 text-muted">
+          <div
+            v-if="permisosFiltrados.length === 0"
+            class="text-center py-5 text-muted"
+          >
             <span class="fs-1 d-block mb-2">📁</span>
-            <p class="mb-0">No hay expedientes de permisos registrados para el periodo seleccionado.</p>
+            <p class="mb-0">
+              No hay expedientes de permisos registrados para el periodo
+              seleccionado.
+            </p>
           </div>
 
           <div v-else class="row g-3">
@@ -441,63 +564,110 @@
               :key="item.id"
               class="col-md-6 col-lg-4"
             >
-              <div class="card h-100 border shadow-sm rounded-3 overflow-hidden bg-light hover-shadow transition">
-                <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
-                  <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold">
+              <div
+                class="card h-100 border shadow-sm rounded-3 overflow-hidden bg-light hover-shadow transition"
+              >
+                <div
+                  class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center border-bottom"
+                >
+                  <span
+                    class="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold"
+                  >
                     #{{ item.radicado }}
                   </span>
-                  <span class="badge bg-success-subtle text-success border border-success-subtle small">
+                  <span
+                    class="badge bg-success-subtle text-success border border-success-subtle small"
+                  >
                     ✔ OCR Extraído (99%)
                   </span>
                 </div>
 
                 <div class="card-body p-3 bg-white">
                   <div class="d-flex align-items-center gap-2 mb-2">
-                    <div class="avatar-circle-sm bg-primary text-white fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-size: 0.85rem;">
-                      {{ getIniciales(item.funcionario || item.nombreFuncionario) }}
+                    <div
+                      class="avatar-circle-sm bg-primary text-white fw-bold rounded-circle d-flex align-items-center justify-content-center"
+                      style="width: 36px; height: 36px; font-size: 0.85rem"
+                    >
+                      {{
+                        getIniciales(item.funcionario || item.nombreFuncionario)
+                      }}
                     </div>
                     <div class="text-truncate">
-                      <strong class="d-block text-dark text-truncate" style="font-size: 0.9rem;">
+                      <strong
+                        class="d-block text-dark text-truncate"
+                        style="font-size: 0.9rem"
+                      >
                         {{ item.funcionario || item.nombreFuncionario }}
                       </strong>
-                      <span class="text-muted small d-block text-truncate" style="font-size: 0.75rem;">
-                        {{ item.cargo }} — {{ item.dependencia || 'Operativa' }}
+                      <span
+                        class="text-muted small d-block text-truncate"
+                        style="font-size: 0.75rem"
+                      >
+                        {{ item.cargo }} — {{ item.dependencia || "Operativa" }}
                       </span>
                     </div>
                   </div>
 
-                  <div class="p-2 bg-light rounded-2 border mb-2" style="font-size: 0.78rem;">
+                  <div
+                    class="p-2 bg-light rounded-2 border mb-2"
+                    style="font-size: 0.78rem"
+                  >
                     <div class="d-flex justify-content-between mb-1">
                       <span class="text-muted">Tipo de Permiso:</span>
                       <strong class="text-primary">{{ item.tipo }}</strong>
                     </div>
                     <div class="d-flex justify-content-between mb-1">
                       <span class="text-muted">Fecha de Petición:</span>
-                      <strong class="text-dark">📅 {{ item.fechaInicio }}</strong>
+                      <strong class="text-dark"
+                        >📅 {{ item.fechaInicio }}</strong
+                      >
                     </div>
                     <div class="d-flex justify-content-between">
                       <span class="text-muted">Horario & Duración:</span>
-                      <strong class="text-dark">⏱️ {{ item.hora24 }} ({{ item.duracion }})</strong>
+                      <strong class="text-dark"
+                        >⏱️ {{ item.hora24 }} ({{ item.duracion }})</strong
+                      >
                     </div>
                   </div>
 
-                  <div class="p-2 bg-warning-subtle text-warning-emphasis rounded-2 border border-warning-subtle small mb-2" style="font-size: 0.75rem;">
-                    <strong class="d-block text-dark">✍️ Motivo / Excusa Registrada:</strong>
-                    <span class="fst-italic text-truncate d-block">"{{ item.motivo || item.justificacion || 'Sin observaciones adicionales' }}"</span>
+                  <div
+                    class="p-2 bg-warning-subtle text-warning-emphasis rounded-2 border border-warning-subtle small mb-2"
+                    style="font-size: 0.75rem"
+                  >
+                    <strong class="d-block text-dark"
+                      >✍️ Motivo / Excusa Registrada:</strong
+                    >
+                    <span class="fst-italic text-truncate d-block"
+                      >"{{
+                        item.motivo ||
+                        item.justificacion ||
+                        "Sin observaciones adicionales"
+                      }}"</span
+                    >
                   </div>
 
-                  <div class="d-flex align-items-center gap-1 text-muted small" style="font-size: 0.72rem;">
+                  <div
+                    class="d-flex align-items-center gap-1 text-muted small"
+                    style="font-size: 0.72rem"
+                  >
                     <span>📁 Soporte:</span>
-                    <strong class="text-truncate" style="max-width: 180px;">{{ item.soporte || 'Solicitud_Permiso_Laboral.pdf' }}</strong>
+                    <strong class="text-truncate" style="max-width: 180px">{{
+                      item.soporte || "Solicitud_Permiso_Laboral.pdf"
+                    }}</strong>
                   </div>
                 </div>
 
-                <div class="card-footer bg-light py-2 px-3 border-top d-flex justify-content-between align-items-center">
-                  <span class="small text-muted" style="font-size: 0.72rem;">Acumulado: {{ item.horasAcumuladasMesEmpleado || 4 }}h/mes</span>
+                <div
+                  class="card-footer bg-light py-2 px-3 border-top d-flex justify-content-between align-items-center"
+                >
+                  <span class="small text-muted" style="font-size: 0.72rem"
+                    >Acumulado:
+                    {{ item.horasAcumuladasMesEmpleado || 4 }}h/mes</span
+                  >
                   <button
                     type="button"
                     class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
-                    style="font-size: 0.78rem;"
+                    style="font-size: 0.78rem"
                     @click="abrirDetallePermisoModal(item)"
                   >
                     <span>📄 Ver Expediente Real</span>
@@ -517,7 +687,7 @@
       v-if="modalDetalleVisible && permisoSeleccionado"
       class="modal fade show d-block"
       tabindex="-1"
-      style="background: rgba(0,0,0,0.6); z-index: 1080;"
+      style="background: rgba(0, 0, 0, 0.6); z-index: 1080"
     >
       <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content shadow-lg border-0 rounded-4">
@@ -525,19 +695,32 @@
             <h5 class="modal-title fw-bold mb-0">
               📋 Permiso Radicado #{{ permisoSeleccionado.radicado }}
             </h5>
-            <button type="button" class="btn-close btn-close-white" @click="modalDetalleVisible = false"></button>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              @click="modalDetalleVisible = false"
+            ></button>
           </div>
 
           <div class="modal-body p-4">
             <!-- Selector si el empleado tiene múltiples permisos en el mes -->
-            <div v-if="empleadoPermisosSeleccionados.length > 1" class="mb-3 p-2 bg-light rounded-3 border">
-              <label class="form-label small fw-bold text-secondary mb-1">Permisos registrados de este funcionario en el mes:</label>
+            <div
+              v-if="empleadoPermisosSeleccionados.length > 1"
+              class="mb-3 p-2 bg-light rounded-3 border"
+            >
+              <label class="form-label small fw-bold text-secondary mb-1"
+                >Permisos registrados de este funcionario en el mes:</label
+              >
               <div class="d-flex flex-wrap gap-1">
                 <button
                   v-for="p in empleadoPermisosSeleccionados"
                   :key="p.id"
                   class="btn btn-xs fw-semibold px-2 py-1"
-                  :class="permisoSeleccionado.id === p.id ? 'btn-primary' : 'btn-outline-secondary'"
+                  :class="
+                    permisoSeleccionado.id === p.id
+                      ? 'btn-primary'
+                      : 'btn-outline-secondary'
+                  "
                   @click="permisoSeleccionado = p"
                 >
                   📄 #{{ p.radicado }} ({{ p.fechaInicio }})
@@ -547,26 +730,49 @@
 
             <!-- User Banner -->
             <div class="user-modal-card mb-3">
-              <div class="avatar-big">{{ getIniciales(permisoSeleccionado.funcionario) }}</div>
+              <div class="avatar-big">
+                {{ getIniciales(permisoSeleccionado.funcionario) }}
+              </div>
               <div class="user-modal-info">
-                <h4 class="m-0 fw-bold">{{ permisoSeleccionado.funcionario }}</h4>
-                <p class="m-0 text-muted small">{{ permisoSeleccionado.cargo }} — {{ permisoSeleccionado.dependencia }}</p>
-                <p class="m-0 text-muted small font-mono">Cédula: {{ permisoSeleccionado.cedula }}</p>
+                <h4 class="m-0 fw-bold">
+                  {{ permisoSeleccionado.funcionario }}
+                </h4>
+                <p class="m-0 text-muted small">
+                  {{ permisoSeleccionado.cargo }} —
+                  {{ permisoSeleccionado.dependencia }}
+                </p>
+                <p class="m-0 text-muted small font-mono">
+                  Cédula: {{ permisoSeleccionado.cedula }}
+                </p>
               </div>
             </div>
 
             <!-- Stats badges in modal -->
             <div class="row g-2 mb-3">
               <div class="col-6">
-                <div class="stat-box bg-blue-subtle text-blue p-2 rounded-3 text-center">
-                  <span class="d-block small text-uppercase fw-bold">Solicitudes en {{ mesNombreActual }}</span>
-                  <span class="fs-4 fw-bold">{{ permisoSeleccionado.solicitudesMesEmpleado }} veces solicitó</span>
+                <div
+                  class="stat-box bg-blue-subtle text-blue p-2 rounded-3 text-center"
+                >
+                  <span class="d-block small text-uppercase fw-bold"
+                    >Solicitudes en {{ mesNombreActual }}</span
+                  >
+                  <span class="fs-4 fw-bold"
+                    >{{ permisoSeleccionado.solicitudesMesEmpleado }} veces
+                    solicitó</span
+                  >
                 </div>
               </div>
               <div class="col-6">
-                <div class="stat-box bg-purple-subtle text-purple p-2 rounded-3 text-center">
-                  <span class="d-block small text-uppercase fw-bold">Horas Acumuladas en {{ mesNombreActual }}</span>
-                  <span class="fs-4 fw-bold">{{ permisoSeleccionado.horasAcumuladasMesEmpleado }} Horas Totales</span>
+                <div
+                  class="stat-box bg-purple-subtle text-purple p-2 rounded-3 text-center"
+                >
+                  <span class="d-block small text-uppercase fw-bold"
+                    >Horas Acumuladas en {{ mesNombreActual }}</span
+                  >
+                  <span class="fs-4 fw-bold"
+                    >{{ permisoSeleccionado.horasAcumuladasMesEmpleado }} Horas
+                    Totales</span
+                  >
                 </div>
               </div>
             </div>
@@ -574,43 +780,85 @@
             <!-- Request details grid -->
             <div class="details-grid p-3 bg-light rounded-3 mb-3">
               <div class="detail-row">
-                <strong>Tipo de Permiso:</strong> <span>{{ permisoSeleccionado.tipo }}</span>
+                <strong>Tipo de Permiso:</strong>
+                <span>{{ permisoSeleccionado.tipo }}</span>
               </div>
               <div class="detail-row">
-                <strong>Fecha Petición:</strong> <span>{{ permisoSeleccionado.fechaInicio }} al {{ permisoSeleccionado.fechaFin }}</span>
+                <strong>Fecha Petición:</strong>
+                <span
+                  >{{ permisoSeleccionado.fechaInicio }} al
+                  {{ permisoSeleccionado.fechaFin }}</span
+                >
               </div>
               <div class="detail-row">
-                <strong>Hora Inicio & Duración:</strong> <span>{{ permisoSeleccionado.hora24 }} | {{ permisoSeleccionado.duracion }}</span>
+                <strong>Hora Inicio & Duración:</strong>
+                <span
+                  >{{ permisoSeleccionado.hora24 }} |
+                  {{ permisoSeleccionado.duracion }}</span
+                >
               </div>
               <div class="detail-row">
-                <strong>Soporte / Archivo Adjunto:</strong> <span>📁 {{ permisoSeleccionado.soporte || 'Permiso_Escaneado.pdf' }}</span>
+                <strong>Soporte / Archivo Adjunto:</strong>
+                <span
+                  >📁
+                  {{
+                    permisoSeleccionado.soporte || "Permiso_Escaneado.pdf"
+                  }}</span
+                >
               </div>
               <div class="detail-row">
-                <strong>Confianza OCR:</strong> <span>{{ permisoSeleccionado.ocrScore || 95 }}% de coincidencia</span>
+                <strong>Confianza OCR:</strong>
+                <span
+                  >{{ permisoSeleccionado.ocrScore || 95 }}% de
+                  coincidencia</span
+                >
               </div>
             </div>
 
             <!-- EVIDENCIA / EXCUSA DE PERMISO Y JUSTIFICACIÓN DESTACADA -->
-            <div class="p-3 bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-3 mb-3">
-              <div class="fw-bold mb-1 d-flex align-items-center justify-content-between" style="font-size: 0.88rem;">
+            <div
+              class="p-3 bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-3 mb-3"
+            >
+              <div
+                class="fw-bold mb-1 d-flex align-items-center justify-content-between"
+                style="font-size: 0.88rem"
+              >
                 <span class="d-flex align-items-center gap-2">
                   <span>✍️</span>
                   <span>Excusa / Motivo de la Solicitud:</span>
                 </span>
-                <span class="badge bg-warning text-dark border border-warning px-2 py-1">Soporte Verificado OCR</span>
+                <span
+                  class="badge bg-warning text-dark border border-warning px-2 py-1"
+                  >Soporte Verificado OCR</span
+                >
               </div>
-              <p class="mb-0 small fst-italic text-dark bg-white p-2 rounded border border-warning-subtle">
-                "{{ permisoSeleccionado.motivo || permisoSeleccionado.justificacion || 'Permiso laboral con justificación reglamentaria adjunta.' }}"
+              <p
+                class="mb-0 small fst-italic text-dark bg-white p-2 rounded border border-warning-subtle"
+              >
+                "{{
+                  permisoSeleccionado.motivo ||
+                  permisoSeleccionado.justificacion ||
+                  "Permiso laboral con justificación reglamentaria adjunta."
+                }}"
               </p>
-              <div v-if="permisoSeleccionado.motivoManuscrito" class="mt-2 pt-2 border-top border-warning-subtle small text-muted">
-                <strong>Texto Manuscrito Extraído:</strong> <span>{{ permisoSeleccionado.motivoManuscrito }}</span>
+              <div
+                v-if="permisoSeleccionado.motivoManuscrito"
+                class="mt-2 pt-2 border-top border-warning-subtle small text-muted"
+              >
+                <strong>Texto Manuscrito Extraído:</strong>
+                <span>{{ permisoSeleccionado.motivoManuscrito }}</span>
               </div>
             </div>
 
             <!-- VISOR DE DOCUMENTO PDF / EVIDENCIA ORIGINAL ENVIADA POR ENCARGADO -->
             <div class="pdf-viewer-section mt-3 pt-3 border-top">
-              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <h6 class="fw-bold text-primary m-0 d-flex align-items-center gap-2" style="color: #004884 !important;">
+              <div
+                class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"
+              >
+                <h6
+                  class="fw-bold text-primary m-0 d-flex align-items-center gap-2"
+                  style="color: #004884 !important"
+                >
                   <span>📄</span>
                   <span>Documentos Escaneados & Evidencia Adjunta</span>
                 </h6>
@@ -657,58 +905,75 @@
               </div>
 
               <!-- Viewport del PDF / Documento Escaneado Real y Evidencia -->
-              <div class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2" style="min-height: 480px; max-height: 620px;">
+              <div
+                class="pdf-container rounded-3 border bg-dark bg-opacity-75 overflow-auto position-relative p-2"
+                style="min-height: 480px; max-height: 620px"
+              >
                 <!-- IF CUSTOM UPLOADED PDF FILE -->
                 <object
                   v-if="esPdfDocumento(permisoSeleccionado)"
                   :data="getUrlDocumento(permisoSeleccionado)"
                   type="application/pdf"
                   class="w-100 rounded-3 border-0 bg-white"
-                  style="min-height: 520px;"
+                  style="min-height: 520px"
                 >
                   <iframe
                     :src="getUrlDocumento(permisoSeleccionado)"
                     class="w-100 h-100 rounded-3 border-0 bg-white"
-                    style="min-height: 520px;"
+                    style="min-height: 520px"
                     title="Visor PDF Permiso Original"
                   ></iframe>
                 </object>
 
                 <!-- IF UPLOADED IMAGE FILE (JPG/PNG/WEBP) -->
                 <div
-                  v-else-if="tieneArchivoAdjunto(permisoSeleccionado) && esImageDocumento(permisoSeleccionado)"
+                  v-else-if="
+                    tieneArchivoAdjunto(permisoSeleccionado) &&
+                    esImageDocumento(permisoSeleccionado)
+                  "
                   class="w-100 text-center"
                 >
-                  <div class="badge bg-info text-dark mb-2 shadow-sm px-3 py-1 fw-bold">
+                  <div
+                    class="badge bg-info text-dark mb-2 shadow-sm px-3 py-1 fw-bold"
+                  >
                     IMAGEN ADJUNTA ORIGINAL
                   </div>
                   <img
                     :src="getUrlDocumento(permisoSeleccionado)"
                     :alt="permisoSeleccionado?.soporte || 'Imagen del permiso'"
                     class="img-fluid rounded shadow bg-white border w-100"
-                    style="max-width: 760px; object-fit: contain;"
+                    style="max-width: 760px; object-fit: contain"
                   />
                 </div>
 
                 <!-- IF UPLOADED TXT / CSV FILE -->
                 <iframe
-                  v-else-if="tieneArchivoAdjunto(permisoSeleccionado) && esTextDocumento(permisoSeleccionado)"
+                  v-else-if="
+                    tieneArchivoAdjunto(permisoSeleccionado) &&
+                    esTextDocumento(permisoSeleccionado)
+                  "
                   :src="getUrlDocumento(permisoSeleccionado)"
                   class="w-100 rounded-3 border-0 bg-white"
-                  style="min-height: 520px;"
+                  style="min-height: 520px"
                   title="Visor de Texto del Permiso"
                 ></iframe>
 
                 <!-- IF UPLOADED WORD FILE (no renderizable en navegador) -->
                 <div
-                  v-else-if="tieneArchivoAdjunto(permisoSeleccionado) && esWordDocumento(permisoSeleccionado)"
+                  v-else-if="
+                    tieneArchivoAdjunto(permisoSeleccionado) &&
+                    esWordDocumento(permisoSeleccionado)
+                  "
                   class="w-100 d-flex flex-column align-items-center justify-content-center gap-3 p-5 text-center"
-                  style="min-height: 480px;"
+                  style="min-height: 480px"
                 >
                   <div class="fs-1">ðŸ“„</div>
-                  <h6 class="text-white fw-bold mb-0">{{ permisoSeleccionado?.soporte || 'Documento de Word' }}</h6>
+                  <h6 class="text-white fw-bold mb-0">
+                    {{ permisoSeleccionado?.soporte || "Documento de Word" }}
+                  </h6>
                   <p class="text-white-50 mb-2 small">
-                    Los documentos de Word no se previsualizan dentro del navegador.
+                    Los documentos de Word no se previsualizan dentro del
+                    navegador.
                   </p>
                   <a
                     :href="getUrlDocumento(permisoSeleccionado)"
@@ -720,36 +985,51 @@
                 </div>
 
                 <!-- IF IMAGES / SCANS OF SOLICITUD AND EVIDENCIA/EXCUSA -->
-                <div v-else class="w-100 d-flex flex-column align-items-center gap-3">
+                <div
+                  v-else
+                  class="w-100 d-flex flex-column align-items-center gap-3"
+                >
                   <!-- Página 1: Solicitud de Permiso Laboral Oficial Escaneada -->
                   <div
-                    v-if="vistaDocumentoModo === 'ambos' || vistaDocumentoModo === 'solicitud'"
+                    v-if="
+                      vistaDocumentoModo === 'ambos' ||
+                      vistaDocumentoModo === 'solicitud'
+                    "
                     class="w-100 text-center"
                   >
-                    <div class="badge bg-primary text-white mb-2 shadow-sm px-3 py-1 fw-bold">
-                      📄 PÁGINA 1: SOLICITUD DE PERMISO LABORAL OFICIAL ESCANEADA
+                    <div
+                      class="badge bg-primary text-white mb-2 shadow-sm px-3 py-1 fw-bold"
+                    >
+                      📄 PÁGINA 1: SOLICITUD DE PERMISO LABORAL OFICIAL
+                      ESCANEADA
                     </div>
                     <img
                       src="/scans/solicitud_permiso_scan.png"
                       alt="Solicitud de Permiso Laboral Original Escaneada Acuasan"
                       class="img-fluid rounded shadow bg-white border w-100"
-                      style="max-width: 760px; object-fit: contain;"
+                      style="max-width: 760px; object-fit: contain"
                     />
                   </div>
 
                   <!-- Página 2: Evidencia / Excusa Adjunta Escaneada -->
                   <div
-                    v-if="vistaDocumentoModo === 'ambos' || vistaDocumentoModo === 'evidencia'"
+                    v-if="
+                      vistaDocumentoModo === 'ambos' ||
+                      vistaDocumentoModo === 'evidencia'
+                    "
                     class="w-100 text-center mt-2"
                   >
-                    <div class="badge bg-success text-white mb-2 shadow-sm px-3 py-1 fw-bold">
-                      📑 PÁGINA 2: EVIDENCIA Y EXCUSA ADJUNTA (CERTIFICADO / SOPORTE)
+                    <div
+                      class="badge bg-success text-white mb-2 shadow-sm px-3 py-1 fw-bold"
+                    >
+                      📑 PÁGINA 2: EVIDENCIA Y EXCUSA ADJUNTA (CERTIFICADO /
+                      SOPORTE)
                     </div>
                     <img
                       src="/scans/evidencia_e18_scan.png"
                       alt="Formulario E-18 Evidencia y Excusa Adjunta Escaneada"
                       class="img-fluid rounded shadow bg-white border w-100"
-                      style="max-width: 760px; object-fit: contain;"
+                      style="max-width: 760px; object-fit: contain"
                     />
                   </div>
                 </div>
@@ -758,7 +1038,13 @@
 
             <!-- Modal Actions -->
             <div class="d-flex justify-content-end gap-2">
-              <button type="button" class="btn btn-secondary" @click="modalDetalleVisible = false">Cerrar</button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                @click="modalDetalleVisible = false"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
@@ -768,150 +1054,173 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { permisosService } from '../services/permisosService.js'
-import PageHeader from '../../../components/PageHeader.vue'
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { permisosService } from "../services/permisosService.js";
+import PageHeader from "../../../components/PageHeader.vue";
 
-const permisos = ref([])
-const cargando = ref(false)
-const busqueda = ref('')
+const permisos = ref([]);
+const cargando = ref(false);
+const busqueda = ref("");
 
 const alertaBootstrap = ref({
   visible: false,
-  tipo: 'success',
-  titulo: '',
-  mensaje: ''
-})
+  tipo: "success",
+  titulo: "",
+  mensaje: "",
+});
 
 const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 4000) => {
-  alertaBootstrap.value = { visible: true, tipo, titulo, mensaje }
+  alertaBootstrap.value = { visible: true, tipo, titulo, mensaje };
   setTimeout(() => {
-    alertaBootstrap.value.visible = false
-  }, duracion)
-}
+    alertaBootstrap.value.visible = false;
+  }, duracion);
+};
 
 // Vista: 'excel' | 'calendario' | 'resumen'
-const vistaModo = ref('excel')
+const vistaModo = ref("excel");
 
 // Mes y Año seleccionado (Por defecto: Agosto 2026)
-const mesSeleccionado = ref(7) // 0-indexed: 7 = Agosto
-const anioSeleccionado = ref(2026)
+const mesSeleccionado = ref(7); // 0-indexed: 7 = Agosto
+const anioSeleccionado = ref(2026);
 
-const modalDetalleVisible = ref(false)
-const permisoSeleccionado = ref(null)
-const vistaDocumentoModo = ref('ambos')
+const modalDetalleVisible = ref(false);
+const permisoSeleccionado = ref(null);
+const vistaDocumentoModo = ref("ambos");
 
 const mesesNombres = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-]
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
 
 // Helper para acortar nombres en los chips del calendario y evitar amontonamiento
 const shortName = (nombreCompleto) => {
-  if (!nombreCompleto) return 'Funcionario'
-  const partes = nombreCompleto.trim().split(/\s+/)
-  if (partes.length === 1) return partes[0]
-  if (partes.length === 2) return `${partes[0]} ${partes[1]}`
-  if (partes.length === 3) return `${partes[0]} ${partes[1]}`
-  return `${partes[0]} ${partes[2]}`
-}
+  if (!nombreCompleto) return "Funcionario";
+  const partes = nombreCompleto.trim().split(/\s+/);
+  if (partes.length === 1) return partes[0];
+  if (partes.length === 2) return `${partes[0]} ${partes[1]}`;
+  if (partes.length === 3) return `${partes[0]} ${partes[1]}`;
+  return `${partes[0]} ${partes[2]}`;
+};
 
-const mesNombreActual = computed(() => mesesNombres[mesSeleccionado.value])
+const mesNombreActual = computed(() => mesesNombres[mesSeleccionado.value]);
 
 const cambiarMes = (delta) => {
-  let nuevoMes = mesSeleccionado.value + delta
+  let nuevoMes = mesSeleccionado.value + delta;
   if (nuevoMes > 11) {
-    mesSeleccionado.value = 0
-    anioSeleccionado.value++
+    mesSeleccionado.value = 0;
+    anioSeleccionado.value++;
   } else if (nuevoMes < 0) {
-    mesSeleccionado.value = 11
-    anioSeleccionado.value--
+    mesSeleccionado.value = 11;
+    anioSeleccionado.value--;
   } else {
-    mesSeleccionado.value = nuevoMes
+    mesSeleccionado.value = nuevoMes;
   }
-}
+};
 
 // Cargar permisos oficiales del sistema.
 // silencioso=true (polling/visibilitychange): no toca `cargando` para que el
 // botón Sincronizar no parpadee cada 5 segundos.
 const cargarPermisos = async (silencioso = false) => {
-  if (!silencioso) cargando.value = true
+  if (!silencioso) cargando.value = true;
   try {
-    const lista = await permisosService.obtenerHistorialPermisos()
-    permisos.value = lista || []
+    const lista = await permisosService.obtenerHistorialPermisos();
+    permisos.value = lista || [];
   } catch (error) {
-    console.error('Error al cargar permisos:', error)
+    console.error("Error al cargar permisos:", error);
   } finally {
-    if (!silencioso) cargando.value = false
+    if (!silencioso) cargando.value = false;
   }
-}
+};
 
 const onStorageChange = (e) => {
-  if (e.key === 'acuasan_permisos_v2' || !e.key) {
-    cargarPermisos(true)
+  if (e.key === "acuasan_permisos_v2" || !e.key) {
+    cargarPermisos(true);
   }
-}
+};
 
 const onVisibilityChange = () => {
-  if (document.visibilityState === 'visible') cargarPermisos(true)
-}
+  if (document.visibilityState === "visible") cargarPermisos(true);
+};
 
 // Listado automatico: refresco al montar, al volver la pestaña visible y por polling cada 5s
 // (mismo intervalo que Radicados: lo que publica el Encargado aparece casi al instante)
-let intervaloRefresco = null
+let intervaloRefresco = null;
 
 onMounted(() => {
-  cargarPermisos()
-  window.addEventListener('storage', onStorageChange)
-  document.addEventListener('visibilitychange', onVisibilityChange)
-  intervaloRefresco = setInterval(() => cargarPermisos(true), 5000)
-})
+  cargarPermisos();
+  window.addEventListener("storage", onStorageChange);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  intervaloRefresco = setInterval(() => cargarPermisos(true), 5000);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('storage', onStorageChange)
-  document.removeEventListener('visibilitychange', onVisibilityChange)
-  if (intervaloRefresco) clearInterval(intervaloRefresco)
-  revocarUrlDocumento()
-})
+  window.removeEventListener("storage", onStorageChange);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
+  if (intervaloRefresco) clearInterval(intervaloRefresco);
+  revocarUrlDocumento();
+});
 
 // Helper para parsear la duración a horas numéricas
 const extraerHorasDuracion = (duracionStr) => {
-  if (!duracionStr) return 4
-  const match = duracionStr.match(/(\d+)\s*horas?/i)
-  if (match) return parseInt(match[1], 10)
-  return 8 // por defecto jornada completa si no especifica
-}
+  if (!duracionStr) return 4;
+  const match = duracionStr.match(/(\d+)\s*horas?/i);
+  if (match) return parseInt(match[1], 10);
+  return 8; // por defecto jornada completa si no especifica
+};
 
 // Helper para parsear fechas string "DD/MM/YYYY"
 const parsearFechaDMY = (fechaStr) => {
-  if (!fechaStr) return new Date(2026, 7, 15)
-  if (fechaStr.includes('/')) {
-    const partes = fechaStr.split('/')
+  if (!fechaStr) return new Date(2026, 7, 15);
+  if (fechaStr.includes("/")) {
+    const partes = fechaStr.split("/");
     if (partes.length === 3) {
-      return new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1, parseInt(partes[0], 10))
+      return new Date(
+        parseInt(partes[2], 10),
+        parseInt(partes[1], 10) - 1,
+        parseInt(partes[0], 10),
+      );
     }
   }
-  return new Date(fechaStr)
-}
+  return new Date(fechaStr);
+};
 
 // Permisos procesados con estadísticas acumuladas por empleado en el mes seleccionado
 const permisosProcesados = computed(() => {
-  return permisos.value.map(p => {
-    const fInicio = parsearFechaDMY(p.fechaInicio)
-    const m = fInicio.getMonth()
-    const a = fInicio.getFullYear()
+  return permisos.value.map((p) => {
+    const fInicio = parsearFechaDMY(p.fechaInicio);
+    const m = fInicio.getMonth();
+    const a = fInicio.getFullYear();
 
     // Calcular cuántos permisos ha pedido esta misma persona en el mismo mes/año
-    const todosEmpleadoEnMes = permisos.value.filter(item => {
-      const itemF = parsearFechaDMY(item.fechaInicio)
-      const mismaCedulaONombre = (item.cedula && item.cedula === p.cedula) || (item.funcionario === p.funcionario)
-      return mismaCedulaONombre && itemF.getMonth() === m && itemF.getFullYear() === a
-    })
+    const todosEmpleadoEnMes = permisos.value.filter((item) => {
+      const itemF = parsearFechaDMY(item.fechaInicio);
+      const mismaCedulaONombre =
+        (item.cedula && item.cedula === p.cedula) ||
+        item.funcionario === p.funcionario;
+      return (
+        mismaCedulaONombre &&
+        itemF.getMonth() === m &&
+        itemF.getFullYear() === a
+      );
+    });
 
-    const solicitudesMesEmpleado = todosEmpleadoEnMes.length
-    const horasAcumuladasMesEmpleado = todosEmpleadoEnMes.reduce((acc, curr) => {
-      return acc + extraerHorasDuracion(curr.duracion)
-    }, 0)
+    const solicitudesMesEmpleado = todosEmpleadoEnMes.length;
+    const horasAcumuladasMesEmpleado = todosEmpleadoEnMes.reduce(
+      (acc, curr) => {
+        return acc + extraerHorasDuracion(curr.duracion);
+      },
+      0,
+    );
 
     return {
       ...p,
@@ -919,204 +1228,227 @@ const permisosProcesados = computed(() => {
       anioNum: a,
       solicitudesMesEmpleado,
       horasAcumuladasMesEmpleado,
-      horasUnicas: extraerHorasDuracion(p.duracion)
-    }
-  })
-})
+      horasUnicas: extraerHorasDuracion(p.duracion),
+    };
+  });
+});
 
 // Permisos filtrados por mes, año y texto de búsqueda
 const permisosFiltrados = computed(() => {
-  return permisosProcesados.value.filter(p => {
+  return permisosProcesados.value.filter((p) => {
     // Filtro mes/año
-    const coincideMes = p.mesNum === mesSeleccionado.value && p.anioNum === anioSeleccionado.value
+    const coincideMes =
+      p.mesNum === mesSeleccionado.value &&
+      p.anioNum === anioSeleccionado.value;
 
     // Filtro búsqueda
-    const query = busqueda.value.toLowerCase().trim()
-    const coincideQuery = !query ||
+    const query = busqueda.value.toLowerCase().trim();
+    const coincideQuery =
+      !query ||
       (p.funcionario && p.funcionario.toLowerCase().includes(query)) ||
-      (p.nombreFuncionario && p.nombreFuncionario.toLowerCase().includes(query)) ||
+      (p.nombreFuncionario &&
+        p.nombreFuncionario.toLowerCase().includes(query)) ||
       (p.radicado && p.radicado.toLowerCase().includes(query)) ||
-      (p.cedula && p.cedula.includes(query))
+      (p.cedula && p.cedula.includes(query));
 
-    return coincideMes && coincideQuery
-  })
-})
+    return coincideMes && coincideQuery;
+  });
+});
 
 // Indicadores KPI
 const totalHorasAcumuladasGlobal = computed(() => {
-  return permisosFiltrados.value.reduce((acc, p) => acc + p.horasUnicas, 0)
-})
+  return permisosFiltrados.value.reduce((acc, p) => acc + p.horasUnicas, 0);
+});
 
 // Resumen agrupado por Funcionario (Acumulados del mes)
 const resumenEmpleadosAcumulado = computed(() => {
-  const mapa = {}
+  const mapa = {};
 
-  permisosFiltrados.value.forEach(p => {
-    const key = p.cedula || p.funcionario
+  permisosFiltrados.value.forEach((p) => {
+    const key = p.cedula || p.funcionario;
     if (!mapa[key]) {
       mapa[key] = {
         nombre: p.funcionario || p.nombreFuncionario,
-        cedula: p.cedula || '—',
-        cargo: p.cargo || 'Funcionario Acuasan',
-        dependencia: p.dependencia || 'Operativa',
+        cedula: p.cedula || "—",
+        cargo: p.cargo || "Funcionario Acuasan",
+        dependencia: p.dependencia || "Operativa",
         totalSolicitudesMes: 0,
         totalHorasAcumuladas: 0,
-        permisosList: []
-      }
+        permisosList: [],
+      };
     }
 
-    mapa[key].totalSolicitudesMes++
-    mapa[key].totalHorasAcumuladas += p.horasUnicas
-    mapa[key].permisosList.push(p)
-  })
+    mapa[key].totalSolicitudesMes++;
+    mapa[key].totalHorasAcumuladas += p.horasUnicas;
+    mapa[key].permisosList.push(p);
+  });
 
-  return Object.values(mapa)
-})
+  return Object.values(mapa);
+});
 
 // Generador de cuadrícula del calendario mensual (35 a 42 días en grid)
 const diasDelMesGrid = computed(() => {
-  const anio = anioSeleccionado.value
-  const mes = mesSeleccionado.value
+  const anio = anioSeleccionado.value;
+  const mes = mesSeleccionado.value;
 
-  const primerDiaMes = new Date(anio, mes, 1)
-  const ultimoDiaMes = new Date(anio, mes + 1, 0)
+  const primerDiaMes = new Date(anio, mes, 1);
+  const ultimoDiaMes = new Date(anio, mes + 1, 0);
 
-  let diaSemanaInicio = primerDiaMes.getDay() // 0 = Dom, 1 = Lun ...
-  if (diaSemanaInicio === 0) diaSemanaInicio = 7 // Ajustar a Lun=1 ... Dom=7
+  let diaSemanaInicio = primerDiaMes.getDay(); // 0 = Dom, 1 = Lun ...
+  if (diaSemanaInicio === 0) diaSemanaInicio = 7; // Ajustar a Lun=1 ... Dom=7
 
-  const totalDiasMes = ultimoDiaMes.getDate()
-  const grid = []
+  const totalDiasMes = ultimoDiaMes.getDate();
+  const grid = [];
 
   // Días del mes anterior para rellenar
-  const diasMesAnterior = new Date(anio, mes, 0).getDate()
+  const diasMesAnterior = new Date(anio, mes, 0).getDate();
   for (let i = diaSemanaInicio - 1; i > 0; i--) {
     grid.push({
       id: `prev-${i}`,
       numeroDia: diasMesAnterior - i + 1,
       esMesActual: false,
-      permisos: []
-    })
+      permisos: [],
+    });
   }
 
   // Días del mes actual
-  const hoy = new Date()
+  const hoy = new Date();
   for (let d = 1; d <= totalDiasMes; d++) {
-    const esHoy = hoy.getDate() === d && hoy.getMonth() === mes && hoy.getFullYear() === anio
+    const esHoy =
+      hoy.getDate() === d &&
+      hoy.getMonth() === mes &&
+      hoy.getFullYear() === anio;
 
     // Filtrar permisos para este día exacto
-    const permisosDia = permisosFiltrados.value.filter(p => {
-      const f = parsearFechaDMY(p.fechaInicio)
-      return f.getDate() === d
-    })
+    const permisosDia = permisosFiltrados.value.filter((p) => {
+      const f = parsearFechaDMY(p.fechaInicio);
+      return f.getDate() === d;
+    });
 
     grid.push({
       id: `curr-${d}`,
       numeroDia: d,
       esMesActual: true,
       esHoy,
-      permisos: permisosDia
-    })
+      permisos: permisosDia,
+    });
   }
 
   // Completar hasta llenar la cuadrícula de 35 o 42 celdas
-  const celdasRestantes = (42 - grid.length) % 7
+  const celdasRestantes = (42 - grid.length) % 7;
   for (let i = 1; i <= celdasRestantes; i++) {
     grid.push({
       id: `next-${i}`,
       numeroDia: i,
       esMesActual: false,
-      permisos: []
-    })
+      permisos: [],
+    });
   }
 
-  return grid
-})
+  return grid;
+});
 
 // Modal y Acciones
-const empleadoPermisosSeleccionados = ref([])
+const empleadoPermisosSeleccionados = ref([]);
 
 // URL de objeto (blob) del archivo original descargado desde el backend
-const urlDocumentoDescargado = ref('')
+const urlDocumentoDescargado = ref("");
 
 const revocarUrlDocumento = () => {
   if (urlDocumentoDescargado.value) {
-    URL.revokeObjectURL(urlDocumentoDescargado.value)
-    urlDocumentoDescargado.value = ''
+    URL.revokeObjectURL(urlDocumentoDescargado.value);
+    urlDocumentoDescargado.value = "";
   }
-}
+};
 
 const abrirDetallePermisoModal = async (item, listaCompleta = []) => {
-  permisoSeleccionado.value = item
-  empleadoPermisosSeleccionados.value = listaCompleta.length > 0 ? listaCompleta : [item]
-  modalDetalleVisible.value = true
+  permisoSeleccionado.value = item;
+  empleadoPermisosSeleccionados.value =
+    listaCompleta.length > 0 ? listaCompleta : [item];
+  modalDetalleVisible.value = true;
 
   // Descargar el archivo original (PDF/Word/TXT/Imagen) guardado en la base de datos
-  revocarUrlDocumento()
+  revocarUrlDocumento();
   if (item && item.id && item.hasArchivo) {
     try {
-      urlDocumentoDescargado.value = await permisosService.obtenerArchivoPermiso(item.id)
+      urlDocumentoDescargado.value =
+        await permisosService.obtenerArchivoPermiso(item.id);
     } catch (e) {
-      console.warn('[Gerencia] No se pudo descargar el archivo del permiso:', e)
+      console.warn(
+        "[Gerencia] No se pudo descargar el archivo del permiso:",
+        e,
+      );
     }
   }
-}
+};
 
 const verDetallesEmpleado = (emp) => {
   if (emp.permisosList && emp.permisosList.length > 0) {
-    abrirDetallePermisoModal(emp.permisosList[0], emp.permisosList)
+    abrirDetallePermisoModal(emp.permisosList[0], emp.permisosList);
   }
-}
+};
 
 const getUrlDocumento = (p) => {
-  if (!p) return '/scans/solicitud_permiso_scan.png'
-  if (urlDocumentoDescargado.value) return urlDocumentoDescargado.value
-  if (p.archivoUrl && String(p.archivoUrl).startsWith('data:')) return p.archivoUrl
-  if (p.customFileUrl && p.customFileUrl.trim()) return p.customFileUrl
-  if (p.soporteUrl && p.soporteUrl.trim()) return p.soporteUrl
-  return '/scans/solicitud_permiso_scan.png'
-}
+  if (!p) return "/scans/solicitud_permiso_scan.png";
+  if (urlDocumentoDescargado.value) return urlDocumentoDescargado.value;
+  if (p.archivoUrl && String(p.archivoUrl).startsWith("data:"))
+    return p.archivoUrl;
+  if (p.customFileUrl && p.customFileUrl.trim()) return p.customFileUrl;
+  if (p.soporteUrl && p.soporteUrl.trim()) return p.soporteUrl;
+  return "/scans/solicitud_permiso_scan.png";
+};
 
 const esPdfDocumento = (p) => {
-  if (p?.archivoMimeType === 'application/pdf') return true
-  if (p?.isPdf) return true
-  if (p?.soporte && p.soporte.toLowerCase().endsWith('.pdf')) return true
-  return false
-}
+  if (p?.archivoMimeType === "application/pdf") return true;
+  if (p?.isPdf) return true;
+  if (p?.soporte && p.soporte.toLowerCase().endsWith(".pdf")) return true;
+  return false;
+};
 
 const esWordDocumento = (p) => {
-  const m = p?.archivoMimeType || ''
-  if (/word|wordprocessingml/i.test(m)) return true
-  return /\.(docx?|odt)$/i.test(p?.soporte || '')
-}
+  const m = p?.archivoMimeType || "";
+  if (/word|wordprocessingml/i.test(m)) return true;
+  return /\.(docx?|odt)$/i.test(p?.soporte || "");
+};
 
 const esTextDocumento = (p) => {
-  const m = p?.archivoMimeType || ''
-  if (m.startsWith('text/')) return true
-  return /\.(txt|csv|md)$/i.test(p?.soporte || '')
-}
+  const m = p?.archivoMimeType || "";
+  if (m.startsWith("text/")) return true;
+  return /\.(txt|csv|md)$/i.test(p?.soporte || "");
+};
 
 const esImageDocumento = (p) => {
-  const m = p?.archivoMimeType || ''
-  if (m.startsWith('image/')) return true
-  return /\.(png|jpe?g|webp|gif|bmp)$/i.test(p?.soporte || '')
-}
+  const m = p?.archivoMimeType || "";
+  if (m.startsWith("image/")) return true;
+  return /\.(png|jpe?g|webp|gif|bmp)$/i.test(p?.soporte || "");
+};
 
-const tieneArchivoAdjunto = (p) => Boolean(p && (p.hasArchivo || p.archivoBinario))
+const tieneArchivoAdjunto = (p) =>
+  Boolean(p && (p.hasArchivo || p.archivoBinario));
 
 const getIniciales = (nombre) => {
-  if (!nombre) return 'U'
-  return nombre.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
-}
+  if (!nombre) return "U";
+  return nombre
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
+};
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
 .gerencia-permisos-view {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   max-width: 100%;
   overflow-x: hidden;
 }
@@ -1189,14 +1521,32 @@ const getIniciales = (nombre) => {
   color: #94a3b8;
 }
 
-.highlight-blue .kpi-icon { background: #dbeafe; color: #1e40af; }
-.highlight-amber .kpi-icon { background: #fef3c7; color: #b45309; }
-.highlight-green .kpi-icon { background: #d1fae5; color: #047857; }
-.highlight-purple .kpi-icon { background: #f3e8ff; color: #7e22ce; }
+.highlight-blue .kpi-icon {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.highlight-amber .kpi-icon {
+  background: #fef3c7;
+  color: #b45309;
+}
+.highlight-green .kpi-icon {
+  background: #d1fae5;
+  color: #047857;
+}
+.highlight-purple .kpi-icon {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
 
-.text-amber { color: #d97706 !important; }
-.text-green { color: #16a34a !important; }
-.text-purple { color: #7e22ce !important; }
+.text-amber {
+  color: #d97706 !important;
+}
+.text-green {
+  color: #16a34a !important;
+}
+.text-purple {
+  color: #7e22ce !important;
+}
 
 /* ==================== TOOLBAR ==================== */
 .toolbar-card {
@@ -1403,9 +1753,18 @@ const getIniciales = (nombre) => {
   gap: 8px;
 }
 
-.excel-icon-logo { font-size: 0.9rem; }
-.excel-tag { font-family: monospace; font-weight: 700; letter-spacing: 0.3px; }
-.excel-meta { font-size: 0.7rem; opacity: 0.9; }
+.excel-icon-logo {
+  font-size: 0.9rem;
+}
+.excel-tag {
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.excel-meta {
+  font-size: 0.7rem;
+  opacity: 0.9;
+}
 
 /* Barra de Fórmulas de Excel (fx) */
 .excel-formula-bar {
@@ -1488,7 +1847,10 @@ const getIniciales = (nombre) => {
   min-width: 1460px; /* Asegura que el scroll horizontal siempre funcione y se vea todo el contenido */
   border-collapse: collapse;
   font-size: 0.76rem;
-  font-family: 'Inter', -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    sans-serif;
 }
 
 .btn-eye-only {
@@ -1558,16 +1920,39 @@ const getIniciales = (nombre) => {
   background: #f0f9ff !important;
 }
 
-.row-even td { background: #f8fafc; }
-.row-pending td { background: #fffdf5; }
+.row-even td {
+  background: #f8fafc;
+}
+.row-pending td {
+  background: #fffdf5;
+}
 
-.col-radicado { font-family: monospace; font-weight: 700; color: #107c41; font-size: 0.76rem; }
+.col-radicado {
+  font-family: monospace;
+  font-weight: 700;
+  color: #107c41;
+  font-size: 0.76rem;
+}
 
-.cell-user { display: flex; flex-direction: column; }
-.user-name { font-weight: 700; color: #0f172a; font-size: 0.78rem; }
-.user-sub { font-size: 0.68rem; color: #64748b; }
+.cell-user {
+  display: flex;
+  flex-direction: column;
+}
+.user-name {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.78rem;
+}
+.user-sub {
+  font-size: 0.68rem;
+  color: #64748b;
+}
 
-.cell-dep { font-size: 0.72rem; color: #475569; font-weight: 500; }
+.cell-dep {
+  font-size: 0.72rem;
+  color: #475569;
+  font-weight: 500;
+}
 
 .type-pill {
   background: #f1f5f9;
@@ -1580,9 +1965,19 @@ const getIniciales = (nombre) => {
   white-space: nowrap;
 }
 
-.cell-datetime { display: flex; flex-direction: column; }
-.date-main { font-weight: 700; color: #1e293b; font-size: 0.74rem; }
-.time-sub { font-size: 0.68rem; color: #64748b; }
+.cell-datetime {
+  display: flex;
+  flex-direction: column;
+}
+.date-main {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 0.74rem;
+}
+.time-sub {
+  font-size: 0.68rem;
+  color: #64748b;
+}
 
 .freq-badge {
   background: #dbeafe;
@@ -1656,23 +2051,72 @@ const getIniciales = (nombre) => {
   font-weight: 800;
   letter-spacing: 0.4px;
 }
-.status-pendiente { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-.status-aprobado  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-.status-rechazado { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.status-pendiente {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.status-aprobado {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+.status-rechazado {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
 
 /* OCR Bar */
-.ocr-score-bar { display: flex; align-items: center; gap: 5px; }
-.score-text { font-size: 0.7rem; font-weight: 700; color: #0284c7; }
-.progress-bar-bg { width: 42px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
-.progress-bar-fill { height: 100%; background: #0284c7; }
+.ocr-score-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.score-text {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0284c7;
+}
+.progress-bar-bg {
+  width: 42px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: #0284c7;
+}
 
 /* Action Buttons */
-.actions-group { display: flex; gap: 3px; }
-.btn-xs { padding: 3px 7px; font-size: 0.7rem; border-radius: 4px; font-weight: 700; border: none; cursor: pointer; }
-.btn-approve { background: #16a34a; color: white; }
-.btn-approve:hover { background: #15803d; }
-.btn-reject { background: #dc2626; color: white; }
-.btn-reject:hover { background: #b91c1c; }
+.actions-group {
+  display: flex;
+  gap: 3px;
+}
+.btn-xs {
+  padding: 3px 7px;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+.btn-approve {
+  background: #16a34a;
+  color: white;
+}
+.btn-approve:hover {
+  background: #15803d;
+}
+.btn-reject {
+  background: #dc2626;
+  color: white;
+}
+.btn-reject:hover {
+  background: #b91c1c;
+}
 
 /* ==================== VISTA 2: CALENDARIO MENSUAL ==================== */
 .calendar-container {
@@ -1705,11 +2149,26 @@ const getIniciales = (nombre) => {
   font-weight: 600;
 }
 
-.legend-item { display: flex; align-items: center; gap: 4px; color: #475569; }
-.dot { width: 7px; height: 7px; border-radius: 50%; }
-.dot-pending { background: #d97706; }
-.dot-approved { background: #16a34a; }
-.dot-rejected { background: #dc2626; }
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #475569;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.dot-pending {
+  background: #d97706;
+}
+.dot-approved {
+  background: #16a34a;
+}
+.dot-rejected {
+  background: #dc2626;
+}
 
 .calendar-grid-header {
   display: grid;
@@ -1743,9 +2202,17 @@ const getIniciales = (nombre) => {
   transition: background 0.15s ease;
 }
 
-.calendar-cell:hover { background: #f8fafc; }
-.cell-other-month { background: #f8fafc; opacity: 0.4; }
-.cell-today { background: #f0f9ff; border: 2px solid #0284c7; }
+.calendar-cell:hover {
+  background: #f8fafc;
+}
+.cell-other-month {
+  background: #f8fafc;
+  opacity: 0.4;
+}
+.cell-today {
+  background: #f0f9ff;
+  border: 2px solid #0284c7;
+}
 
 .cell-day-num {
   display: flex;
@@ -1786,11 +2253,25 @@ const getIniciales = (nombre) => {
   line-height: 1.25;
 }
 
-.calendar-permiso-chip:hover { transform: scale(1.02); }
+.calendar-permiso-chip:hover {
+  transform: scale(1.02);
+}
 
-.chip-pending  { background: #fef3c7; border-left-color: #d97706; color: #92400e; }
-.chip-aprobado { background: #dcfce7; border-left-color: #16a34a; color: #14532d; }
-.chip-rechazado{ background: #fee2e2; border-left-color: #dc2626; color: #7f1d1d; }
+.chip-pending {
+  background: #fef3c7;
+  border-left-color: #d97706;
+  color: #92400e;
+}
+.chip-aprobado {
+  background: #dcfce7;
+  border-left-color: #16a34a;
+  color: #14532d;
+}
+.chip-rechazado {
+  background: #fee2e2;
+  border-left-color: #dc2626;
+  color: #7f1d1d;
+}
 
 .chip-top {
   display: flex;
@@ -1835,14 +2316,34 @@ const getIniciales = (nombre) => {
   text-overflow: ellipsis;
   max-width: 75px;
 }
-.chip-accum { font-weight: 800; }
+.chip-accum {
+  font-weight: 800;
+}
 
 /* Status pills in summary view */
-.status-summary-pills { display: flex; gap: 4px; justify-content: center; }
-.pill { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
-.pill-pending-sm { background: #fef3c7; color: #b45309; }
-.pill-approved-sm { background: #dcfce7; color: #15803d; }
-.pill-rejected-sm { background: #fee2e2; color: #b91c1c; }
+.status-summary-pills {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.pill-pending-sm {
+  background: #fef3c7;
+  color: #b45309;
+}
+.pill-approved-sm {
+  background: #dcfce7;
+  color: #15803d;
+}
+.pill-rejected-sm {
+  background: #fee2e2;
+  color: #b91c1c;
+}
 
 /* User modal card */
 .user-modal-card {
