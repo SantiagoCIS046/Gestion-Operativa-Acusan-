@@ -35,3 +35,9 @@ acusan/backend/drive_local_backup/
 acusan/backend/server.log
 acusan/backend/spa.traineddata
 
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
