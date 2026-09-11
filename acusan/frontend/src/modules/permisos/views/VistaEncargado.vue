@@ -2069,7 +2069,41 @@ const procesarDocumentoCompleto = async (dataUrl, isPdf) => {
   return { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas }
 }
 
+// ─── OCR VÍA BACKEND ─────────────────────────────────────────────────────────
+// Envía el archivo al endpoint /api/permisos/ocr del servidor.
+// El servidor usa pdf-parse (instantáneo para PDFs con texto) o Tesseract Node.
+// Devuelve los 9 campos listos para aplicarCampos().
+// Si el servidor no está disponible, se cae al pipeline Tesseract local.
+const procesarConBackendOCR = async (dataUrl, fileName, mimeType) => {
+  const headers = { 'Content-Type': 'application/json' }
+  // Intentar incluir el token de autenticación si existe
+  try {
+    const { default: authService } = await import('../../auth/services/authService.js')
+    const authHeader = authService.getAuthHeader()
+    if (authHeader && authHeader.Authorization) headers['Authorization'] = authHeader.Authorization
+  } catch (_) {}
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+
+  const res = await fetch('/api/permisos/ocr', {
+    method: 'POST',
+    headers,
+    signal: controller.signal,
+    body: JSON.stringify({ archivoBase64: dataUrl, nombreArchivo: fileName, mimeType })
+  })
+  clearTimeout(timeoutId)
+
+  if (!res.ok) throw new Error(`Backend OCR HTTP ${res.status}`)
+  const data = await res.json()
+  if (!data.success) throw new Error(data.message || 'Backend OCR sin éxito')
+  return data // { campos, confianza, faltantes }
+}
+
 // 🎯 MANEJADOR PRINCIPAL RESILIENTE CON RESPUESTA INMEDIATA
+// Estrategia de dos vías:
+//   1. Backend OCR (/api/permisos/ocr): pdf-parse + Tesseract Node — más rápido y preciso
+//   2. Fallback local (Tesseract.js en navegador): si el backend falla o no responde
 const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
   // Reiniciar el input de archivo para permitir subir el mismo archivo nuevamente
@@ -2096,15 +2130,58 @@ const handleScannedFileUpload = async (e) => {
   confianzaOcrReal.value = 0
   camposFaltantesOcr.value = []
 
-  // NOTA: no se pre-llena nada desde el nombre del archivo. Antes se sembraban
-  // datos ("nombre + fecha del nombre.pdf") que quedaban como si el OCR los
-  // hubiera leído del documento aunque la lectura fallara. El único origen de
-  // datos es el contenido real del archivo.
   const reader = new FileReader()
   reader.onload = async (event) => {
     // Almacenar siempre en Base64 para que la base de datos pueda guardar el archivo real
     customFileUrl.value = event.target.result
 
+    // ── INTENTO 1: OCR VÍA BACKEND ──────────────────────────────────────────
+    // Solo para PDFs e imágenes (Word y TXT los procesa el pipeline local directamente)
+    let camposBackend = null
+    const puedeUsarBackend = tipoArchivo.esPdf || tipoArchivo.esImagen
+    if (puedeUsarBackend) {
+      try {
+        ocrStepMessage.value = '🔍 Extrayendo datos con servidor OCR...'
+        ocrProgress.value = 30
+
+        const resultado = await procesarConBackendOCR(event.target.result, file.name, file.type || '')
+        camposBackend = resultado.campos
+
+        aplicarCampos(camposBackend)
+
+        confianzaOcrReal.value = resultado.confianza
+        camposFaltantesOcr.value = resultado.faltantes || []
+        ocrProgress.value = 100
+        ocrStepMessage.value = '¡Lectura completada!'
+
+        const { confianza, faltantes } = resultado
+        if (faltantes.length === 0) {
+          lanzarAlertaBootstrap(
+            'success',
+            '✅ Datos del Permiso Extraídos',
+            `Solicitud de ${formData.nombreFuncionario || 'el funcionario'} — ${formData.tipoPermiso || 'permiso'} (${formData.fechaInicio || 'fecha por verificar'}). Revise que los datos coincidan con el PDF antes de radicar.`
+          )
+        } else {
+          lanzarAlertaBootstrap(
+            'warning',
+            `OCR ${confianza}% — ${faltantes.length} campo(s) por completar`,
+            `No se encontró en el PDF: ${faltantes.join(', ')}. Diligencie manualmente esos campos antes de radicar.`,
+            9000
+          )
+        }
+
+        isScanningOCR.value = false
+        ocrProgress.value = 0
+        return // ✅ Éxito con backend — no se usa el pipeline local
+      } catch (backendErr) {
+        console.warn('[OCR Backend] No disponible, usando pipeline local:', backendErr.message)
+        ocrStepMessage.value = 'Servidor OCR no disponible — procesando localmente...'
+        ocrProgress.value = 15
+        // Continúa al pipeline local (fallback)
+      }
+    }
+
+    // ── INTENTO 2: PIPELINE LOCAL (TESSERACT.JS EN NAVEGADOR) ────────────────
     try {
       const { textoCompleto, textoPagina1, ocrDocumentoIlegible, paginasOCRAgotadas } =
         await procesarDocumentoCompleto(event.target.result, isPdfFile.value)

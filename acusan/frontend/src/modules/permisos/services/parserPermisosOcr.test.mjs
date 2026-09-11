@@ -317,6 +317,111 @@ const CASOS = [
       nombreFuncionario: 'MIGUEL ESPITIA',
       fechaInicio: '18/11/2026'
     }
+  },
+  {
+    nombre: '26. Rótulo extendido del área: "ÁREA A LA QUE PERTENECE:"',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: MARTA LUCIA ARDILA',
+      'CARGO: Analista de Facturación',
+      'ÁREA A LA QUE PERTENECE: Comercial y Facturación'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'MARTA LUCIA ARDILA',
+      dependencia: 'Comercial y Facturación'
+    }
+  },
+  {
+    nombre: '27. Etiqueta OFICINA: (plan B, exige dos puntos)',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: HERNAN DARIO CUELLAR',
+      'OFICINA: Potabilización'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'HERNAN DARIO CUELLAR',
+      dependencia: 'Potabilización'
+    }
+  },
+  {
+    nombre: '28. Membrete "GERENCIA GENERAL" (sin dos puntos) no siembra el área',
+    texto: [
+      'ACUASAN E.S.P.',
+      'GERENCIA GENERAL',
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: RIGOBERTO PARRA'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'RIGOBERTO PARRA',
+      dependencia: ''
+    }
+  },
+  {
+    nombre: '29. Plan B horas: HORA DE INICIO/FINALIZACIÓN con a.m./p.m.',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: YEIMI ALEXANDRA MENDOZA',
+      'HORA DE INICIO: 8:00 AM',
+      'HORA DE FINALIZACIÓN: 12:00 PM'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'YEIMI ALEXANDRA MENDOZA',
+      horaInicio: '08:00',
+      horaFin: '12:00'
+    }
+  },
+  {
+    nombre: '30. "desde las 2:00 p.m. hasta las 4:00 p.m." (artículos "las")',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: SANDRA PATRICIA QUINTERO',
+      'FECHA: 03/10/2026',
+      'El permiso se disfrutará desde las 2:00 p.m. hasta las 4:00 p.m.'
+    ].join('\n'),
+    expect: {
+      fechaInicio: '03/10/2026',
+      horaInicio: '14:00',
+      horaFin: '16:00'
+    }
+  },
+  {
+    nombre: '31. "de 8:00 a 12:00 horas" (unidad suelta al final)',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: CARLOS ANDRES PICO',
+      'HORA: de 8:00 a 12:00 horas'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'CARLOS ANDRES PICO',
+      horaInicio: '08:00',
+      horaFin: '12:00'
+    }
+  },
+  {
+    nombre: '32. Plan B con meridianos que cruzan el mediodía (11 a.m. → 1 p.m.)',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: FABIO ALBERTO NIEVES',
+      'INICIO: 11:00 a.m.  FIN: 1:00 p.m.'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'FABIO ALBERTO NIEVES',
+      horaInicio: '11:00',
+      horaFin: '13:00'
+    }
+  },
+  {
+    nombre: '33. Columna rota: valor del ÁREA en la línea siguiente',
+    texto: [
+      'SOLICITUD DE PERMISO',
+      'NOMBRE: GLADYS ESPERANZA DURAN',
+      'ÁREA:',
+      'Alcantarillado'
+    ].join('\n'),
+    expect: {
+      nombreFuncionario: 'GLADYS ESPERANZA DURAN',
+      dependencia: 'Alcantarillado'
+    }
   }
 ]
 
@@ -330,6 +435,9 @@ const CASOS_RANGO = [
   ['11 a.m. a 1', '11:00', '13:00'],
   ['07:30-18:00', '07:30', '18:00'],
   ['2:00 de la tarde a 4:00 de la tarde', '14:00', '16:00'],
+  ['desde las 2:00 p.m. hasta las 4:00 p.m.', '14:00', '16:00'],
+  ['de 8:00 a 12:00 horas', '08:00', '12:00'],
+  ['desde las 8 hasta las 12', '08:00', '12:00'],
   ['Página 1 a 2', null, null],
   ['01-12-2026', null, null],
   ['del 8 al 10 de agosto de 2026', null, null],

@@ -236,7 +236,8 @@ const hhmm = (h, min) => `${String(h).padStart(2, '0')}:${String(min).padStart(2
 
 /**
  * Extrae un rango horario explícito del texto ("7:30 a 9:30 a.m.", "2 pm a
- * 4 pm", "07:30-18:00", "de 8 a 12", "ENTRADA: 8:00 SALIDA: 12:00").
+ * 4 pm", "07:30-18:00", "de 8 a 12", "ENTRADA: 8:00 SALIDA: 12:00",
+ * "desde las 2:00 p.m. hasta las 4:00 p.m.", "de 8:00 a 12:00 horas").
  * Devuelve { horaInicio, horaFin, detalle } en formato 24h o null si el
  * documento no trae horario. Guardas anti-falso-positivo:
  *   · la hora no puede ser cola de un número mayor (fechas, cédulas, NIT)
@@ -257,7 +258,10 @@ export const extraerRangoHorario = (texto) => {
   //   (?!\d)          — no es cola de un número mayor (cédulas, NIT)
   //   (?![.,]\d)      — no es decimal ("8 a 12.5") ni fecha "12.08.2026"
   //   (?!\s*[-\/.]\d) — no continúa una fecha ("01-12-2026", "12/08/2026")
-  const RX_RANGO = /(^|[^\w.,:\/-])\s*(?:de\s+|desde\s+)?(\d{1,2})(?:[:.h](\d{2}))?\s*([ap]\.?\s*m\.?|m\.?)?\s*(?:a\b|hasta|al\b|-|–)\s*(\d{1,2})(?:[:.h](\d{2}))?\s*([ap]\.?\s*m\.?|m\.?)?(?!\d)(?![.,]\d)(?!\s*[-\/.]\s*\d)/gi
+  // "las" de "desde las 8" / "hasta las 12" y la palabra "horas" tras la segunda
+  // hora ("de 8:00 a 12:00 horas") son redacción natural colombiana: el rango
+  // debe casar igual con artículos y unidades sueltas.
+  const RX_RANGO = /(^|[^\w.,:\/-])\s*(?:desde\s+(?:la[s]?\s+)?|de\s+(?:la[s]?\s+)?)?(\d{1,2})(?:[:.h](\d{2}))?\s*([ap]\.?\s*m\.?|m\.?)?\s*(?:a\b|hasta(?:\s+la[s]?)?|al\b|-|–)\s*(?:la[s]?\s+)?(\d{1,2})(?:[:.h](\d{2}))?\s*([ap]\.?\s*m\.?|m\.?)?(?!\d)(?![.,]\d)(?!\s*[-\/.]\s*\d)/gi
 
   const MESES_RX = '(?:ene|feb|mar|abr|may|jun|jul|ago|sep|sept|oct|nov|dic|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)'
 
@@ -316,12 +320,16 @@ export const extraerRangoHorario = (texto) => {
     return { horaInicio: mejor.horaInicio, horaFin: mejor.horaFin, detalle: mejor.detalle }
   }
 
-  // Plan B: etiquetas ENTRADA/INICIO y SALIDA/FIN separadas en el formulario
-  const mEnt = t.match(/\b(?:entr(?:ada|e)|inicio)\s*[:\-]?\s*(\d{1,2})(?:[:.h](\d{2}))?/i)
-  const mSal = t.match(/\b(?:salida|fin|finalizaci[oó]n)\s*[:\-]?\s*(\d{1,2})(?:[:.h](\d{2}))?/i)
+  // Plan B: etiquetas ENTRADA/INICIO y SALIDA/FIN separadas en el formulario.
+  // Con meridiano explícito ("HORA DE INICIO: 8:00 AM") la hora se convierte
+  // con la misma regla de los rangos; sin meridiano queda tal cual (24h).
+  const mEnt = t.match(/\b(?:entr(?:ada|e)|inicio)\s*[:\-]?\s*(\d{1,2})(?:[:.h](\d{2}))?\s*([ap]\.?\s*m\.?|m\.?)?/i)
+  const mSal = t.match(/\b(?:salida|fin|finalizaci[oó]n)\s*[:\-]?\s*(\d{1,2})(?:[:.h](\d{2}))?\s*([ap]\.?\s*m\.?|m\.?)?/i)
   if (mEnt && mSal) {
-    const h1 = parseInt(mEnt[1], 10), min1 = mEnt[2] !== undefined ? parseInt(mEnt[2], 10) : 0
-    const h2 = parseInt(mSal[1], 10), min2 = mSal[2] !== undefined ? parseInt(mSal[2], 10) : 0
+    const h1 = mEnt[3] ? a24h(parseInt(mEnt[1], 10), mEnt[3]) : parseInt(mEnt[1], 10)
+    const min1 = mEnt[2] !== undefined ? parseInt(mEnt[2], 10) : 0
+    const h2 = mSal[3] ? a24h(parseInt(mSal[1], 10), mSal[3]) : parseInt(mSal[1], 10)
+    const min2 = mSal[2] !== undefined ? parseInt(mSal[2], 10) : 0
     if (horaValida(h1, min1) && horaValida(h2, min2) && h2 * 60 + min2 > h1 * 60 + min1) {
       return { horaInicio: hhmm(h1, min1), horaFin: hhmm(h2, min2), detalle: `${hhmm(h1, min1)} a ${hhmm(h2, min2)}` }
     }
@@ -458,17 +466,51 @@ export const parsearTextoPermiso = (textoCompleto, nombreArchivo = '', textoPagi
     'i'
   )
 
-  const mCargo = texto.match(rxValorLabeled('CARGO|PUESTO|OFICIO|EMPLEO'))
+  const mCargo = texto.match(rxValorLabeled('CARGO|PUESTO|OFICIO|EMPLEO|OCUPACI[oÓ]N'))
   if (mCargo) {
     const cargoLiteral = mCargo[1].replace(/\s{2,}/g, ' ').replace(/[\s\-.,:;]+$/, '').trim()
     const info = normalizarCargoYDependencia(cargoLiteral)
-    campos.cargo = info.cargo !== 'Funcionario Acuasan' ? info.cargo : cargoLiteral
-    if (!campos.dependencia && info.dependencia !== 'Operativa') campos.dependencia = info.dependencia
+    if (info.cargo !== 'Funcionario Acuasan') {
+      campos.cargo = info.cargo
+      if (!campos.dependencia && info.dependencia !== 'Operativa') campos.dependencia = info.dependencia
+    } else if (/^[A-ZÁÉÍÓÚÜÑ0-9]/.test(cargoLiteral) && cargoLiteral.length >= 3) {
+      // Literal solo si arranca en mayúscula: "cargo de conductor" en prosa
+      // no es un valor rotulado del formulario.
+      campos.cargo = cargoLiteral
+    }
   }
 
-  const mDependencia = texto.match(rxValorLabeled('DEPENDENCIA|DEPARTAMENTO|[ÁA]REA'))
-  if (mDependencia) {
-    const depLiteral = mDependencia[1].replace(/\s{2,}/g, ' ').replace(/[\s\-.,:;]+$/, '').trim()
+  // Rótulos extendidos del área: los PDF reales no siguen una plantilla única.
+  // (a) Etiquetas clásicas con complemento — "ÁREA A LA QUE PERTENECE:",
+  //     "DEPENDENCIA SOLICITANTE:", "ÁREA DE TRABAJO:" — donde el complemento
+  //     se come ANTES de los dos puntos para no capturarlo como valor.
+  // (b) Plan B: etiquetas de oficina/unidad (OFICINA, SECCIÓN, DIREcción…)
+  //     que EXIGEN dos puntos — sin ellos, el membrete "GERENCIA GENERAL"
+  //     de la firma sembraría el área "GENERAL".
+  const RELLENO_AREA = String.raw`(?:\s+(?:[ÁA]\s+LA\s+QUE\s+PERTENECE|DE\s+TRABAJO|SOLICITANTE|DONDE\s+LABORA|DE\s+LA\s+EMPRESA))*`
+  // OJO: \b no sirve antes de "ÁREA" — en JS \w es ASCII, la Á acentuada no
+  // cuenta como word-char y "ÁREA:" al inicio de línea no genera frontera.
+  // Lookbehind explícito: la etiqueta no puede venir pegada a otra palabra.
+  const mDependencia = texto.match(new RegExp(
+    String.raw`(?<![A-Za-z0-9_ÁÉÍÓÚÜÑáéíóúüñ])(?:DEPENDENCIA|DEPARTAMENTO|[ÁA]REA)${RELLENO_AREA}\s*[:.\-]?\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\-/ ]{2,50}?)(?=\s{2,}|\s*\b${ETIQUETAS_CORTE}\b\s*[:.\-]|[.\n]|$)`,
+    'i'
+  ))
+  let depLiteral = mDependencia
+    ? mDependencia[1].replace(/\s{2,}/g, ' ').replace(/[\s\-.,:;]+$/, '').trim()
+    : ''
+  // Cola de rótulo que coló cuando el OCR perdió los dos puntos ("ÁREA A LA
+  // QUE PERTENECE Comercial"): se retira, el valor empieza después.
+  depLiteral = depLiteral.replace(/^(?:[aá]\s+la\s+que\s+pertenece|de\s+trabajo|solicitante|donde\s+labora|de\s+la\s+empresa)\s+/i, '')
+  if (!depLiteral) {
+    const mOficina = texto.match(new RegExp(
+      String.raw`\b(?:OFICINA|SECCI[oÓ]N|DIRECCI[oÓ]N|UNIDAD|GERENCIA|SUBGERENCIA|DIVISI[oÓ]N|PROCESO)\s*:\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\.\-/ ]{2,50}?)(?=\s{2,}|\s*\b${ETIQUETAS_CORTE}\b\s*[:.\-]|[.\n]|$)`,
+      'i'
+    ))
+    if (mOficina) depLiteral = mOficina[1].replace(/\s{2,}/g, ' ').replace(/[\s\-.,:;]+$/, '').trim()
+  }
+  // Un área institucional empieza con mayúscula: "de Santander" (prosa suelta
+  // tras la palabra "departamento") no es un valor rotulado del formulario.
+  if (depLiteral && /^[A-ZÁÉÍÓÚÜÑ0-9]/.test(depLiteral)) {
     // El área rotulada la aporta el documento: se respeta el LITERAL. El
     // diccionario de cargos re-mapearía "Distribución y Redes" a "Alcantarillado"
     // (por la palabra "redes") y corrompería un valor que el PDF dice explícito.
