@@ -296,6 +296,33 @@ export const radicadosService = {
   },
 
   /**
+   * Escaneo con el motor OCR Python: envía el documento ORIGINAL en base64
+   * (no el comprimido para BD) y recibe texto + tipo + campos ya interpretados
+   * — no se vuelve a llamar a extraer-campos. Motor principal; si falla
+   * (503 caído / 504 timeout / sin texto) el llamador cae al OCR del
+   * navegador, por eso los errores salen tipados en error.codigo.
+   */
+  async escanearDocumento(dataUrl, nombreArchivo, mimeType, { tipo = '' } = {}) {
+    const res = await fetch('/api/ocr/escanear', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ archivoBase64: dataUrl, nombreArchivo, mimeType, dominio: 'radicados', tipo })
+    })
+    if (res.status === 503 || res.status === 504) {
+      const error = new Error('Motor OCR Python no disponible')
+      error.codigo = 'no-disponible'
+      error.status = res.status
+      throw error
+    }
+    if (!res.ok) await exigirRespuestaOk(res, 'El motor OCR no pudo procesar el documento.')
+    const data = await res.json()
+    if (data && data.success && data.data && typeof data.data.texto === 'string' && data.data.texto.trim()) {
+      return data.data
+    }
+    throw new Error('El motor OCR no extrajo texto del documento.')
+  },
+
+  /**
    * Crea y archiva un oficio de respuesta vinculado a un radicado padre.
    */
   async crearRespuesta(datos) {

@@ -79,26 +79,6 @@
             <span>Historial (Plantilla Excel)</span>
             <span class="badge bg-success text-white rounded-pill ms-1" style="font-size: 0.65rem; padding: 2px 5px;">{{ historialRemisiones.length }}</span>
           </button>
-
-          <!-- Button: Insertar Permiso Escaneado -->
-          <label
-            class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5 mb-0"
-            style="font-size: 0.77rem; background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
-            title="Seleccionar archivo PDF, Word, TXT o imagen del computador"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <span>Insertar Permiso Escaneado</span>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
-              @change="handleScannedFileUpload"
-              hidden
-            />
-          </label>
         </div>
       </div>
 
@@ -131,14 +111,24 @@
             <div class="card-header bg-light d-flex justify-content-between align-items-center py-1.5 px-3 border-bottom">
               <div class="d-flex align-items-center gap-1.5">
                 <span class="fs-6">📄</span>
-                <span class="fw-bold small text-dark text-truncate" style="max-width: 260px; font-size: 0.8rem;">
+                <span class="fw-bold small text-dark text-truncate" style="max-width: 240px; font-size: 0.8rem;">
                   {{ documentLoaded ? documentFileName : 'Ningún documento cargado' }}
                 </span>
               </div>
 
-              <div v-if="documentLoaded">
-                <label class="btn btn-sm btn-outline-secondary fw-semibold mb-0 py-0.5 px-2" style="cursor: pointer; font-size: 0.72rem;" title="Cambiar archivo">
-                  <span>🔄 Cambiar Archivo</span>
+              <!-- BOTÓN ÚNICO SELECTOR DE ARCHIVO (Cargar o Reemplazar) -->
+              <div>
+                <label
+                  class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5 mb-0"
+                  style="font-size: 0.77rem; background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
+                  :title="documentLoaded ? 'Cambiar por otro documento PDF' : 'Seleccionar archivo PDF, Word, TXT o imagen del computador'"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span>📂 Cargar PDF / Archivo</span>
                   <input
                     type="file"
                     accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
@@ -153,27 +143,13 @@
             <div class="card-body p-0 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center overflow-auto flex-grow-1" style="min-height: 440px; max-height: 520px;">
               <!-- STATE A: NO DOCUMENT LOADED (WAITING FOR INSERTION) -->
               <div v-if="!documentLoaded" class="card border-0 shadow-sm p-3 text-center mx-auto my-auto rounded-3 bg-white" style="max-width: 310px;">
-                <div class="mx-auto mb-2 d-flex align-items-center justify-content-center bg-success-subtle border border-success-subtle rounded-circle" style="width: 44px; height: 44px;">
-                  <span class="fs-5">📑</span>
+                <div class="mx-auto mb-2 d-flex align-items-center justify-content-center bg-primary-subtle border border-primary-subtle rounded-circle" style="width: 44px; height: 44px;">
+                  <span class="fs-5">📄</span>
                 </div>
-                <h6 class="fw-bold mb-1 text-primary" style="color: #004884 !important; font-size: 0.88rem;">Bandeja de Permisos Lista</h6>
-                <p class="text-muted mb-2.5" style="font-size: 0.72rem; line-height: 1.35;">
-                  Inserte el archivo PDF, Word, TXT o imagen para previsualizar el soporte original y rectificar los datos.
+                <h6 class="fw-bold mb-1 text-primary" style="color: #004884 !important; font-size: 0.88rem;">Sin documento cargado</h6>
+                <p class="text-muted mb-0" style="font-size: 0.74rem; line-height: 1.35;">
+                  Haz clic en <strong>📂 Cargar PDF / Archivo</strong> arriba para previsualizar el documento y extraer sus datos.
                 </p>
-                <label class="btn btn-primary btn-sm fw-bold mx-auto mb-0 py-1 px-2.5" style="background: #004884; font-size: 0.75rem; cursor: pointer;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="me-1">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  <span>Seleccionar Archivo</span>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.odt,.txt,.png,.jpg,.jpeg,.webp"
-                    @change="handleScannedFileUpload"
-                    hidden
-                  />
-                </label>
               </div>
 
               <!-- STATE B: DOCUMENTO REAL ESCANEADO / PDF OCUPANDO TODO EL CUADRO -->
@@ -1760,9 +1736,10 @@ const mejorarImagenParaOCR = (srcCanvas) => {
 }
 
 // Normalizar texto OCR y parsear los campos del permiso: el motor completo
-// vive en el paquete Python del backend (acuusan_ocr); esta vista solo
-// previsualiza el documento y la regla de oro se mantiene: «el dato sale
-// del documento o el campo queda vacío» — nunca se inventa un valor.
+// vive en el paquete Python del backend (acuusan_ocr), invocado desde
+// handleScannedFileUpload vía /api/ocr/escanear. La regla de oro se
+// mantiene: «el dato sale del documento o el campo queda vacío» — nunca se
+// inventa un valor.
 
 // Aplicar campos al formulario Vue
 const aplicarCampos = (campos) => {
@@ -1862,11 +1839,18 @@ const extraerTextoPaginaEncargado = async (page) => {
     .join('\n')
 }
 
-// 🎯 CARGA DE ARCHIVO ESCANEADO — Preparado para el nuevo motor de escaneo en Python
+// 🎯 CARGA DE ARCHIVO ESCANEADO — motor OCR Python: al seleccionar el
+// documento se envía el ORIGINAL al backend (que lo reenvía al servicio
+// Python con preprocesado de borrosos + multi-pase Tesseract + parser de
+// permisos). Si el motor no está disponible, el formulario queda manual
+// como siempre: aviso informativo, nunca un error.
+let tokenEscaneoOcr = 0
+
 const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
   if (e && e.target) e.target.value = ''
   if (!file) return
+  const token = ++tokenEscaneoOcr
 
   resetFormData()
   const tipoArchivo = detectarTipoArchivo(file)
@@ -1884,6 +1868,40 @@ const handleScannedFileUpload = async (e) => {
   const reader = new FileReader()
   reader.onload = async (event) => {
     customFileUrl.value = event.target.result
+
+    // Solo PDFs e imágenes van al motor Python; .docx/.txt siguen su flujo
+    const esPdfOImagen = (file.type || '').startsWith('application/pdf') || (file.type || '').startsWith('image/')
+    if (!esPdfOImagen) return
+
+    isScanningOCR.value = true
+    ocrProgress.value = 15
+    ocrStepMessage.value = 'Enviando al motor Python…'
+    try {
+      ocrProgress.value = 35
+      ocrStepMessage.value = 'Motor Python leyendo el documento…'
+      const escaneo = await permisosService.escanearDocumento(event.target.result, file.name, file.type || 'application/pdf')
+      if (token !== tokenEscaneoOcr) return
+      ocrProgress.value = 85
+      ocrStepMessage.value = 'Interpretando los datos del permiso…'
+      aplicarCampos(escaneo.campos || {})
+      confianzaOcrReal.value = Number(escaneo.confianza) || 0
+      camposFaltantesOcr.value = Array.isArray(escaneo.faltantes) ? escaneo.faltantes : []
+      if (escaneo.texto) textoDocumentoExtraido.value = escaneo.texto
+      ocrProgress.value = 100
+      ocrStepMessage.value = `Lectura completa (${escaneo.metodo})`
+    } catch (err) {
+      if (token !== tokenEscaneoOcr) return
+      console.info('[OCR] Motor Python no disponible — diligencie manualmente:', err?.message)
+      ocrStepMessage.value = 'Motor Python no disponible — diligencie manualmente'
+    } finally {
+      if (token === tokenEscaneoOcr) {
+        // El panel de progreso se recogé un instante después para que el
+        // 100% sea visible; una re-selección lo cancela.
+        setTimeout(() => {
+          if (token === tokenEscaneoOcr) isScanningOCR.value = false
+        }, 600)
+      }
+    }
   }
   reader.readAsDataURL(file)
 }

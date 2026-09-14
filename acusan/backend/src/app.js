@@ -16,6 +16,7 @@ import pqrRoutes from './modules/pqr/pqr.routes.js'
 import whatsappRoutes from './modules/pqr/whatsapp.routes.js'
 import radicadosRoutes from './modules/radicados/radicados.routes.js'
 import adminRoutes from './modules/admin/admin.routes.js'
+import ocrRoutes from './modules/ocr/ocr.routes.js'
 
 // Middlewares
 import { verificarToken, verificarRol } from './middlewares/auth.middleware.js'
@@ -59,6 +60,10 @@ app.use('/api/permisos',     verificarToken, permisosRoutes)
 app.use('/api/horas-extras', verificarToken, horasExtrasRoutes)
 app.use('/api/pqr',          verificarToken, pqrRoutes)
 app.use('/api/radicados',    verificarToken, radicadosRoutes)
+
+// Puente al motor OCR Python (degrada a 503 si el servicio no corre —
+// el frontend cae al OCR del navegador sin error visible)
+app.use('/api/ocr',          verificarToken, ocrRoutes)
 
 // ─── Rutas exclusivas ADMIN (doble protección: token + rol) ───────────────────
 app.use('/api/admin', verificarToken, verificarRol('ADMIN'), adminRoutes)

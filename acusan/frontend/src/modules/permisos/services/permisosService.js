@@ -66,6 +66,46 @@ const fusionarEnCache = (item) => {
 
 export const permisosService = {
   /**
+   * Escaneo con el motor OCR Python: envía el documento ORIGINAL en base64
+   * y recibe los campos del permiso + confianza + faltantes. Motor principal;
+   * si falla (503 caído / 504 timeout) el error sale tipado en error.codigo
+   * para que la vista deje el formulario manual sin asustar al usuario.
+   */
+  async escanearDocumento(dataUrl, nombreArchivo, mimeType) {
+    const res = await fetch("/api/ocr/escanear", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        archivoBase64: dataUrl,
+        nombreArchivo,
+        mimeType,
+        dominio: "permisos",
+      }),
+    });
+    if (res.status === 503 || res.status === 504) {
+      const error = new Error("Motor OCR Python no disponible");
+      error.codigo = "no-disponible";
+      error.status = res.status;
+      throw error;
+    }
+    if (!res.ok) {
+      let msg = "El motor OCR no pudo procesar el documento.";
+      try {
+        const data = await res.json();
+        if (data && data.message) msg = data.message;
+      } catch (e) {}
+      const error = new Error(msg);
+      error.status = res.status;
+      throw error;
+    }
+    const data = await res.json();
+    if (data && data.success && data.data && data.data.campos) {
+      return data.data;
+    }
+    throw new Error("El motor OCR no extrajo datos del documento.");
+  },
+
+  /**
    * Obtiene la lista de permisos desde la base de datos central (fuente de verdad).
    * La caché local NUNCA se pisa con una lista vacía del servidor y los
    * registros provisionales (sin conexión) se conservan y se muestran al final.

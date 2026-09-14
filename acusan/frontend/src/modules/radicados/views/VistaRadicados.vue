@@ -1265,6 +1265,56 @@ const leerDocumento = async (file) => {
   lecturaProgreso.value = 0
   lecturaError.value = ''
   resumenLectura.value = null
+  // ═══════════════════════════════════════════════════════════════════════
+  // 1) MOTOR PYTHON (principal) — documento ORIGINAL al backend, que lo
+  //    reenvía al servicio OCR Python (preprocesado de borrosos + multi-pase
+  //    Tesseract). Devuelve texto + tipo + campos ya interpretados. Si el
+  //    servicio no corre, el backend responde 503 en milisegundos y se cae
+  //    al OCR del navegador abajo — en silencio, sin asustar al usuario.
+  // ═══════════════════════════════════════════════════════════════════════
+  const esPdfOImagen = (file.type || '').startsWith('application/pdf') || (file.type || '').startsWith('image/')
+  if (esPdfOImagen) {
+    try {
+      lecturaEtapa.value = 'Enviando al motor Python…'
+      const dataUrl = await new Promise((resolve, reject) => {
+        const lector = new FileReader()
+        lector.onload = () => resolve(lector.result)
+        lector.onerror = () => reject(lector.error || new Error('No se pudo leer el archivo'))
+        lector.readAsDataURL(file)
+      })
+      if (token !== tokenLectura) return
+
+      lecturaEtapa.value = 'Motor Python leyendo el documento…'
+      lecturaProgreso.value = 0.4
+      const escaneo = await radicadosService.escanearDocumento(dataUrl, file.name, file.type || 'application/pdf')
+      if (token !== tokenLectura) return
+
+      lecturaEtapa.value = 'Interpretando los datos del documento…'
+      lecturaProgreso.value = 0.85
+      ultimoTextoOcr = escaneo.texto || ''
+      const tipoPy = escaneo.tipo === 'RESPUESTA' ? 'RESPUESTA' : 'RADICADO'
+      tipoDetectadoOcr.value = tipoPy
+      tipoDocSeleccionado.value = tipoPy
+      if (tipoPy === 'RESPUESTA') {
+        aplicarCamposRespuestaExtraidos(escaneo.campos || {}, `Python · ${escaneo.metodo}`, ultimoTextoOcr)
+      } else {
+        aplicarCamposExtraidos(escaneo.campos || {}, `Python · ${escaneo.metodo}`)
+      }
+      lecturaEstado.value = 'exito'
+      lecturaProgreso.value = 1
+      return
+    } catch (e) {
+      if (token !== tokenLectura) return
+      console.info('[OCR] Motor Python no disponible — usando OCR del navegador:', e?.message)
+      lecturaEstado.value = 'leyendo'
+      lecturaEtapa.value = 'Leyendo el documento en el navegador…'
+      lecturaProgreso.value = 0.05
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 2) OCR DEL NAVEGADOR (respaldo) — flujo original intacto
+  // ═══════════════════════════════════════════════════════════════════════
   try {
     const { texto, metodo } = await ocrRadicados.extraerTexto(file, (etapa, progreso) => {
       if (token !== tokenLectura) return

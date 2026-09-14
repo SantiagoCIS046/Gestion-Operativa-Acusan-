@@ -264,6 +264,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import respuestasService from '../services/respuestasService.js'
+import { radicadosService } from '../services/radicadosService.js'
 import ocrRadicados from '../services/ocrRadicados.js'
 import compressorRadicados from '../services/compressorRadicados.js'
 import authService from '../../auth/services/authService.js'
@@ -410,8 +411,42 @@ const comprimirArchivo = async (file, token) => {
   }
 }
 
-// OCR en el navegador + parseo de campos del oficio en el servidor.
+// OCR del oficio: motor Python primero (documento ORIGINAL → campos ya
+// interpretados con tipo RESPUESTA fijo); si no está disponible, el OCR del
+// navegador de siempre toma el relevo en silencio.
 const leerOficio = async (file, token) => {
+  const esPdfOImagen = (file.type || '').startsWith('application/pdf') || (file.type || '').startsWith('image/')
+  if (esPdfOImagen) {
+    try {
+      lecturaEtapa.value = 'Enviando al motor Python…'
+      const dataUrl = await new Promise((resolve, reject) => {
+        const lector = new FileReader()
+        lector.onload = () => resolve(lector.result)
+        lector.onerror = () => reject(lector.error || new Error('No se pudo leer el archivo'))
+        lector.readAsDataURL(file)
+      })
+      if (token !== tokenLectura) return
+
+      lecturaEtapa.value = 'Motor Python leyendo el oficio…'
+      lecturaProgreso.value = 0.4
+      const escaneo = await radicadosService.escanearDocumento(dataUrl, file.name, file.type || 'application/pdf', { tipo: 'RESPUESTA' })
+      if (token !== tokenLectura) return
+
+      lecturaEtapa.value = 'Interpretando los datos del oficio…'
+      lecturaProgreso.value = 0.85
+      aplicarCampos(escaneo.campos || {}, `Python · ${escaneo.metodo}`)
+      lecturaEstado.value = 'exito'
+      lecturaProgreso.value = 1
+      return
+    } catch (e) {
+      if (token !== tokenLectura) return
+      console.info('[OCR] Motor Python no disponible — usando OCR del navegador:', e?.message)
+      lecturaEstado.value = 'leyendo'
+      lecturaEtapa.value = 'Leyendo el oficio en el navegador…'
+      lecturaProgreso.value = 0.05
+    }
+  }
+
   try {
     const { texto, metodo } = await ocrRadicados.extraerTexto(file, (etapa, progreso) => {
       if (token !== tokenLectura) return
