@@ -110,6 +110,20 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
 
     logger.divider('Servidor listo — esperando peticiones')
   })
+
+  // Cierre limpio para liberar el puerto 3000 en reinicios de nodemon y señales de terminación
+  const apagarLimpio = (signal, callback) => {
+    servidor.close(() => {
+      if (callback) callback()
+      else process.exit(0)
+    })
+  }
+
+  process.once('SIGUSR2', () => {
+    apagarLimpio('SIGUSR2', () => process.kill(process.pid, 'SIGUSR2'))
+  })
+  process.on('SIGINT', () => apagarLimpio('SIGINT'))
+  process.on('SIGTERM', () => apagarLimpio('SIGTERM'))
 }
 
 export default app
