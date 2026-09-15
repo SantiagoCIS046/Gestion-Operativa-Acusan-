@@ -8,6 +8,7 @@
     "dev:web": "vite acusan/frontend",
     "dev:api": "npm --prefix acusan/backend run dev",
     "build": "prisma generate --schema=acusan/backend/prisma/schema.prisma && vite build",
+    "postinstall": "npm --prefix acusan/backend install",
     "preview": "vite preview"
   },
   "dependencies": {
