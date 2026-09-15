@@ -18,6 +18,7 @@ if BACKEND_DIR not in sys.path:
 import pytest
 
 from acuusan_ocr.parser_permisos import (
+    completar_campos_faltantes,
     evaluar_campos_extraidos,
     extraer_rango_horario,
     parsear_texto_permiso,
@@ -428,6 +429,152 @@ def _casos():
                 "dependencia": "Alcantarillado",
             },
         },
+        {
+            "nombre": "34. Observaciones rotuladas: valor completo tras la etiqueta",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: LAURA MARTINEZ ROJAS",
+                "OBSERVACIONES: Adjunta cita médica confirmada por la EPS",
+                "FIRMA:",
+            ]),
+            "expect": {
+                "nombreFuncionario": "LAURA MARTINEZ ROJAS",
+                "observaciones": "Adjunta cita médica confirmada por la EPS",
+            },
+        },
+        {
+            "nombre": "35. Motivo y observaciones conviven: cada etiqueta corta la suya",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: ANA CECILIA TORRES",
+                "MOTIVO: Cita de control con oftalmología",
+                "OBSERVACIÓN: Debe portar lentes de seguridad al retornar",
+            ]),
+            "expect": {
+                "motivo": "Cita de control con oftalmología",
+                "observaciones": "Debe portar lentes de seguridad al retornar",
+            },
+        },
+        {
+            "nombre": "36. Sin caja de observaciones → campo vacío (regla de oro)",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: PEDRO ALONSO RINCON",
+                "MOTIVO: cita médica general",
+            ]),
+            "expect": {
+                "nombreFuncionario": "PEDRO ALONSO RINCON",
+                "observaciones": "",
+            },
+        },
+        {
+            "nombre": "37. Caja VACÍA antes de las firmas: 'FIRMA DEL' no es observación",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: MARIA ELENA PARRA",
+                "MOTIVO: cita medica EPS",
+                "OBSERVACIONES:",
+                "FIRMA DEL SOLICITANTE",
+                "FIRMA DEL JEFE INMEDIATO",
+            ]),
+            "expect": {
+                "nombreFuncionario": "MARIA ELENA PARRA",
+                "observaciones": "",
+            },
+        },
+        {
+            "nombre": "38. Rótulo compuesto DEL JEFE: absorbe el complemento (el valor corta en palabra-etiqueta PERMISO, como todos los campos)",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE:JORGE ENRIQUE SALAZAR",
+                "MOTIVO: calamidad domestica",
+                "OBSERVACIONES DEL JEFE: Se autoriza el permiso solicitado",
+                "FIRMA:",
+            ]),
+            "expect": {
+                "observaciones": "Se autoriza el",
+            },
+        },
+        {
+            "nombre": "39. 'observación' en prosa sin rótulo no contamina el campo",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: CAMILO ANDRES OJEDA",
+                "MOTIVO: permiso personal",
+                "Cualquier observacion comuniquese con Talento Humano.",
+                "Documento diligenciado en tinta",
+            ]),
+            "expect": {
+                "observaciones": "",
+            },
+        },
+        {
+            "nombre": "40. Valor con línea manuscrita ('______') interna se conserva limpio",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: ROSA JULIA FUENTES",
+                "OBSERVACIONES: Se aprueba con goce de ______ sueldo",
+            ]),
+            "expect": {
+                "observaciones": "Se aprueba con goce de sueldo",
+            },
+        },
+        {
+            "nombre": "41. Bloque de firmas leído como nombre: rótulos no son persona → fallback al archivo",
+            "texto": "\n".join([
+                "SOLICITUD DE PERMISO LABORAL",
+                "NOMBRE: La Mon D Ca counal ¡O CARGO: Aux A d Lun",
+                "FECHA PERMISO: 03-07 - 2026",
+                "SOLICITANTE",
+                "FIRMA JEFE INMEDIATO",
+                "FIRMA DIRECTORA ADMINISTRATIVA",
+            ]),
+            "archivo": "PERMISO RAMON DONATO CARDENAS RODRIGUEZ20260803.pdf",
+            "expect": {
+                # 'FIRMA JEFE INMEDIATO' (y 'IRMA JEFE…RMA DIRECTORA…') deben caer
+                # por el guardia de rótulos; el nombre real llega del archivo.
+                "nombreFuncionario": "RAMON DONATO CARDENAS RODRIGUEZ",
+                "observaciones": "",
+            },
+        },
+        {
+            "nombre": "42. Membrete 'DEPARTAMENTO DE SANTANDER' (sin dos puntos) no siembra dependencia",
+            "texto": "\n".join([
+                "REPUBLICA DE COLOMBIA",
+                "DEPARTAMENTO DE SANTANDER",
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: RIGOBERTO PARRA",
+            ]),
+            "expect": {
+                "nombreFuncionario": "RIGOBERTO PARRA",
+                "dependencia": "",
+            },
+        },
+        {
+            "nombre": "43. 'CC 91071263 58 Años': la edad pegada no es parte de la cédula",
+            "texto": "\n".join([
+                "ORDEN DE REMISION",
+                "RAMON DONATO CARDENAS CC 91071263 58 Años COTIZANTE 268 1",
+            ]),
+            "expect": {
+                "cedula": "91071263",   # jamás '9107126358'
+            },
+        },
+        {
+            "nombre": "44. Membrete 'EMPRESA DE ACUEDUCTO, ALCANTARILLADO, ASEO' no siembra cargo",
+            "texto": "\n".join([
+                "EMPRESA DE ACUEDUCTO, ALCANTARILLADO, ASEO Y GESTION ENERGETICA",
+                "DE ALUMBRADO PUBLICO DE SAN GIL",
+                "SOLICITUD DE PERMISO",
+                "NOMBRE: PEDRO ALONSO RINCON",
+                "FECHA: 12/08/2026",
+            ]),
+            "expect": {
+                "nombreFuncionario": "PEDRO ALONSO RINCON",
+                "fechaInicio": "12/08/2026",
+                "cargo": "",   # el alcantarillado del membrete no es el oficio del solicitante
+            },
+        },
     ]
 
 
@@ -451,7 +598,7 @@ CASOS_RANGO = [
 
 @pytest.mark.parametrize("caso", _casos(), ids=lambda c: c["nombre"])
 def test_documento_completo(caso):
-    campos = parsear_texto_permiso(caso["texto"], "", caso["texto"])
+    campos = parsear_texto_permiso(caso["texto"], caso.get("archivo", ""), caso["texto"])
     for campo, esperado in caso["expect"].items():
         obtenido = campos.get(campo)
         if esperado == "":
@@ -477,15 +624,45 @@ def test_cobertura_completa_confianza_100():
     completo = evaluar_campos_extraidos({
         "nombreFuncionario": "X", "cedula": "1", "cargo": "X", "dependencia": "X",
         "fechaInicio": "01/01/2026", "horaInicio": "08:00", "horaFin": "10:00",
-        "tipoPermiso": "Personal", "motivo": "X",
+        "tipoPermiso": "Personal", "motivo": "X", "observaciones": "X",
     })
     assert completo["faltantes"] == []
     assert completo["confianza"] == 100
 
 
-def test_cobertura_parcial_2_de_9():
+def test_cobertura_parcial_2_de_10():
     parcial = evaluar_campos_extraidos({"nombreFuncionario": "X", "cedula": "1"})
-    assert parcial["confianza"] == 22
-    assert len(parcial["faltantes"]) == 7
+    assert parcial["confianza"] == 20
+    assert len(parcial["faltantes"]) == 8
     assert "Cargo" in parcial["faltantes"]
     assert "Motivo y Justificación" in parcial["faltantes"]
+    assert "Observaciones" in parcial["faltantes"]
+
+
+def test_completar_campos_faltantes_llena_solo_vacios():
+    """Contrato del refuerzo: los llenos quedan INTACTOS, los vacíos se llenan,
+    y un valor vacío del refuerzo no cuenta ni pisa nada."""
+    base = {"nombreFuncionario": "MARIA GOMEZ", "cedula": "", "tipoPermiso": "Personal"}
+    refuerzo = {
+        "nombreFuncionario": "OTRA PERSONA",      # debe NO pisar el lleno
+        "cedula": "1098765432",                   # vacío → se llena
+        "cargo": "",                              # vacío del refuerzo: no entra
+        "horaInicio": "14:00",                    # nuevo: entra
+        "horaFin": None,                          # None: no entra
+    }
+    finales = completar_campos_faltantes(base, refuerzo)
+    assert finales["nombreFuncionario"] == "MARIA GOMEZ"
+    assert finales["cedula"] == "1098765432"
+    assert finales["tipoPermiso"] == "Personal"
+    assert finales["horaInicio"] == "14:00"
+    assert not finales.get("cargo")
+    assert not finales.get("horaFin")
+    # La base original no se muta
+    assert base["cedula"] == ""
+
+
+def test_completar_campos_faltantes_entradas_nulas():
+    assert completar_campos_faltantes(None, None) == {}
+    assert completar_campos_faltantes({"cargo": "Fontanero"}, None)["cargo"] == "Fontanero"
+    assert "cedula" not in completar_campos_faltantes(None, {"cedula": "1"}) or \
+        completar_campos_faltantes(None, {"cedula": "1"})["cedula"] == "1"

@@ -1767,6 +1767,7 @@ const aplicarCampos = (campos) => {
   }
   formData.motivo = campos.motivo || ''
   formData.motivoManuscrito = campos.motivo || ''
+  formData.observaciones = campos.observaciones || ''
 }
 
 // Singleton de pdfjs para lectura de permisos
@@ -1927,7 +1928,11 @@ const cargarEnFormulario = async (item) => {
   formData.tipoPermiso = item.tipo || item.tipoPermiso || 'Compensatorio'
   formData.motivo = item.motivo || item.justificacion || ''
   formData.motivoManuscrito = item.motivoManuscrito || item.motivo || ''
-  formData.observaciones = item.observaciones || formData.observaciones
+  // Estricto como los demás 11 campos: la observación del registro cargado o
+  // vacío — conservar la de un escaneo anterior contaminaría este registro al
+  // guardar (el "|| formData.observaciones" anterior dejaba pasar la del PDF
+  // previo cuando el historial viene sin observaciones).
+  formData.observaciones = item.observaciones || ''
   formData.id = item.id || ''
   formData.radicado = item.radicado || ''
   formData.createdAt = item.createdAt || ''

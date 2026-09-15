@@ -35,6 +35,7 @@ import io
 import os
 import re
 import shutil
+import unicodedata
 
 # ── Dependencias con degradación (ninguna es obligatoria para importar) ─────
 try:
@@ -65,6 +66,72 @@ LENGUAJE = "spa"
 LADO_MAX_PX = 3200          # tope del lado mayor tras el rasterizado
 UMBRAL_DIGITAL = 30         # chars alfanuméricos mínimos para considerar página digital
 MIN_ALTO_STAMP = 120        # px mínimos del recorte del sello para que valga la pena
+
+# ── Compuerta de calidad de la capa de texto digital ────────────────────────
+# Un PDF escaneado puede traer una capa de texto OCULTA producida por el OCR del
+# propio escáner, y esa capa puede ser BASURA ("SOLlcrruD PERMlsO LAiroRAL"):
+# pasa el umbral de 30 alfanuméricos, se etiqueta pdf-digital/99% y nuestro
+# Tesseract (mejor) jamás corre. La compuerta puntúa la capa con dos señales
+# calibradas contra PDFs reales (basura 0.07–0.16 / limpia 0.24–0.38):
+#   · score léxico: proporción de tokens presentes en un léxico español +
+#     institucional mínimo (palabras funcionales, rótulos del formulario,
+#     membrete, meses).
+#   · anomalía de caja: tokens con mayúsculas y minúsculas mezcladas
+#     ("GESTtoN"), firma típica del OCR del escáner.
+SCORE_DIGITAL_MIN = 0.20    # por debajo → capa desconfiada
+ANOMALIA_DIGITAL_MAX = 0.15  # por encima → capa desconfiada
+MIN_TOKENS_CALIDAD = 8      # con menos tokens no hay señal: se confía (igual que hoy)
+
+_LEXICO_DIGITAL = frozenset("""del los las una uno con para por que este esta estos estas sus nuestro
+fecha hora horas nombre nombres completo cedula cargo area dependencia departamento
+motivo tipo permiso solicitud laboral auxiliar observacion observaciones firma
+solicitante jefe inmediato directora director administrativa administrativo gerencia
+general empresa acueducto alcantarillado aseo gestion energetica alumbrado publico
+publica san gil santander colombia republica acuasan agua vida compensatorio medico
+medica calamidad domestica estudio capacitacion personal caso cita adjunte soporte
+jornada completa entrada salida dia dias mes ano registraduria electoral votacion
+jurado certificado orden remision especialista paciente usuario eps fundacion
+contratista ciudad municipio senor senora radicado remitente asunto folios respuesta
+peticion queja reclamo referencia anexo direccion telefono correo
+vo bo autoriza aprobo codigo version""".split())
+
+_MESES_DIGITAL = frozenset(
+    "enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre "
+    "diciembre ene feb mar abr may jun jul ago sep sept oct nov dic".split())
+
+
+def _sin_acentos(s):
+    nfd = unicodedata.normalize("NFD", s)
+    return "".join(ch for ch in nfd if not unicodedata.combining(ch))
+
+
+def _puntaje_capa_digital(texto):
+    """(score_léxico, tasa_anomalía) de una capa de texto digital, o None si hay
+    demasiados pocos tokens para juzgar (páginas numéricas/taquillas)."""
+    tokens = re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}", texto or "")
+    if len(tokens) < MIN_TOKENS_CALIDAD:
+        return None
+    limpios = [_sin_acentos(t).lower() for t in tokens]
+    hits = sum(1 for t in limpios if t in _LEXICO_DIGITAL or t in _MESES_DIGITAL)
+    anomalias = 0
+    for token, limpio in zip(tokens, limpios):
+        if limpio in _LEXICO_DIGITAL or limpio in _MESES_DIGITAL:
+            continue
+        mayusculas = sum(1 for ch in token if ch.isupper())
+        if mayusculas >= 2 and any(ch.islower() for ch in token):
+            anomalias += 1
+    n = len(tokens)
+    return hits / n, anomalias / n
+
+
+def _capa_digital_confiable(texto):
+    """True si la capa digital de la página merece confianza (o no hay señal
+    suficiente para juzgar). False si huele a OCR-basura del escáner."""
+    puntaje = _puntaje_capa_digital(texto)
+    if puntaje is None:
+        return True
+    score, anomalia = puntaje
+    return score >= SCORE_DIGITAL_MIN and anomalia <= ANOMALIA_DIGITAL_MAX
 
 _RUTAS_TESSERACT_WINDOWS = [
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -265,6 +332,88 @@ def _ocr_con_sello(img_gris, es_pagina1):
     return texto, conf
 
 
+# ── Refuerzo: segunda recolección forzada para campos faltantes ──────────────
+
+# Pases EXTRA del refuerzo: 4 = columna única (un formulario es una columna de
+# rótulos) y 12 = texto disperso con OSD (palabras manuscritas sueltas que el
+# pase de bloque se salta). Un rótulo ilegible en el pase ganador de la
+# primera pasada puede ser legible en uno de estos.
+PSM_REFUERZO = (4, 12)
+
+
+def _ocr_variantes_pagina(img_gris, es_pagina1):
+    """Pases adicionales del refuerzo sobre una página ya rasterizada.
+    Devuelve [(texto, conf)] de los pases que produjeron texto; en la página 1
+    el sello (40% superior) se antepone igual que en la primera pasada."""
+    variantes = dict(_variantes_preprocesadas(img_gris))
+    a = variantes.get("A-borroso", variantes.get("gris"))
+    b = variantes.get("B-contraste", variantes.get("gris"))
+
+    sello = ""
+    if es_pagina1:
+        alto_sello = int(b.shape[0] * 0.40)
+        if alto_sello >= MIN_ALTO_STAMP:
+            texto_sello, _, _ = _ocr_un_pase(b[:alto_sello, :], 6)
+            sello = texto_sello.strip()
+
+    textos = []
+    for imagen_np, psm in zip((a, b), PSM_REFUERZO):
+        texto, conf, _ = _ocr_un_pase(imagen_np, psm)
+        if texto.strip():
+            textos.append(((sello + "\n" + texto) if sello else texto, conf))
+    return textos
+
+
+def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    """Segunda recolección FORZADA del documento, dirigida a los campos que la
+    primera pasada dejó vacíos. Devuelve {'texto', 'texto_pagina1'} con los
+    pases EXTRA concatenados — un texto DISTINTO al de la primera pasada, no
+    una re-lectura idéntica. Una única ronda, sin gate por página: la decisión
+    de correr ya la tomó el servidor (había campos vacíos y el documento era
+    escaneado). Degradación elegante: sin motor o con entrada rara → vacío."""
+    vacio = {"texto": "", "texto_pagina1": ""}
+    if not bytes_archivo:
+        return vacio
+    if pytesseract is None or Image is None or not estado_motores()["tesseract_disponible"]:
+        return vacio
+    tipo = _clasificar(bytes_archivo, nombre_archivo, mime_type)
+    try:
+        if tipo == "imagen":
+            if on_etapa:
+                on_etapa("Refuerzo: OCR de imagen (campos faltantes)", 0.1)
+            img = Image.open(io.BytesIO(bytes_archivo)).convert("L")
+            variantes = _ocr_variantes_pagina(img, es_pagina1=True)
+            texto = "\n".join(t for t, _ in variantes)
+            return {"texto": texto, "texto_pagina1": texto}
+        if tipo != "pdf" or fitz is None:
+            return vacio
+
+        dpi = _env_int("OCR_DPI", 300)
+        max_paginas = _env_int("OCR_MAX_PAGINAS", 6)
+        matriz = fitz.Matrix(dpi / 72.0, dpi / 72.0)
+        paginas = []
+        with fitz.open(stream=bytes_archivo, filetype="pdf") as doc:
+            if doc.needs_pass:
+                try:
+                    doc.authenticate("")
+                except Exception:
+                    pass
+            total = doc.page_count
+            for indice in range(min(total, max_paginas)):
+                if on_etapa:
+                    on_etapa(f"Refuerzo página {indice + 1} (campos faltantes)",
+                             indice / max(total, 1))
+                pix = doc[indice].get_pixmap(matrix=matriz, colorspace=fitz.csGRAY)
+                img_gris = _pixmap_a_imagen_gris(pix)
+                textos_pagina = _ocr_variantes_pagina(img_gris, es_pagina1=(indice == 0))
+                if textos_pagina:
+                    paginas.append("\n".join(t for t, _ in textos_pagina))
+        return {"texto": "\n\n".join(paginas),
+                "texto_pagina1": paginas[0] if paginas else ""}
+    except Exception:
+        return vacio
+
+
 # ── Rasterizado y lectura de páginas ─────────────────────────────────────────
 
 def _cuenta_alfanumericos(texto):
@@ -308,19 +457,40 @@ def _pdf_a_texto(bytes_pdf, on_etapa=None):
                 on_etapa(f"Página {indice + 1} de {min(total, max_paginas)}", indice / max(total, 1))
             pagina = doc[indice]
             texto_digital = pagina.get_text("text") or ""
-            if _cuenta_alfanumericos(texto_digital) >= UMBRAL_DIGITAL:
+            if (_cuenta_alfanumericos(texto_digital) >= UMBRAL_DIGITAL
+                    and _capa_digital_confiable(texto_digital)):
                 texto_paginas.append(texto_digital)
                 confianzas.append(None)  # la capa de texto es autoridad
                 hubo_digital = True
                 continue
+            # Capa digital ausente, corta… o BASURA del OCR del escáner: se
+            # rasteriza y se queda el MEJOR texto. El propio Tesseract sobre el
+            # escaneo a 300dpi supera con holgura a la capa rota ("SOLlcrruD
+            # PERMlsO" → "SOLICITUD PERMISO"); si el OCR no produce nada (sin
+            # motor, página irrecuperable) la capa original es mejor que nada.
             pix = pagina.get_pixmap(matrix=matriz, colorspace=fitz.csGRAY)
             img_gris = _pixmap_a_imagen_gris(pix)
             if on_etapa:
                 on_etapa(f"OCR página {indice + 1} (documento escaneado)", indice / max(total, 1))
             texto_ocr, conf = _ocr_con_sello(img_gris, es_pagina1=(indice == 0))
-            texto_paginas.append(texto_ocr)
-            confianzas.append(conf if texto_ocr else None)
-            hubo_ocr = bool(texto_ocr)
+            puntaje_digital = _puntaje_capa_digital(texto_digital)
+            puntaje_ocr = _puntaje_capa_digital(texto_ocr)
+            usa_ocr = bool(texto_ocr.strip()) and (
+                not texto_digital.strip()
+                # Capa corta imposible de juzgar ("Recibido conforme", foliatura,
+                # marca de agua): sin señal no puede ganar por defecto — el OCR
+                # que produjo texto lee la página completa y la reemplaza.
+                or puntaje_digital is None
+                or (puntaje_ocr is not None and puntaje_ocr[0] > puntaje_digital[0])
+            )
+            if usa_ocr:
+                texto_paginas.append(texto_ocr)
+                confianzas.append(conf if texto_ocr else None)
+                hubo_ocr = True
+            else:
+                texto_paginas.append(texto_digital)
+                confianzas.append(None)
+                hubo_digital = bool(texto_digital.strip())
     return texto_paginas, confianzas, total, hubo_digital, hubo_ocr
 
 

@@ -22,7 +22,7 @@ let io = null
 // ─── Orígenes permitidos (CORS) ───────────────────────────────────────────────
 // FRONTEND_URLS: lista separada por comas. Default = Vercel de producción + dev
 function origenesPermitidos() {
-  return (process.env.FRONTEND_URLS || 'https://acuusan.vercel.app,http://localhost:5173')
+  return (process.env.FRONTEND_URLS || 'https://acuusan.vercel.app,http://localhost:5173,http://127.0.0.1:5173')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean)

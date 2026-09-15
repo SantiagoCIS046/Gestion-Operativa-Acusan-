@@ -13,12 +13,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true
       },
       // WebSockets de Socket.io (alertas PQR en dev; en prod usa VITE_BACKEND_URL)
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         ws: true,
         changeOrigin: true
       }

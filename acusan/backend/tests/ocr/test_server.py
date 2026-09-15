@@ -152,3 +152,95 @@ def test_alias_legacy_permisos(cliente):
     })
     assert respuesta.status_code == 200
     assert "textoExtraido" in respuesta.get_json()
+
+
+# ── Refuerzo: verificación campo a campo + recolección forzada de vacíos ─────
+
+def test_refuerzo_llena_solo_campos_vacios(cliente, monkeypatch):
+    """Documento escaneado con campos vacíos → el refuerzo corre y fusiona
+    SOLO los vacíos; un valor distinto del refuerzo para un campo ya lleno
+    (NOMBRE: OTRA PERSONA) se ignora."""
+    texto_1a = "SOLICITUD DE PERMISO\nNOMBRE: MARIA GOMEZ\nFECHA: 18-08-2026"
+
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+        return {"texto": texto_1a, "texto_pagina1": texto_1a,
+                "metodo": "ocr-tesseract", "paginas": 1, "confianza": 80.0}
+
+    def _refuerzo(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+        return {"texto": "CARGO: Fontanero\nHORA: 2:00 p.m. a 4:00 p.m.\nNOMBRE: OTRA PERSONA",
+                "texto_pagina1": "CARGO: Fontanero"}
+
+    monkeypatch.setattr(server, "extraer_texto_documento", _primera)
+    monkeypatch.setattr(server, "refuerzo_texto_documento", _refuerzo)
+    respuesta = cliente.post("/api/ocr/escanear", json={
+        "archivoBase64": _data_url(b"%PDF-falso"),
+        "nombreArchivo": "permiso.pdf",
+        "mimeType": "application/pdf",
+        "dominio": "permisos",
+    })
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.get_json()
+    campos = cuerpo["campos"]
+    assert campos["nombreFuncionario"] == "MARIA GOMEZ"      # intacto
+    assert campos["fechaInicio"] == "18/08/2026"             # intacto
+    assert campos["cargo"] == "Fontanero"                    # llenado por refuerzo
+    assert campos["horaInicio"] == "14:00"                   # llenado por refuerzo
+    assert campos["horaFin"] == "16:00"
+    assert set(cuerpo["refuerzo"]) == {"cargo", "dependencia", "horaInicio", "horaFin"}
+    # faltantes y confianza coherentes con el estado FINAL
+    assert "Cargo" not in cuerpo["faltantes"]
+    assert "Nombre Completo del Trabajador" not in cuerpo["faltantes"]
+
+
+def test_refuerzo_no_corre_sin_faltantes(cliente, monkeypatch):
+    """Todos los campos llenos → no hay nada que forzar: el refuerzo jamás corre."""
+    texto_completo = "\n".join([
+        "SOLICITUD DE PERMISO",
+        "NOMBRE: MARIA GOMEZ  CEDULA: 1.098.765.432",
+        "CARGO: Fontanero  AREA: Distribución y Redes",
+        "FECHA: 18-08-2026  HORA: 7:30 a 9:30 a.m.",
+        "TIPO DE PERMISO: Personal",
+        "MOTIVO: tramite personal en banco",
+        "OBSERVACIONES: sin novedad",
+    ])
+
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+        return {"texto": texto_completo, "texto_pagina1": texto_completo,
+                "metodo": "ocr-tesseract", "paginas": 1, "confianza": 85.0}
+
+    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+        raise AssertionError("sin campos faltantes el refuerzo no debe correr")
+
+    monkeypatch.setattr(server, "extraer_texto_documento", _primera)
+    monkeypatch.setattr(server, "refuerzo_texto_documento", _refuerzo_prohibido)
+    respuesta = cliente.post("/api/ocr/escanear", json={
+        "archivoBase64": _data_url(b"%PDF-falso"),
+        "dominio": "permisos",
+    })
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.get_json()
+    assert cuerpo["faltantes"] == []
+    assert cuerpo["refuerzo"] == []
+    assert cuerpo["confianza"] == 100
+
+
+def test_refuerzo_no_corre_para_pdf_digital(cliente, monkeypatch):
+    """PDF digital limpio: la capa de texto es la autoridad — aunque falten
+    campos no se fuerza OCR (un formato en blanco digital es un vacío real)."""
+    texto = "SOLICITUD DE PERMISO\nNOMBRE: MARIA GOMEZ\nFECHA: 18-08-2026"
+
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+        return {"texto": texto, "texto_pagina1": texto,
+                "metodo": "pdf-digital", "paginas": 1, "confianza": 99.0}
+
+    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+        raise AssertionError("un pdf-digital limpio no debe pasar por refuerzo")
+
+    monkeypatch.setattr(server, "extraer_texto_documento", _primera)
+    monkeypatch.setattr(server, "refuerzo_texto_documento", _refuerzo_prohibido)
+    respuesta = cliente.post("/api/ocr/escanear", json={
+        "archivoBase64": _data_url(b"%PDF-falso"),
+        "dominio": "permisos",
+    })
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()["refuerzo"] == []

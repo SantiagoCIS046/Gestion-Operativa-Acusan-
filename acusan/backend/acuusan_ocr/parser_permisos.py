@@ -424,6 +424,20 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
     # ═══ 1. NOMBRE COMPLETO DEL TRABAJADOR ═══
     nombre_encontrado = ""
 
+    # Guardia del bloque de firmas: con letra manuscrita el rótulo NOMBRE se
+    # pierde y la captura cae en "SOLICITANTE / FIRMA JEFE INMEDIATO / FIRMA
+    # DIRECTORA…". Ninguna de esas palabras es un nombre de persona. Se aplica
+    # como CRITERIO DE ACEPTACIÓN de cada plan (no al final): un candidato
+    # rechazado deja vacío el campo y el plan siguiente —incluido el nombre
+    # del archivo— tiene su oportunidad.
+    def _es_candidato_nombre(limpio):
+        if len([p for p in limpio.split(" ") if p]) < 2:
+            return False
+        return not re.search(
+            r"\b(?:FIRMA|JEFE|INMEDIATO|DIRECTORA|DIRECTOR|ADMINISTRATIVA|"
+            r"ADMINISTRATIVO|SOLICITANTE|TRABAJADOR|FUNCIONARIO|GERENTE|"
+            r"SUPERVISOR|COORDINADOR|Vo\.?\s?Bo\.?)\b", limpio, re.I)
+
     # A. Etiquetas del formulario (prima sobre el anexo EPS: el "Paciente" de
     #    la orden médica es el solicitante solo si el formulario no rotuló).
     rx_nombre = re.compile(
@@ -437,7 +451,7 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
         # Los dígitos entran a la captura a propósito: con letra borrosa el OCR
         # lee "MAR1A" y limpiar_nombre_completo corrige 1→I después.
         n_limpio = limpiar_nombre_completo(m_nombre.group(1))
-        if len(n_limpio) >= 5 and len([p for p in n_limpio.split(" ") if p]) >= 2:
+        if _es_candidato_nombre(n_limpio):
             nombre_encontrado = n_limpio
 
     # B. Anexo EPS / orden médica sin formulario: el paciente es el solicitante
@@ -448,13 +462,13 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
             texto, re.I)
         if m_paciente:
             p_nombre = limpiar_nombre_completo(m_paciente.group(1))
-            if len([p for p in p_nombre.split(" ") if p]) >= 2:
+            if _es_candidato_nombre(p_nombre):
                 nombre_encontrado = p_nombre
 
     # C. Último recurso: nombre del archivo (metadato de quien escaneó)
     if not nombre_encontrado and nombre_archivo:
         p_arch = limpiar_nombre_completo(nombre_archivo)
-        if len([p for p in p_arch.split(" ") if p]) >= 2:
+        if _es_candidato_nombre(p_arch):
             nombre_encontrado = p_arch
 
     # Guardia de coherencia: un nombre no lleva dígitos ni restos de etiquetas
@@ -498,7 +512,11 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
     ]
     for patron in patrones_cedula:
         for m in re.finditer(patron, texto, re.I | re.M):
-            digitos = re.sub(r"[^\d]", "", (m.group(1) or "").strip())
+            # Primer cluster sin espacios de la captura: el OCR de una misma
+            # línea junta campos vecinos ("CC 91071263 58 Años" — la edad NO es
+            # parte de la cédula). Los números reales van pegados o con puntos.
+            primer_cluster = re.split(r"\s+", (m.group(1) or "").strip())[0]
+            digitos = re.sub(r"[^\d]", "", primer_cluster)
             # Para un número ETIQUETADO la etiqueta es la evidencia: NO se
             # aplica el guard de contexto empresarial.
             if _es_cedula_plausible(digitos):
@@ -531,8 +549,14 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
                 campos["dependencia"] = info["dependencia"]
         elif re.match(r"^[A-ZÁÉÍÓÚÜÑ0-9]", cargo_literal) and len(cargo_literal) >= 3:
             # Literal solo si arranca en mayúscula: "cargo de conductor" en
-            # prosa no es un valor rotulado del formulario.
-            campos["cargo"] = cargo_literal
+            # prosa no es un valor rotulado del formulario. Y el manuscrito
+            # ilegible tampoco es un cargo: "Aux A d Lun" (dos monosílabos
+            # sueltos, ninguna palabra de 4+ letras) es ruido de columna del
+            # OCR, no un valor — mejor campo vacío que basura.
+            palabras = cargo_literal.split()
+            sueltos = sum(1 for p in palabras if len(p.strip(".")) == 1)
+            if sueltos <= 1 and any(len(p) >= 4 for p in palabras):
+                campos["cargo"] = cargo_literal
 
     # Rótulos extendidos del área: los PDF reales no siguen una plantilla única.
     # (a) Etiquetas clásicas con complemento ("ÁREA A LA QUE PERTENECE:") donde
@@ -540,12 +564,17 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
     # (b) Plan B: etiquetas de oficina (OFICINA, SECCIÓN…) que EXIGEN dos
     #     puntos — sin ellos, el membrete "GERENCIA GENERAL" sembraría "GENERAL".
     releno_area = r"(?:\s+(?:[ÁA]\s+LA\s+QUE\s+PERTENECE|DE\s+TRABAJO|SOLICITANTE|DONDE\s+LABORA|DE\s+LA\s+EMPRESA))*"
+    # DEPENDENCIA y DEPARTAMENTO EXIGEN separador: sin él, la única aparición
+    # de esas palabras en los documentos reales es el membrete institucional
+    # ("DEPARTAMENTO DE SANTANDER"), que no es un valor rotulado del formulario.
     # El rótulo no puede venir pegado a otra palabra (en Python \b ya es
     # Unicode-safe para "ÁREA"; el lookbehind replica el fix del lado JS).
-    m_dependencia = texto and re.search(
-        r"(?<![A-Za-z0-9_" + "ÁÉÍÓÚÜÑáéíóúüñ" + r"])(?:DEPENDENCIA|DEPARTAMENTO|[ÁA]REA)"
-        + releno_area + r"\s*[:.\-]?\s*" + _VALOR + _CORTE,
-        texto, re.I)
+    _exclusion = r"(?<![A-Za-z0-9_" + "ÁÉÍÓÚÜÑáéíóúüñ" + r"])"
+    m_dependencia = texto and (
+        re.search(_exclusion + r"(?:DEPENDENCIA|DEPARTAMENTO)"
+                  + r"\s*[:\-]\s*" + _VALOR + _CORTE, texto, re.I)
+        or re.search(_exclusion + r"[ÁA]REA"
+                     + releno_area + r"\s*[:.\-]?\s*" + _VALOR + _CORTE, texto, re.I))
     dep_literal = ""
     if m_dependencia:
         dep_literal = re.sub(r"\s{2,}", " ", m_dependencia.group(1))
@@ -570,24 +599,33 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
         if len(dep_literal) >= 3:
             campos["dependencia"] = dep_literal
 
-    # Fallback: cargo reconocible en el texto (la palabra sí está en el documento)
+    # Fallback: cargo reconocible en el texto (la palabra sí está en el
+    # documento), PERO fuera del membrete: el encabezado institucional dice
+    # "EMPRESA DE ACUEDUCTO, ALCANTARILLADO, ASEO…" y esa línea sembraba
+    # "Operario de Alcantarillado" en cualquier documento de Acuasan.
     if not campos.get("cargo"):
-        if re.search(r"potabiliz|planta\s+de\s+tratam", texto, re.I):
+        rx_membrete = re.compile(
+            r"EMPRESA\s+DE\s+ACUEDUCTO|ALUMBRADO\s+P[UÚ]BLICO|\bNIT\b|\bNUIR\b|"
+            r"REP[UÚ]BLICA\s+DE\s+COLOMBIA|DEPARTAMENTO\s+DE\s+SANTANDER|"
+            r",\s*ALCANTARILLADO|ALCANTARILLADO\s*,", re.I)
+        zona_util = "\n".join(
+            linea for linea in (texto or "").split("\n") if not rx_membrete.search(linea))
+        if re.search(r"potabiliz|planta\s+de\s+tratam", zona_util, re.I):
             campos["cargo"] = "Líder de Potabilización"
             campos["dependencia"] = campos.get("dependencia") or "Planta de Tratamiento / Potabilización"
-        elif re.search(r"fontan", texto, re.I):
+        elif re.search(r"fontan", zona_util, re.I):
             campos["cargo"] = "Fontanero"
             campos["dependencia"] = campos.get("dependencia") or "Distribución y Redes"
-        elif re.search(r"alcant", texto, re.I):
+        elif re.search(r"alcant", zona_util, re.I):
             campos["cargo"] = "Operario de Alcantarillado"
             campos["dependencia"] = campos.get("dependencia") or "Redes de Alcantarillado"
-        elif re.search(r"conduct", texto, re.I):
+        elif re.search(r"conduct", zona_util, re.I):
             campos["cargo"] = "Conductor Operativo"
             campos["dependencia"] = campos.get("dependencia") or "Transporte y Maquinaria"
-        elif re.search(r"analist", texto, re.I):
+        elif re.search(r"analist", zona_util, re.I):
             campos["cargo"] = "Analista de Facturación y Cartera"
             campos["dependencia"] = campos.get("dependencia") or "Comercial y Facturación"
-        elif re.search(r"auxiliar", texto, re.I):
+        elif re.search(r"auxiliar", zona_util, re.I):
             campos["cargo"] = "Auxiliar Administrativo"
             campos["dependencia"] = campos.get("dependencia") or "Administrativa"
 
@@ -716,6 +754,10 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
         # Marcas de casilla sueltas, solo como palabra completa: sin \b, la x
         # de "examen" se comería y el texto quedaría mutilado ("e amen").
         trabajo = re.sub(r"\b[xX✓✗☑☒☐]\b", " ", trabajo)
+        # Letra basura pegada a la palabra de tipo ("tCompensatorio"): el OCR
+        # funde la marca de la casilla con la palabra. Se separa para que el
+        # filtro de ruido inicial pueda ver y retirar la palabra que sigue.
+        trabajo = re.sub(r"^[a-z]{1,2}(?=[A-ZÁÉÍÓÚÜÑ])", "", trabajo)
         # Ruido inicial: símbolos, palabras de 1-2 letras y —si el valor
         # arranca con la etiqueta de un tipo ("Médico", "Compensatorio…")— esa
         # palabra. Solo al inicio: en "Cita médica general EPS" la palabra
@@ -761,12 +803,65 @@ def parsear_texto_permiso(texto_completo, nombre_archivo="", texto_pagina1=""):
     campos["motivo"] = motivo_extraido or ""
     campos["motivoManuscrito"] = motivo_extraido or ""
 
+    # ═══ 9. OBSERVACIONES ═══
+    # La caja rotulada del formulario (la misma que llena el encargado a mano):
+    # dato estricto del documento o campo vacío — nunca texto inventado. El
+    # rótulo exige separador (':' o '-'): la caja del formulario va rotulada,
+    # la prosa ("cualquier observación comuníquese…") no. Corta contra las
+    # mismas etiquetas de referencia que el motivo, así ambos campos no se
+    # invaden (lo que sigue a OBSERVACIONES era basura del motivo antes).
+    observacion_extraida = ""
+    rx_observacion = re.compile(
+        r"\bOBSERVACI[oÓ]N(?:ES)?"
+        r"(?:\s+(?:DEL|DE\s+LA|DE)\s+(?:JEFE|SUPERVISOR|COORDINADOR|"
+        r"FUNCIONARIO|TRABAJADOR)(?:\s+INMEDIATO)?)?"
+        r"\s*[:\-]\s*"
+        r"([A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9/\s,.\-()_|]{3,140}?)"
+        r"(?=\s{2,}|\s*\b" + ETIQUETAS_CORTE + r"\b\s*[:.\-]?|[.\n]|$)",
+        re.I)
+    m_obs = p1 and rx_observacion.search(p1)
+    if m_obs:
+        # La línea de escritura manuscrita ('______') entra para no perder el
+        # valor real que la rodea; aquí se limpia.
+        observacion_extraida = re.sub(r"[_|~]{2,}", " ", m_obs.group(1))
+        observacion_extraida = re.sub(r"\b[xX✓✗☑☒☐]\b", " ", observacion_extraida)
+        observacion_extraida = re.sub(r"\s{2,}", " ", observacion_extraida).strip(" .:-")
+        # Señal mínima: 3 letras seguidas (rechaza "N/A", guiones, ruido de línea).
+        if not re.search(r"[a-záéíóúñ]{3,}", observacion_extraida, re.I):
+            observacion_extraida = ""
+        # Guarda de rótulo desnudo: la caja suele ser la última antes de las
+        # firmas y la captura corta en la etiqueta siguiente dejando "FIRMA
+        # DEL"; palabras de rótulo/conectoras solas o en secuencia no son
+        # observación.
+        elif re.fullmatch(r"(?:(?:firma|del|de|la|el|los|las|solicitante|jefe|"
+                          r"inmediato|supervisor|coordinador|funcionario|"
+                          r"trabajador|cargo|dependencia|motivo|"
+                          r"observaci[oó]n(?:es)?|vo\.?\s?bo\.?)[\s:.]*)+",
+                          observacion_extraida, re.I):
+            observacion_extraida = ""
+    campos["observaciones"] = observacion_extraida or ""
+
     return campos
 
 
-# ─── Evaluación de cobertura de las 9 áreas ──────────────────────────────────
+# ─── Fusión del refuerzo: llenar vacíos sin pisar lo verificado ──────────────
 
-# Las 9 áreas del formulario, en el orden en que se muestran.
+
+def completar_campos_faltantes(campos, refuerzo):
+    """Fusiona la segunda recolección SOBRE los campos vacíos: los campos ya
+    llenados por la primera pasada quedan INTACTOS (jamás se sobreescriben);
+    del refuerzo solo entran los valores con contenido real. Regla de oro
+    doble: no se inventa nada y no se pisa lo ya verificado."""
+    finales = dict(campos or {})
+    for clave, valor in (refuerzo or {}).items():
+        if str(valor or "").strip() and not str(finales.get(clave) or "").strip():
+            finales[clave] = valor
+    return finales
+
+
+# ─── Evaluación de cobertura de las 10 áreas ─────────────────────────────────
+
+# Las 10 áreas del formulario, en el orden en que se muestran.
 CAMPOS_OCR = [
     ("nombreFuncionario", "Nombre Completo del Trabajador"),
     ("cedula", "Cédula / Documento"),
@@ -777,11 +872,12 @@ CAMPOS_OCR = [
     ("horaFin", "Hora Fin"),
     ("tipoPermiso", "Tipo de Permiso"),
     ("motivo", "Motivo y Justificación"),
+    ("observaciones", "Observaciones"),
 ]
 
 
 def evaluar_campos_extraidos(valores=None):
-    """Evalúa cuántas de las 9 áreas quedaron llenas con respaldo del documento.
+    """Evalúa cuántas de las 10 áreas quedaron llenas con respaldo del documento.
     Devuelve {'faltantes': [...], 'confianza': % de áreas llenas}."""
     valores = valores or {}
     faltantes = [etiqueta for clave, etiqueta in CAMPOS_OCR

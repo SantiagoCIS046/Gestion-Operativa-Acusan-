@@ -94,7 +94,7 @@ app.use((err, req, res, next) => {
 // app.listen() al importarse provoca FUNCTION_INVOCATION_FAILED. Vercel define
 // process.env.VERCEL automáticamente, así que sirve de guard.
 if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
-  const servidor = app.listen(PORT, async () => {
+  const servidor = app.listen(PORT, '0.0.0.0', async () => {
     logger.startup(PORT, process.env.NODE_ENV || 'development')
 
     // WebSockets sobre ESTA instancia HTTP (requiere proceso persistente:

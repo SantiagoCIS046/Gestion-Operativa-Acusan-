@@ -29,8 +29,13 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from deteccion_documental import detectar_tipo_documental
-from extraction import estado_motores, extraer_texto_documento
-from parser_permisos import evaluar_campos_extraidos, parsear_texto_permiso
+from extraction import estado_motores, extraer_texto_documento, refuerzo_texto_documento
+from parser_permisos import (
+    CAMPOS_OCR,
+    completar_campos_faltantes,
+    evaluar_campos_extraidos,
+    parsear_texto_permiso,
+)
 from parser_radicados import extraer_campos, extraer_campos_respuesta
 
 logging.basicConfig(
@@ -111,13 +116,43 @@ def _escanear(data):
         logger.info("Permiso %s → confianza %s%% | faltantes: %s",
                     nombre_archivo or "(sin nombre)", evaluacion["confianza"],
                     evaluacion["faltantes"])
+
+        # ── Verificación campo a campo y RECOLECCIÓN FORZADA de los vacíos ──
+        # Si quedan campos sin llenar y el documento es ESCANEADO (el texto
+        # vino del OCR, no de una capa digital limpia), se fuerza una segunda
+        # ronda de pases distintos (PSM 4/12 + sello) y se fusiona SOLO sobre
+        # los vacíos: lo ya llenado por la primera pasada queda congelado.
+        refuerzo_llenados = []
+        if (evaluacion["faltantes"] and archivo_base64
+                and resultado["metodo"] in ("ocr-tesseract", "hibrido", "imagen-ocr")):
+            on_etapa("Verificando campos: recolección forzada de faltantes", 0.85)
+            extra = refuerzo_texto_documento(
+                bytes_archivo, nombre_archivo=nombre_archivo,
+                mime_type=mime_type, on_etapa=on_etapa)
+            if extra["texto"].strip():
+                campos_extra = parsear_texto_permiso(
+                    extra["texto"], nombre_archivo=nombre_archivo,
+                    texto_pagina1=extra["texto_pagina1"])
+                campos_antes = dict(campos)
+                campos = completar_campos_faltantes(campos, campos_extra)
+                refuerzo_llenados = sorted(
+                    clave for clave, _ in CAMPOS_OCR
+                    if not str(campos_antes.get(clave) or "").strip()
+                    and str(campos.get(clave) or "").strip())
+                if refuerzo_llenados:
+                    evaluacion = evaluar_campos_extraidos(campos)
+                    logger.info("Refuerzo %s → llenó %s | faltan: %s",
+                                nombre_archivo or "(sin nombre)",
+                                refuerzo_llenados, evaluacion["faltantes"])
+
         return {"success": True,
                 "metodo": resultado["metodo"],
                 "paginas": resultado["paginas"],
                 "texto": texto[:MAX_TEXTO_RESPUESTA],
                 "campos": campos,
                 "confianza": evaluacion["confianza"],
-                "faltantes": evaluacion["faltantes"]}, 200
+                "faltantes": evaluacion["faltantes"],
+                "refuerzo": refuerzo_llenados}, 200
 
     # dominio == "radicados"
     tipo = tipo_solicitado
