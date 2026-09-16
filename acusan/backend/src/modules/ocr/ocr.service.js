@@ -15,6 +15,11 @@ import logger from '../../config/logger.js'
 const OCR_PY_URL = process.env.OCR_PY_URL || 'http://127.0.0.1:5001'
 const OCR_PY_TIMEOUT_MS = Number(process.env.OCR_PY_TIMEOUT_MS || 90000)
 
+// Valor especial "DISABLED": usado en Vercel/producción donde no existe el
+// servicio Python. Devuelve 503 instantáneamente sin abrir ninguna conexión
+// (evita el timeout de 30s que Vercel aplica a sus Serverless Functions).
+const OCR_PY_DESHABILITADO = OCR_PY_URL.trim().toUpperCase() === 'DISABLED'
+
 // Base64 de un PDF de ~28 MB ya redondea 40 MB de JSON — mismo tope que
 // MAX_CONTENT_LENGTH del servicio Python.
 const MAX_BASE64_LENGTH = 40 * 1024 * 1024
@@ -28,6 +33,20 @@ const MAX_BASE64_LENGTH = 40 * 1024 * 1024
  *   Errores tipados: { status, codigo: 'no-disponible'|'timeout'|'error-python' }
  */
 const escanearEnPython = async (payload) => {
+  // Cortocircuito instantáneo en Vercel/producción (OCR_PY_URL=DISABLED)
+  if (OCR_PY_DESHABILITADO) {
+    return {
+      status: 503,
+      codigo: 'no-disponible',
+      cuerpo: {
+        success: false,
+        motor: 'python',
+        disponible: false,
+        message: 'Motor OCR Python no disponible en esta instancia — use el OCR del navegador'
+      }
+    }
+  }
+
   const controlador = new AbortController()
   const temporizador = setTimeout(() => controlador.abort(), OCR_PY_TIMEOUT_MS)
 
