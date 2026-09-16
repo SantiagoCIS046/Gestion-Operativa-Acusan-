@@ -1,7 +1,10 @@
 // Prisma schema file for Acuasan Gestión Operativa (MongoDB Atlas)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Vercel construye en Linux y la función lambda corre en Amazon Linux:
+  // se generan los motores para build (debian) y runtime (rhel/lambda).
+  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
