@@ -226,9 +226,10 @@ def radicados_ocr():
 
 
 if __name__ == "__main__":
-    puerto = int(os.environ.get("PORT_OCR", 5001))
-    logger.info("Iniciando Acuasan OCR Python en http://127.0.0.1:%s", puerto)
+    puerto = int(os.environ.get("PORT", os.environ.get("PORT_OCR", 5001)))
+    host = os.environ.get("HOST", "0.0.0.0")
+    logger.info("Iniciando Acuasan OCR Python en http://%s:%s", host, puerto)
     logger.info("Motores: %s", estado_motores())
-    # threaded=True (default del dev server): suficiente para el uso local
-    # mono-usuario detrás del puente Node.
-    app.run(host="127.0.0.1", port=puerto, debug=False, threaded=True)
+    # threaded=True: atiende peticiones concurrentes del backend
+    app.run(host=host, port=puerto, debug=False, threaded=True)
+
