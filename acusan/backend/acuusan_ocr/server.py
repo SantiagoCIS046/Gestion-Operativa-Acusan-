@@ -170,6 +170,7 @@ def _escanear(data):
             "campos": campos}, 200
 
 
+@app.route("/", methods=["GET"])
 @app.route("/health", methods=["GET"])
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -177,6 +178,7 @@ def health():
     return jsonify({
         "status": "online",
         "service": "Acuusan OCR Python Engine",
+        "mensaje": "Servicio de motor OCR activo y operativo. La aplicacion web principal se encuentra en https://acuusan.vercel.app",
         "runtime": f"Python {sys.version.split()[0]}",
         **motores,
     })
