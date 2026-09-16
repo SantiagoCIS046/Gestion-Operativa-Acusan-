@@ -111,19 +111,40 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
     logger.divider('Servidor listo — esperando peticiones')
   })
 
-  // Cierre limpio para liberar el puerto 3000 en reinicios de nodemon y señales de terminación
-  const apagarLimpio = (signal, callback) => {
+  // ── Error del servidor HTTP ─────────────────────────────────────────────────
+  // EADDRINUSE ocurre en Windows cuando nodemon reinicia antes de que el SO
+  // libere el puerto (las conexiones WebSocket de Socket.io lo mantienen abierto).
+  // Al capturar el evento aquí evitamos el crash con stacktrace y lo reportamos
+  // de forma legible mientras el SO termina de cerrar la conexión anterior.
+  servidor.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.warn('SISTEMA', 'EADDRINUSE', `Puerto ${PORT} ocupado — nodemon volverá a intentarlo al próximo guardado`)
+    } else {
+      logger.error('SISTEMA', 'SERVER ERR', err.message)
+    }
+  })
+
+  // ── Cierre limpio compatible con Windows + nodemon ──────────────────────────
+  // closeAllConnections() (Node ≥ 18.2) fuerza el cierre de conexiones keep-alive
+  // (WebSockets de Socket.io) que de otro modo bloquean el puerto en Windows
+  // incluso después de que nodemon envíe SIGTERM/SIGINT.
+  const apagarLimpio = (callback) => {
+    if (typeof servidor.closeAllConnections === 'function') {
+      servidor.closeAllConnections()        // cierra keep-alives inmediatamente
+    }
     servidor.close(() => {
       if (callback) callback()
       else process.exit(0)
     })
   }
 
+  // nodemon en Windows usa SIGUSR2 para reiniciar; re-emitimos la señal DESPUÉS
+  // de cerrar el servidor para que nodemon pueda arrancar el nuevo proceso.
   process.once('SIGUSR2', () => {
-    apagarLimpio('SIGUSR2', () => process.kill(process.pid, 'SIGUSR2'))
+    apagarLimpio(() => process.kill(process.pid, 'SIGUSR2'))
   })
-  process.on('SIGINT', () => apagarLimpio('SIGINT'))
-  process.on('SIGTERM', () => apagarLimpio('SIGTERM'))
+  process.on('SIGINT',  () => apagarLimpio())
+  process.on('SIGTERM', () => apagarLimpio())
 }
 
 export default app
