@@ -12,7 +12,7 @@
 
 import logger from '../../config/logger.js'
 
-const OCR_PY_URL = process.env.OCR_PY_URL || 'http://127.0.0.1:5001'
+const OCR_PY_URL = process.env.OCR_PY_URL || process.env.URL_PY_OCR || 'http://127.0.0.1:5001'
 const OCR_PY_TIMEOUT_MS = Number(process.env.OCR_PY_TIMEOUT_MS || 90000)
 
 // Valor especial "DISABLED": usado en Vercel/producción donde no existe el
