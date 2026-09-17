@@ -1890,7 +1890,34 @@ const handleScannedFileUpload = async (e) => {
     try {
       ocrProgress.value = 35
       ocrStepMessage.value = 'Motor Python leyendo el documento… (puede tardar unos minutos)'
-      const escaneo = await permisosService.escanearDocumento(event.target.result, file.name, file.type || 'application/pdf')
+      // Flujo asíncrono: el escaneo de un permiso tarda más que la vida útil
+      // de una conexión del servidor — se enrola un trabajo y se consulta su
+      // estado cada 4 s. Las suspensiones de red (equipo dormido,
+      // ERR_NETWORK_IO_SUSPENDED) se toleran: el trabajo sigue vivo en el
+      // motor aunque esta consulta puntual falle.
+      const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+      const jobId = await permisosService.iniciarEscaneoAsincrono(event.target.result, file.name, file.type || 'application/pdf')
+      let escaneo = null
+      let fallosRedSeguidos = 0
+      const inicioEscaneo = Date.now()
+      while (token === tokenEscaneoOcr) {
+        await esperar(4000)
+        if (token !== tokenEscaneoOcr) return
+        let consulta
+        try {
+          consulta = await permisosService.consultarEscaneoAsincrono(jobId)
+          fallosRedSeguidos = 0
+        } catch (errRed) {
+          if (errRed?.codigo === 'no-disponible' || errRed?.status === 504 || errRed?.status === 404) throw errRed
+          fallosRedSeguidos += 1
+          if (fallosRedSeguidos >= 5) throw errRed
+          continue
+        }
+        if (consulta?.estado === 'listo') { escaneo = consulta; break }
+        if (Date.now() - inicioEscaneo > 10 * 60 * 1000) {
+          throw new Error('El escaneo superó 10 minutos de espera — reintente o diligencie manualmente')
+        }
+      }
       if (token !== tokenEscaneoOcr) return
       ocrProgress.value = 85
       ocrStepMessage.value = 'Interpretando los datos del permiso…'
@@ -1907,6 +1934,10 @@ const handleScannedFileUpload = async (e) => {
       // El motivo real, no un mensaje genérico: peso, espera agotada u otro.
       if (err?.status === 413) {
         ocrStepMessage.value = 'Documento demasiado pesado para el servidor (máx ~3 MB) — comprima el PDF y reintente'
+      } else if (err?.status === 429) {
+        ocrStepMessage.value = 'El motor está procesando otro documento — espere unos segundos y reintente'
+      } else if (err?.status === 404) {
+        ocrStepMessage.value = 'El motor se reinició a mitad del escaneo — intente de nuevo'
       } else if (err?.status === 504 || err?.codigo === 'no-disponible') {
         ocrStepMessage.value = 'El motor tardó más de la espera máxima — reintente o diligencie manualmente'
       } else {

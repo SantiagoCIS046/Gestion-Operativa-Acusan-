@@ -221,7 +221,7 @@ def test_capa_basura_se_reemplaza_por_ocr_mejor(monkeypatch):
     from acuusan_ocr import extraction
     llamadas = []
 
-    def _ocr_falso(img_gris, es_pagina1):
+    def _ocr_falso(img_gris, es_pagina1, cache=None, clave=None):
         llamadas.append(es_pagina1)
         return TEXTO_OCR_BUENO, 81.5
 
@@ -238,7 +238,7 @@ def test_capa_basura_se_reemplaza_por_ocr_mejor(monkeypatch):
 def test_capa_limpia_jamas_pasa_por_ocr(monkeypatch):
     from acuusan_ocr import extraction
 
-    def _ocr_prohibido(img_gris, es_pagina1):
+    def _ocr_prohibido(img_gris, es_pagina1, cache=None, clave=None):
         raise AssertionError("una capa digital limpia no debe rasterizarse")
 
     monkeypatch.setattr(extraction, "_ocr_con_sello", _ocr_prohibido)
@@ -256,7 +256,7 @@ def test_capa_basura_con_ocr_vacio_conserva_la_capa(monkeypatch):
     # El pipeline llama _ocr_con_sello(img_gris, es_pagina1=...): el parámetro
     # debe llamarse igual o el TypeError cae en el except y sale 'ilegible'.
     monkeypatch.setattr(extraction, "_ocr_con_sello",
-                        lambda img_gris, es_pagina1: ("", -1.0))
+                        lambda img_gris, es_pagina1, cache=None, clave=None: ("", -1.0))
     resultado = extraction.extraer_texto_documento(
         _pdf_capa(CAPA_BASURA), "permiso.pdf", "application/pdf")
     assert resultado["metodo"] == "pdf-digital"
@@ -270,7 +270,7 @@ def test_capa_corta_anotacion_se_reemplaza_por_ocr(monkeypatch):
     baseline detectada por verificación adversarial)."""
     from acuusan_ocr import extraction
 
-    def _ocr_bueno(img_gris, es_pagina1):
+    def _ocr_bueno(img_gris, es_pagina1, cache=None, clave=None):
         return TEXTO_OCR_BUENO, 79.3
 
     monkeypatch.setattr(extraction, "_ocr_con_sello", _ocr_bueno)
@@ -286,7 +286,7 @@ def test_ocr_peor_que_la_capa_no_la_reemplaza(monkeypatch):
     capa (p. ej. manuscrito ilegible), la capa se queda."""
     from acuusan_ocr import extraction
 
-    def _ocr_igual_de_malo(img_gris, es_pagina1):
+    def _ocr_igual_de_malo(img_gris, es_pagina1, cache=None, clave=None):
         # Mismo nivel de basura léxica que la capa: no hay mejora
         return "SOLlcrrzD PERMlsz LABzRAL NOMBRE famgr jz", 12.0
 

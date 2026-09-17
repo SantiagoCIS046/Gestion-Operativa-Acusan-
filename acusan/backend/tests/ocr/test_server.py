@@ -162,11 +162,11 @@ def test_refuerzo_llena_solo_campos_vacios(cliente, monkeypatch):
     (NOMBRE: OTRA PERSONA) se ignora."""
     texto_1a = "SOLICITUD DE PERMISO\nNOMBRE: MARIA GOMEZ\nFECHA: 18-08-2026"
 
-    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
         return {"texto": texto_1a, "texto_pagina1": texto_1a,
                 "metodo": "ocr-tesseract", "paginas": 1, "confianza": 80.0}
 
-    def _refuerzo(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    def _refuerzo(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
         return {"texto": "CARGO: Fontanero\nHORA: 2:00 p.m. a 4:00 p.m.\nNOMBRE: OTRA PERSONA",
                 "texto_pagina1": "CARGO: Fontanero"}
 
@@ -204,11 +204,11 @@ def test_refuerzo_no_corre_sin_faltantes(cliente, monkeypatch):
         "OBSERVACIONES: sin novedad",
     ])
 
-    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
         return {"texto": texto_completo, "texto_pagina1": texto_completo,
                 "metodo": "ocr-tesseract", "paginas": 1, "confianza": 85.0}
 
-    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
         raise AssertionError("sin campos faltantes el refuerzo no debe correr")
 
     monkeypatch.setattr(server, "extraer_texto_documento", _primera)
@@ -229,11 +229,11 @@ def test_refuerzo_no_corre_para_pdf_digital(cliente, monkeypatch):
     campos no se fuerza OCR (un formato en blanco digital es un vacío real)."""
     texto = "SOLICITUD DE PERMISO\nNOMBRE: MARIA GOMEZ\nFECHA: 18-08-2026"
 
-    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
         return {"texto": texto, "texto_pagina1": texto,
                 "metodo": "pdf-digital", "paginas": 1, "confianza": 99.0}
 
-    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
         raise AssertionError("un pdf-digital limpio no debe pasar por refuerzo")
 
     monkeypatch.setattr(server, "extraer_texto_documento", _primera)

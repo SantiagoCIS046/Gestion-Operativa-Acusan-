@@ -120,4 +120,108 @@ const escanearEnPython = async (payload) => {
   }
 }
 
-export const OcrService = { escanearEnPython, MAX_BASE64_LENGTH }
+// Trabajos asíncronos: el OCR de un permiso escaneado tarda ~100s/página en
+// el motor free — ninguna conexión HTTP puede esperar eso dentro del lambda
+// (maxDuration 300). El flujo divide el escaneo en llamadas cortas: POST
+// que enrola el trabajo (solo sube el base64) y GET de estado por jobId.
+const OCR_PY_TIMEOUT_INICIO_MS = Number(process.env.OCR_PY_TIMEOUT_INICIO_MS || 90000)
+const OCR_PY_TIMEOUT_CONSULTA_MS = Number(process.env.OCR_PY_TIMEOUT_CONSULTA_MS || 15000)
+
+// Mapeo de errores compartido por las llamadas cortas al motor (el mismo
+// contrato tipado de escanearEnPython: 503 no-disponible / 504 timeout /
+// 502 error-python; 429 ocupado y 404 trabajo-perdido son del flujo de trabajos).
+const _llamarPython = async (ruta, opciones, timeoutMs) => {
+  if (OCR_PY_DESHABILITADO) {
+    return {
+      status: 503,
+      codigo: 'no-disponible',
+      cuerpo: {
+        success: false,
+        motor: 'python',
+        disponible: false,
+        message: 'Motor OCR Python no disponible en esta instancia — use el OCR del navegador'
+      }
+    }
+  }
+
+  const controlador = new AbortController()
+  const temporizador = setTimeout(() => controlador.abort(), timeoutMs)
+  try {
+    const respuesta = await fetch(`${OCR_PY_URL}${ruta}`, { ...opciones, signal: controlador.signal })
+    let cuerpo
+    try {
+      cuerpo = await respuesta.json()
+    } catch {
+      cuerpo = { success: false, message: 'Respuesta no-JSON del motor OCR Python' }
+    }
+    if (!respuesta.ok) {
+      if (respuesta.status === 429) {
+        return { status: 429, codigo: 'ocupado', cuerpo }
+      }
+      if (respuesta.status === 404) {
+        return { status: 404, codigo: 'trabajo-no-encontrado', cuerpo }
+      }
+      return {
+        status: 502,
+        codigo: 'error-python',
+        cuerpo: {
+          success: false,
+          motor: 'python',
+          message: cuerpo?.message || `Motor OCR respondió ${respuesta.status}`
+        }
+      }
+    }
+    return { status: respuesta.status, codigo: 'ok', cuerpo }
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      return {
+        status: 504,
+        codigo: 'timeout',
+        cuerpo: {
+          success: false,
+          motor: 'python',
+          disponible: true,
+          message: `El motor OCR excedió ${Math.round(timeoutMs / 1000)}s de espera`
+        }
+      }
+    }
+    logger.warn('OCR-PY', 'NO DISPONIBLE', `${error.code || error.message} (${OCR_PY_URL})`)
+    return {
+      status: 503,
+      codigo: 'no-disponible',
+      cuerpo: {
+        success: false,
+        motor: 'python',
+        disponible: false,
+        message: 'Motor OCR Python no disponible — use el OCR del navegador'
+      }
+    }
+  } finally {
+    clearTimeout(temporizador)
+  }
+}
+
+/**
+ * Enrola un escaneo asíncrono en el motor Python y devuelve el jobId.
+ * @param {{ archivoBase64?: string, nombreArchivo?: string, mimeType?: string,
+ *           dominio: 'permisos'|'radicados', tipo?: string }} payload
+ * @returns {Promise<{ status: 202, codigo: 'ok', cuerpo: { jobId } }|errores tipados>}
+ */
+const iniciarTrabajoPython = (payload) =>
+  _llamarPython('/api/ocr/trabajos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, OCR_PY_TIMEOUT_INICIO_MS)
+
+/**
+ * Consulta el estado de un trabajo: procesando | listo (+respuesta/codigo).
+ * @returns {Promise<{ status, codigo, cuerpo }>}
+ */
+const consultarTrabajoPython = (jobId) =>
+  _llamarPython(`/api/ocr/trabajos/${encodeURIComponent(jobId)}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  }, OCR_PY_TIMEOUT_CONSULTA_MS)
+
+export const OcrService = { escanearEnPython, iniciarTrabajoPython, consultarTrabajoPython, MAX_BASE64_LENGTH }

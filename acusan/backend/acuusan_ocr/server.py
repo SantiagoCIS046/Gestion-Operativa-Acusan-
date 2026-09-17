@@ -3,13 +3,23 @@ r"""
 server.py — Servicio Flask del Motor OCR Python de Acuusan
 ─────────────────────────────────────────────────────────────────────────────
 Único cliente legítimo: el puente Node del backend (src/modules/ocr), que
-aplica JWT + rol antes de reenviar. Por eso el servicio bindea 127.0.0.1,
-NO monta CORS y solo expone:
+aplica JWT + rol antes de reenviar. En local bindea 127.0.0.1:5001 (npm run
+dev); en Render (HOST=0.0.0.0, PORT=10000) sirve al puente desplegado en
+Vercel. NO monta CORS y expone:
 
   GET  /health                     → flags de motores (fitz / tesseract / spa)
-  POST /api/ocr/escanear           → endpoint unificado Permisos + Radicados
+  POST /api/ocr/escanear           → endpoint unificado Permisos + Radicados (síncrono)
+  POST /api/ocr/trabajos           → inicia un escaneo asíncrono → {jobId} (202)
+  GET  /api/ocr/trabajos/<jobId>   → estado del trabajo: procesando | listo + respuesta
   POST /api/permisos/ocr           → alias compatibilidad (respuesta legacy)
   POST /api/radicados/ocr          → alias compatibilidad (respuesta legacy)
+
+El flujo asíncrono existe porque un permiso escaneado tarda ~100s por página
+en el plan free y el lambda de Vercel muere a los 300s: con trabajos, el
+POST vuelve en segundos y el cliente consulta el estado — ninguna conexión
+vive minutos. El registro de trabajos es EN MEMORIA (proceso único,
+threaded=True) y se pierde si el motor se reinicia: un jobId desconocido
+responde 404 para que el cliente reinicie el escaneo.
 
 Pipeline por debajo (extraction.py): PDF digital por página → rasterizado
 300 dpi → preprocesado OpenCV (borroso/contraste) → multi-pase Tesseract
@@ -21,6 +31,9 @@ import base64
 import logging
 import os
 import sys
+import threading
+import time
+import uuid
 
 from flask import Flask, jsonify, request
 
@@ -51,6 +64,26 @@ app.config["MAX_CONTENT_LENGTH"] = 40 * 1024 * 1024
 
 MAX_TEXTO_RESPUESTA = 8000
 
+# ── Trabajos asíncronos (el plan free tarda ~100s/página: ninguna conexión
+# HTTP puede vivir eso dentro del lambda de Vercel). Proceso único con
+# threaded=True → el dict EN MEMORIA es compartido y seguro con lock. Se
+# pierde al reiniciar: jobId desconocido → 404 y el cliente reintenta. ──────
+TRABAJOS = {}
+TRABAJOS_LOCK = threading.Lock()
+TRABAJOS_TTL_S = 600          # un resultado vive 10 min tras finalizar
+TRABAJOS_MAX = 20             # tope del registro (purga de los más viejos)
+TRABAJOS_SIMULTANEOS = int(os.environ.get("OCR_TRABAJOS_SIMULTANEOS", "1") or 1)
+
+
+def _purgar_trabajos(ahora):
+    """Expira resultados viejos y recorta el registro. Llamar con el lock."""
+    vivos = [(jid, t) for jid, t in TRABAJOS.items()
+             if t["finalizado"] is None or ahora - t["finalizado"] <= TRABAJOS_TTL_S]
+    if len(vivos) > TRABAJOS_MAX:
+        vivos = sorted(vivos, key=lambda p: p[1]["creado_en"])[-TRABAJOS_MAX:]
+    TRABAJOS.clear()
+    TRABAJOS.update(dict(vivos))
+
 
 def decodificar_base64(data_base64):
     """Limpia el prefijo data:...;base64, y decodifica a bytes."""
@@ -64,8 +97,14 @@ def decodificar_base64(data_base64):
         return None
 
 
-def _escanear(data):
-    """Lógica unificada del endpoint. Devuelve (respuesta_dict, codigo_http)."""
+def _escanear(data, cache_variantes=None):
+    """Lógica unificada del endpoint. Devuelve (respuesta_dict, codigo_http).
+
+    cache_variantes: dict por request donde extraction memoiza la variante A
+    de cada página — el refuerzo y un eventual reintento reutilizan el
+    preproceso caro (fastNlMeansDenoising) en vez de recalcularlo."""
+    if cache_variantes is None:
+        cache_variantes = {}
     archivo_base64 = data.get("archivoBase64") or data.get("archivo") or ""
     nombre_archivo = data.get("nombreArchivo") or data.get("nombre") or ""
     mime_type = data.get("mimeType") or ""
@@ -92,7 +131,8 @@ def _escanear(data):
                     "message": "archivoBase64 inválido o vacío."}, 400
         resultado = extraer_texto_documento(
             bytes_archivo, nombre_archivo=nombre_archivo,
-            mime_type=mime_type, on_etapa=on_etapa)
+            mime_type=mime_type, on_etapa=on_etapa,
+            cache_variantes=cache_variantes)
         logger.info("Extracción %s → metodo=%s paginas=%s confianza=%s etapas=%s",
                     nombre_archivo or "(sin nombre)", resultado["metodo"],
                     resultado["paginas"], resultado["confianza"], etapas[-1] if etapas else "-")
@@ -128,7 +168,8 @@ def _escanear(data):
             on_etapa("Verificando campos: recolección forzada de faltantes", 0.85)
             extra = refuerzo_texto_documento(
                 bytes_archivo, nombre_archivo=nombre_archivo,
-                mime_type=mime_type, on_etapa=on_etapa)
+                mime_type=mime_type, on_etapa=on_etapa,
+                cache_variantes=cache_variantes)
             if extra["texto"].strip():
                 campos_extra = parsear_texto_permiso(
                     extra["texto"], nombre_archivo=nombre_archivo,
@@ -194,6 +235,89 @@ def escanear():
         logger.exception("Error en /api/ocr/escanear:")
         return jsonify({"success": False,
                         "message": f"Error interno del motor OCR: {error}"}), 500
+
+
+# ── Trabajos asíncronos: el escaneo corre en un hilo del proceso y el
+# cliente consulta el estado — la conexión HTTP nunca espera al OCR. ────────
+
+def _ejecutar_trabajo(job_id, data):
+    """Corre _escanear en un hilo daemon y deja el resultado en TRABAJOS.
+
+    Reintento único ante texto vacío: en el worker free de 512MB se midieron
+    fallos intermitentes donde tesseract corría completo y devolvía vacío (una
+    misma imagen: 200 la primera vez, 400 'ilegible' en las siguientes). Con
+    el cache de variantes compartido, el reintento no repite el preproceso
+    caro — solo los pases de tesseract."""
+    cache = {}
+    try:
+        respuesta, codigo = _escanear(data, cache_variantes=cache)
+        tiene_archivo = bool(data.get("archivoBase64") or data.get("archivo"))
+        if (codigo == 400 and tiene_archivo
+                and "No se pudo extraer" in (respuesta.get("message") or "")):
+            logger.info("Trabajo %s: texto vacío en ronda 1 — reintentando una vez", job_id)
+            respuesta, codigo = _escanear(data, cache_variantes=cache)
+    except Exception as error:  # noqa: BLE001 - el hilo jamás mata el servicio
+        logger.exception("Error en el trabajo %s:", job_id)
+        respuesta = {"success": False,
+                     "message": f"Error interno del motor OCR: {error}"}
+        codigo = 500
+    finally:
+        with TRABAJOS_LOCK:
+            trabajo = TRABAJOS.get(job_id)
+            if trabajo is not None:
+                trabajo.update(estado="listo", respuesta=respuesta,
+                               codigo=codigo, finalizado=time.time())
+
+
+@app.route("/api/ocr/trabajos", methods=["POST"])
+def crear_trabajo():
+    try:
+        data = request.get_json(silent=True) or {}
+        dominio = (data.get("dominio") or "").lower()
+        if dominio not in ("permisos", "radicados"):
+            return jsonify({"success": False,
+                            "message": "Campo 'dominio' requerido: 'permisos' | 'radicados'."}), 400
+        if not (data.get("archivoBase64") or data.get("archivo") or "").strip() \
+                and not (data.get("texto") or "").strip():
+            return jsonify({"success": False,
+                            "message": "Se requiere 'archivoBase64' (PDF/imagen) o 'texto'."}), 400
+
+        with TRABAJOS_LOCK:
+            _purgar_trabajos(time.time())
+            activos = sum(1 for t in TRABAJOS.values() if t["finalizado"] is None)
+            if activos >= TRABAJOS_SIMULTANEOS:
+                return jsonify({"success": False,
+                                "message": "El motor ya está procesando otro documento — "
+                                           "espere a que termine e intente de nuevo."}), 429
+            job_id = uuid.uuid4().hex
+            TRABAJOS[job_id] = {"estado": "procesando", "respuesta": None,
+                                "codigo": None, "creado_en": time.time(),
+                                "finalizado": None}
+
+        threading.Thread(target=_ejecutar_trabajo, args=(job_id, data),
+                         daemon=True).start()
+        logger.info("Trabajo %s iniciado (%s)", job_id, dominio)
+        return jsonify({"success": True, "jobId": job_id,
+                        "estado": "procesando"}), 202
+    except Exception as error:  # noqa: BLE001
+        logger.exception("Error en /api/ocr/trabajos:")
+        return jsonify({"success": False,
+                        "message": f"Error interno del motor OCR: {error}"}), 500
+
+
+@app.route("/api/ocr/trabajos/<job_id>", methods=["GET"])
+def consultar_trabajo(job_id):
+    with TRABAJOS_LOCK:
+        trabajo = TRABAJOS.get(job_id)
+    if trabajo is None:
+        return jsonify({"success": False,
+                        "message": "Trabajo no encontrado o expirado (el motor se "
+                                   "reinició) — inicie el escaneo de nuevo."}), 404
+    if trabajo["finalizado"] is None:
+        return jsonify({"success": True, "estado": "procesando"}), 200
+    return jsonify({"success": True, "estado": "listo",
+                    "respuesta": trabajo["respuesta"],
+                    "codigo": trabajo["codigo"]}), 200
 
 
 # ── Alias de compatibilidad (contrato legacy de la integración 9a51158) ─────

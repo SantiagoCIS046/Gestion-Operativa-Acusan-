@@ -146,6 +146,13 @@ def _env_int(nombre, predeterminado):
         return predeterminado
 
 
+def _env_float(nombre, predeterminado):
+    try:
+        return float(os.environ.get(nombre, "") or predeterminado)
+    except (TypeError, ValueError):
+        return predeterminado
+
+
 def _localizar_tesseract():
     """Resuelve el binario de Tesseract: env OCR_TESSERACT_CMD → PATH → rutas
     comunes de Windows. Devuelve ruta o None."""
@@ -166,6 +173,7 @@ def _tessdata_dir():
 
 
 def _configurar_pytesseract():
+
     """Apunta pytesseract al binario localizado y fija TESSDATA_PREFIX al
     directorio del repo. Devuelve True si está usable.
 
@@ -249,6 +257,31 @@ def _variantes_preprocesadas(img_gris):
     ]
 
 
+def _variantes_ab(img_gris, cache=None, clave=None):
+    """Devuelve (variante_a, variante_b) para los pases de una página.
+
+    La variante A (fastNlMeansDenoising) es ~98% del costo de preproceso y
+    entre la ronda 1 y el refuerzo se recalculaba IDÉNTICA sobre los mismos
+    píxeles. Con un cache (dict por página, creado por request) la A se
+    calcula una vez por página; la B (~0.02s) se recalcula siempre para no
+    retener dos arrays por página en RAM. Mismas imágenes → mismos
+    resultados: el caché no altera ninguna salida.
+
+    Tope de 3 páginas cacheadas (~8.4MB c/u): el worker free de 512MB ya
+    muestra presión de memoria; los campos de un permiso viven casi todos
+    en la página 1, así que páginas 4+ recalculan como hoy."""
+    if cv2 is None or np is None:
+        gris = _asegurar_np(img_gris)
+        return gris, gris
+    if cache is not None and clave in cache:
+        return cache[clave], _preprocesar_variante_b(img_gris)
+    a = _preprocesar_variante_a(img_gris)
+    b = _preprocesar_variante_b(img_gris)
+    if cache is not None and len(cache) < 3:
+        cache[clave] = a
+    return a, b
+
+
 # ── Multi-pase Tesseract con selección por confianza ─────────────────────────
 
 def _config_psm(psm):
@@ -294,33 +327,41 @@ def _ocr_un_pase(imagen_np, psm):
     return texto, conf_media, n_palabras
 
 
-def _mejor_ocr(imagenes_por_pase):
+def _mejor_ocr(imagenes_por_pase, conf_suficiente=None):
     """Corre los pases indicados sobre imágenes preprocesadas y devuelve el
     TEXTO del pase ganador (mayor confianza media; desempate por nº de
-    palabras). Los pases nunca se mezclan entre sí."""
+    palabras). Los pases nunca se mezclan entre sí.
+
+    conf_suficiente: si un pase alcanza esa confianza media, los pases
+    siguientes no se corren — en páginas limpias el primero (A/PSM6) ya era
+    el ganador y los restantes solo competían para perder. El pase del
+    sello y los pases del refuerzo no usan el corte (cobertura primero)."""
     mejor = ("", -1.0, 0)
     for imagen_np, psm in imagenes_por_pase:
         texto, conf, n = _ocr_un_pase(imagen_np, psm)
         if texto and (conf, n) > (mejor[1], mejor[2]):
             mejor = (texto, conf, n)
+        if conf_suficiente and texto and conf >= conf_suficiente:
+            break
     return mejor
 
 
-def _ocr_con_sello(img_gris, es_pagina1):
+def _ocr_con_sello(img_gris, es_pagina1, cache=None, clave=None):
     """Multi-pase completo de una página. En la página 1 añade el pase del
     sello (40% superior, PSM 6, variante B) que se CONCATENA al ganador: el
     sello físico de ventanilla casi nunca sobrevive al OCR de página completa.
     Devuelve (texto, conf_media)."""
-    variantes = dict(_variantes_preprocesadas(img_gris))
-    a = variantes.get("A-borroso", variantes.get("gris"))
-    b = variantes.get("B-contraste", variantes.get("gris"))
+    a, b = _variantes_ab(img_gris, cache=cache, clave=clave)
 
     if es_pagina1:
         pases = [(a, 6), (b, 3), (a, 11)]
     else:
         pases = [(a, 6), (b, 3)]
 
-    texto, conf, _ = _mejor_ocr(pases)
+    # Pase adaptativo: umbral de confianza a partir del cual no se corren
+    # los pases restantes de la página (OCR_SALTO_CONF=0 lo desactiva).
+    conf_suficiente = _env_float("OCR_SALTO_CONF", 80.0) or None
+    texto, conf, _ = _mejor_ocr(pases, conf_suficiente=conf_suficiente)
 
     if es_pagina1:
         alto = b.shape[0]
@@ -341,13 +382,11 @@ def _ocr_con_sello(img_gris, es_pagina1):
 PSM_REFUERZO = (4, 12)
 
 
-def _ocr_variantes_pagina(img_gris, es_pagina1):
+def _ocr_variantes_pagina(img_gris, es_pagina1, cache=None, clave=None):
     """Pases adicionales del refuerzo sobre una página ya rasterizada.
     Devuelve [(texto, conf)] de los pases que produjeron texto; en la página 1
     el sello (40% superior) se antepone igual que en la primera pasada."""
-    variantes = dict(_variantes_preprocesadas(img_gris))
-    a = variantes.get("A-borroso", variantes.get("gris"))
-    b = variantes.get("B-contraste", variantes.get("gris"))
+    a, b = _variantes_ab(img_gris, cache=cache, clave=clave)
 
     sello = ""
     if es_pagina1:
@@ -364,13 +403,18 @@ def _ocr_variantes_pagina(img_gris, es_pagina1):
     return textos
 
 
-def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
+                             on_etapa=None, cache_variantes=None):
     """Segunda recolección FORZADA del documento, dirigida a los campos que la
     primera pasada dejó vacíos. Devuelve {'texto', 'texto_pagina1'} con los
     pases EXTRA concatenados — un texto DISTINTO al de la primera pasada, no
     una re-lectura idéntica. Una única ronda, sin gate por página: la decisión
     de correr ya la tomó el servidor (había campos vacíos y el documento era
-    escaneado). Degradación elegante: sin motor o con entrada rara → vacío."""
+    escaneado). Degradación elegante: sin motor o con entrada rara → vacío.
+
+    cache_variantes: el dict de variantes A de la ronda 1 (ver
+    _variantes_ab) — el refuerzo reutiliza el preproceso caro de las mismas
+    páginas en vez de recalcular fastNlMeansDenoising sobre píxeles idénticos."""
     vacio = {"texto": "", "texto_pagina1": ""}
     if not bytes_archivo:
         return vacio
@@ -382,7 +426,8 @@ def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_
             if on_etapa:
                 on_etapa("Refuerzo: OCR de imagen (campos faltantes)", 0.1)
             img = Image.open(io.BytesIO(bytes_archivo)).convert("L")
-            variantes = _ocr_variantes_pagina(img, es_pagina1=True)
+            variantes = _ocr_variantes_pagina(img, es_pagina1=True,
+                                              cache=cache_variantes, clave=0)
             texto = "\n".join(t for t, _ in variantes)
             return {"texto": texto, "texto_pagina1": texto}
         if tipo != "pdf" or fitz is None:
@@ -405,7 +450,9 @@ def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_
                              indice / max(total, 1))
                 pix = doc[indice].get_pixmap(matrix=matriz, colorspace=fitz.csGRAY)
                 img_gris = _pixmap_a_imagen_gris(pix)
-                textos_pagina = _ocr_variantes_pagina(img_gris, es_pagina1=(indice == 0))
+                textos_pagina = _ocr_variantes_pagina(
+                    img_gris, es_pagina1=(indice == 0),
+                    cache=cache_variantes, clave=indice)
                 if textos_pagina:
                     paginas.append("\n".join(t for t, _ in textos_pagina))
         return {"texto": "\n\n".join(paginas),
@@ -431,7 +478,7 @@ def _pixmap_a_imagen_gris(pix):
     return img
 
 
-def _pdf_a_texto(bytes_pdf, on_etapa=None):
+def _pdf_a_texto(bytes_pdf, on_etapa=None, cache_variantes=None):
     """Recorre el PDF página a página: texto embebido si es sustancial, si no
     rasterizado + OCR. Devuelve (textos_por_pagina, confianzas_ocr,
     n_paginas_doc, hubo_digital, hubo_ocr)."""
@@ -472,7 +519,8 @@ def _pdf_a_texto(bytes_pdf, on_etapa=None):
             img_gris = _pixmap_a_imagen_gris(pix)
             if on_etapa:
                 on_etapa(f"OCR página {indice + 1} (documento escaneado)", indice / max(total, 1))
-            texto_ocr, conf = _ocr_con_sello(img_gris, es_pagina1=(indice == 0))
+            texto_ocr, conf = _ocr_con_sello(img_gris, es_pagina1=(indice == 0),
+                                              cache=cache_variantes, clave=indice)
             puntaje_digital = _puntaje_capa_digital(texto_digital)
             puntaje_ocr = _puntaje_capa_digital(texto_ocr)
             usa_ocr = bool(texto_ocr.strip()) and (
@@ -515,11 +563,16 @@ def _clasificar(bytes_archivo, nombre_archivo, mime_type):
     return None
 
 
-def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None):
+def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
+                            on_etapa=None, cache_variantes=None):
     """Punto de entrada del pipeline. Devuelve
     {texto, texto_pagina1, metodo, paginas, confianza} — sin lanzar jamás.
     metodo ∈ 'pdf-digital' | 'ocr-tesseract' | 'hibrido' | 'imagen-ocr' |
-    'texto-plano' | 'sin-motor' | 'ilegible'."""
+    'texto-plano' | 'sin-motor' | 'ilegible'.
+
+    cache_variantes: dict opcional (uno por request) donde se memoiza la
+    variante A de cada página OCR-eada, para que el refuerzo posterior no
+    recalcule fastNlMeansDenoising sobre píxeles idénticos."""
     vacio = {"texto": "", "texto_pagina1": "", "metodo": "ilegible",
              "paginas": 0, "confianza": 0.0}
     if not bytes_archivo:
@@ -542,7 +595,8 @@ def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_e
                 on_etapa("OCR de imagen", 0.1)
             img = Image.open(io.BytesIO(bytes_archivo))
             img_gris = img.convert("L")
-            texto, conf = _ocr_con_sello(img_gris, es_pagina1=True)
+            texto, conf = _ocr_con_sello(img_gris, es_pagina1=True,
+                                         cache=cache_variantes, clave=0)
             return {"texto": texto, "texto_pagina1": texto,
                     "metodo": "imagen-ocr" if texto else "ilegible",
                     "paginas": 1, "confianza": round(max(conf, 0.0), 1)}
@@ -557,7 +611,7 @@ def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="", on_e
             if on_etapa:
                 on_etapa("Abriendo documento", 0.0)
             texto_paginas, confianzas, total, hubo_digital, hubo_ocr = \
-                _pdf_a_texto(bytes_archivo, on_etapa)
+                _pdf_a_texto(bytes_archivo, on_etapa, cache_variantes)
         except Exception:
             return vacio
         if not any(t.strip() for t in texto_paginas):

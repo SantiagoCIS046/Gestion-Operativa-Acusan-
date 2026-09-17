@@ -6,6 +6,7 @@
 //   3. Python responde 500    → 502 error-python
 //   4. Python colgado         → 504 timeout (OCR_PY_TIMEOUT_MS corto)
 //   5. Permisos colgado       → 504 timeout (OCR_PY_TIMEOUT_PERMISOS_MS corto)
+//   6-8. Trabajos asíncronos  → 202/jobId, estado procesando→listo, 429/404 tipados
 // Ejecutar: node acusan/backend/tests/ocrBridge.test.mjs
 
 import http from 'node:http'
@@ -137,6 +138,70 @@ const cerrar = (servidor) => new Promise((resolve) => servidor.close(resolve))
   verificar('Permisos colgado → codigo timeout', codigo === 'timeout')
   verificar('Permisos respeta OCR_PY_TIMEOUT_PERMISOS_MS (250ms), no el de radicados (60s)', duracion >= 200 && duracion < 3000, `(tardó ${duracion}ms)`)
   servidor.closeAllConnections?.()
+  await cerrar(servidor)
+}
+
+// ── 6. Trabajos asíncronos: iniciar OK → 202 + jobId ───────────────────────
+{
+  const { servidor, puerto } = await escuchar((req, res) => {
+    let cuerpo = ''
+    req.on('data', (c) => { cuerpo += c })
+    req.on('end', () => {
+      const datos = JSON.parse(cuerpo)
+      if (req.method === 'POST' && req.url === '/api/ocr/trabajos') {
+        res.writeHead(202, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true, jobId: 'job-123', estado: 'procesando', dominio: datos.dominio }))
+      } else {
+        res.writeHead(404); res.end()
+      }
+    })
+  })
+
+  const { OcrService } = await importarServicio(`http://127.0.0.1:${puerto}`)
+  const { status, cuerpo } = await OcrService.iniciarTrabajoPython({ dominio: 'permisos', archivoBase64: 'data:image/png;base64,AAA' })
+  verificar('Iniciar trabajo → status 202', status === 202)
+  verificar('Iniciar trabajo → jobId del motor', cuerpo?.jobId === 'job-123')
+  await cerrar(servidor)
+}
+
+// ── 7. Consultar trabajo: procesando → listo con respuesta ─────────────────
+{
+  let consultas = 0
+  const { servidor, puerto } = await escuchar((req, res) => {
+    if (req.method === 'GET' && req.url === '/api/ocr/trabajos/job-123') {
+      consultas++
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(consultas === 1
+        ? { success: true, estado: 'procesando' }
+        : { success: true, estado: 'listo', codigo: 200, respuesta: { success: true, metodo: 'ocr-tesseract', campos: { nombreFuncionario: 'GOMEZ MARIA' } } }))
+    } else {
+      res.writeHead(404); res.end()
+    }
+  })
+
+  const { OcrService } = await importarServicio(`http://127.0.0.1:${puerto}`)
+  const primera = await OcrService.consultarTrabajoPython('job-123')
+  verificar('Consultar (1ª) → procesando', primera?.cuerpo?.estado === 'procesando')
+  const segunda = await OcrService.consultarTrabajoPython('job-123')
+  verificar('Consultar (2ª) → listo', segunda?.cuerpo?.estado === 'listo')
+  verificar('Consultar (2ª) → respuesta intacta', segunda?.cuerpo?.respuesta?.campos?.nombreFuncionario === 'GOMEZ MARIA')
+  await cerrar(servidor)
+}
+
+// ── 8. Trabajos: 429 ocupado y 404 perdido salen tipados ────────────────────
+{
+  const { servidor, puerto } = await escuchar((req, res) => {
+    res.writeHead(req.method === 'POST' ? 429 : 404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ success: false, message: 'ocupado' }))
+  })
+
+  const { OcrService } = await importarServicio(`http://127.0.0.1:${puerto}`)
+  const inicio = await OcrService.iniciarTrabajoPython({ dominio: 'permisos', archivoBase64: 'x' })
+  verificar('Motor ocupado → status 429', inicio.status === 429)
+  verificar('Motor ocupado → codigo ocupado', inicio.codigo === 'ocupado')
+  const consulta = await OcrService.consultarTrabajoPython('inexistente')
+  verificar('Trabajo perdido → status 404', consulta.status === 404)
+  verificar('Trabajo perdido → codigo trabajo-no-encontrado', consulta.codigo === 'trabajo-no-encontrado')
   await cerrar(servidor)
 }
 

@@ -106,6 +106,79 @@ export const permisosService = {
   },
 
   /**
+   * Flujo asíncrono del motor Python (permisos): el escaneo tarda más que
+   * la vida útil de una conexión del servidor serverless, así que se enrola
+   * un trabajo y se consulta su estado. Mismo tipado de errores que
+   * escanearDocumento (503/504 → 'no-disponible'; otro !ok → message+status).
+   */
+  async iniciarEscaneoAsincrono(dataUrl, nombreArchivo, mimeType) {
+    const res = await fetch("/api/ocr/trabajos", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        archivoBase64: dataUrl,
+        nombreArchivo,
+        mimeType,
+        dominio: "permisos",
+      }),
+    });
+    if (res.status === 503 || res.status === 504) {
+      const error = new Error("Motor OCR Python no disponible");
+      error.codigo = "no-disponible";
+      error.status = res.status;
+      throw error;
+    }
+    if (!res.ok) {
+      let msg = "El motor OCR no pudo iniciar el escaneo.";
+      try {
+        const data = await res.json();
+        if (data && data.message) msg = data.message;
+      } catch (e) {}
+      const error = new Error(msg);
+      error.status = res.status;
+      throw error;
+    }
+    const data = await res.json();
+    if (data && data.success && data.data && data.data.jobId) {
+      return data.data.jobId;
+    }
+    throw new Error("El motor OCR no entregó el identificador del escaneo.");
+  },
+
+  /**
+   * Consulta el estado de un escaneo asíncrono. Devuelve:
+   *   { estado: 'procesando' }  → seguir consultando
+   *   { estado: 'listo', ...campos } → mismo contrato que escanearDocumento
+   * 404 (motor reiniciado) sale con status para que la vista lo explique.
+   */
+  async consultarEscaneoAsincrono(jobId) {
+    const res = await fetch(`/api/ocr/trabajos/${encodeURIComponent(jobId)}`, {
+      headers: getHeaders(),
+    });
+    if (res.status === 503 || res.status === 504) {
+      const error = new Error("Motor OCR Python no disponible");
+      error.codigo = "no-disponible";
+      error.status = res.status;
+      throw error;
+    }
+    if (!res.ok) {
+      let msg = "No se pudo consultar el estado del escaneo.";
+      try {
+        const data = await res.json();
+        if (data && data.message) msg = data.message;
+      } catch (e) {}
+      const error = new Error(msg);
+      error.status = res.status;
+      throw error;
+    }
+    const data = await res.json();
+    if (data && data.success && data.data) {
+      return data.data;
+    }
+    throw new Error("Respuesta inesperada del estado del escaneo.");
+  },
+
+  /**
    * Obtiene la lista de permisos desde la base de datos central (fuente de verdad).
    * La caché local NUNCA se pisa con una lista vacía del servidor y los
    * registros provisionales (sin conexión) se conservan y se muestran al final.

@@ -13,4 +13,19 @@ router.post(
   OcrController.escanear
 )
 
+// Flujo asíncrono para permisos (el escaneo tarda más que la vida útil de
+// una conexión del lambda): enrolar trabajo + consultar estado por jobId.
+// Sin RADICADOS en los roles: radicados conserva el flujo síncrono.
+router.post(
+  '/trabajos',
+  verificarRol('ENCARGADO', 'ADMIN'),
+  OcrController.iniciarTrabajo
+)
+
+router.get(
+  '/trabajos/:jobId',
+  verificarRol('ENCARGADO', 'ADMIN'),
+  OcrController.estadoTrabajo
+)
+
 export default router
