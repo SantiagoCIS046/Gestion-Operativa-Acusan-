@@ -24,4 +24,20 @@ export const precalentarMotorOCR = () => {
   }
 }
 
+// Keep-alive: Render free duerme a los 15 min sin tráfico. Mientras la app
+// esté abierta (pestaña visible), este latido cada 10 min mantiene el motor
+// despierto para que ningún escaneo pague el arranque de ~60s. Pestaña en
+// segundo plano (visible=false) no pinea: no despierta servicios sin usuario.
+const LATIDO_MS = 10 * 60 * 1000
+let latido = null
+
+export const mantenerDespiertoMotorOCR = () => {
+  // Al abrir la app, primer ping inmediato; luego el intervalo.
+  precalentarMotorOCR()
+  if (latido || typeof window === 'undefined') return
+  latido = setInterval(() => {
+    if (document.visibilityState === 'visible') precalentarMotorOCR()
+  }, LATIDO_MS)
+}
+
 export default precalentarMotorOCR

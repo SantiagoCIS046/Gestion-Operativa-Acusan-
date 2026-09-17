@@ -6,6 +6,7 @@ import App from './App.vue'
 import router from './router'
 import authService from './modules/auth/services/authService.js'
 import { conectarSocketPQR } from './services/socket.service.js'
+import { mantenerDespiertoMotorOCR } from './services/ocrWarmup.service.js'
 
 import SpecularButton from './components/SpecularButton.vue'
 
@@ -31,6 +32,10 @@ app.mount('#app')
 if (authService.estaAutenticado()) {
   conectarSocketPQR(authService.getToken())
 }
+
+// Motor OCR (Render free) despierto mientras la app esté en uso: primer ping
+// al abrir y latido cada 10 min — ningún escaneo paga el arranque en frío
+mantenerDespiertoMotorOCR()
 
 // Seguimiento dinámico de luz especular al mover el cursor sobre cualquier botón
 if (typeof window !== 'undefined') {
