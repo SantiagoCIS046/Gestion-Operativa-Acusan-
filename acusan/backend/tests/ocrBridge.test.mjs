@@ -205,6 +205,28 @@ const cerrar = (servidor) => new Promise((resolve) => servidor.close(resolve))
   await cerrar(servidor)
 }
 
+// ── 9. Cancelar trabajo: 200 cancelado y 404 ya-no-existe ──────────────────
+{
+  const { servidor, puerto } = await escuchar((req, res) => {
+    if (req.method === 'DELETE' && req.url === '/api/ocr/trabajos/job-vivo') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true, estado: 'cancelado' }))
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: false, message: 'Trabajo no encontrado o expirado.' }))
+    }
+  })
+
+  const { OcrService } = await importarServicio(`http://127.0.0.1:${puerto}`)
+  const vivo = await OcrService.cancelarTrabajoPython('job-vivo')
+  verificar('Cancelar vivo → status 200', vivo.status === 200)
+  verificar('Cancelar vivo → estado cancelado', vivo?.cuerpo?.estado === 'cancelado')
+  const muerto = await OcrService.cancelarTrabajoPython('job-idem') // idempotente
+  verificar('Cancelar inexistente → status 404', muerto.status === 404)
+  verificar('Cancelar inexistente → codigo trabajo-no-encontrado', muerto.codigo === 'trabajo-no-encontrado')
+  await cerrar(servidor)
+}
+
 // ── Resumen ─────────────────────────────────────────────────────────────────
 console.log(`\nPuente OCR: ${pasados} pasados, ${fallidos} fallidos`)
 process.exit(fallidos === 0 ? 0 : 1)

@@ -179,6 +179,22 @@ export const permisosService = {
   },
 
   /**
+   * Cancela un escaneo asíncrono abandonado (re-selección de archivo, techo
+   * de espera agotado) para liberar el único slot del motor. Best-effort:
+   * nunca lanza — si el trabajo ya expiró o terminó, simplemente no está.
+   */
+  async cancelarEscaneoAsincrono(jobId) {
+    try {
+      await fetch(`/api/ocr/trabajos/${encodeURIComponent(jobId)}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      });
+    } catch (e) {
+      /* best-effort: sin conexión el trabajo expira solo por TTL */
+    }
+  },
+
+  /**
    * Obtiene la lista de permisos desde la base de datos central (fuente de verdad).
    * La caché local NUNCA se pisa con una lista vacía del servidor y los
    * registros provisionales (sin conexión) se conservan y se muestran al final.

@@ -63,6 +63,10 @@ def cliente():
     server.app.config["TESTING"] = True
     with server.app.test_client() as c:
         yield c
+    # Los trabajos asíncronos viven en el dict del proceso: sin limpiar, un
+    # test contamina el siguiente (429 fantasma por un slot ocupado).
+    with server.TRABAJOS_LOCK:
+        server.TRABAJOS.clear()
 
 
 def test_health_con_flags(cliente):
@@ -244,3 +248,107 @@ def test_refuerzo_no_corre_para_pdf_digital(cliente, monkeypatch):
     })
     assert respuesta.status_code == 200
     assert respuesta.get_json()["refuerzo"] == []
+
+
+# ── Trabajos asíncronos (/api/ocr/trabajos) ─────────────────────────────────
+
+import threading  # noqa: E402  (solo lo usan las pruebas de trabajos)
+import time  # noqa: E402
+
+
+def _esperar_listo(cliente, job_id, techo_s=5.0):
+    """Consulta un trabajo hasta que esté listo (el hilo corre en paralelo)."""
+    inicio = time.time()
+    while time.time() - inicio < techo_s:
+        respuesta = cliente.get(f"/api/ocr/trabajos/{job_id}")
+        if respuesta.status_code == 200 and respuesta.get_json().get("estado") == "listo":
+            return respuesta.get_json()
+        time.sleep(0.05)
+    raise AssertionError(f"el trabajo {job_id} no quedó listo en {techo_s}s")
+
+
+def test_trabajo_asincrono_ciclo_completo(cliente, monkeypatch):
+    def _escanear_ok(data, cache_variantes=None):
+        return ({"success": True, "metodo": "ocr-tesseract", "paginas": 1,
+                 "campos": {"nombreFuncionario": "GOMEZ MARIA"}}, 200)
+
+    monkeypatch.setattr(server, "_escanear", _escanear_ok)
+    alta = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert alta.status_code == 202
+    job_id = alta.get_json()["jobId"]
+
+    final = _esperar_listo(cliente, job_id)
+    assert final["codigo"] == 200
+    assert final["respuesta"]["campos"]["nombreFuncionario"] == "GOMEZ MARIA"
+
+
+def test_trabajo_cancelado_libera_el_slot(cliente, monkeypatch):
+    iniciado = threading.Event()
+
+    def _escanear_lento(data, cache_variantes=None):
+        iniciado.set()
+        time.sleep(1.0)
+        return ({"success": True, "metodo": "ocr-tesseract", "campos": {}}, 200)
+
+    monkeypatch.setattr(server, "_escanear", _escanear_lento)
+    alta = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert alta.status_code == 202
+    job_id = alta.get_json()["jobId"]
+    assert iniciado.wait(2), "el hilo del trabajo no arrancó"
+
+    cancelacion = cliente.delete(f"/api/ocr/trabajos/{job_id}")
+    assert cancelacion.status_code == 200
+    assert cancelacion.get_json()["estado"] == "cancelado"
+
+    # Fuera del dict: la consulta da 404 y el slot quedó libre (el próximo
+    # POST no hereda un 429 aunque el hilo viejo siga durmiendo).
+    assert cliente.get(f"/api/ocr/trabajos/{job_id}").status_code == 404
+    segunda = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert segunda.status_code == 202
+
+    # El hilo cancelado termina pero su resultado se descarta (no revive).
+    time.sleep(1.2)
+    assert cliente.get(f"/api/ocr/trabajos/{job_id}").status_code == 404
+
+
+def test_fallo_al_iniciar_hilo_no_deja_zombie(cliente, monkeypatch):
+    """Si Thread.start() lanza (presión de RAM), la entrada debe purgarse: sin
+    esto el contador de activos bloquearía TODOS los escaneos con 429 para
+    siempre (bug hallado por la revisión adversarial del commit eaeec49)."""
+
+    class _HiloRoto:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(server.threading, "Thread", _HiloRoto)
+    respuesta = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert respuesta.status_code == 500
+
+    with server.TRABAJOS_LOCK:
+        assert server.TRABAJOS == {}, "la entrada rota quedó huérfana (429 eterno)"
+
+
+def test_trabajo_ocupado_responde_429(cliente, monkeypatch):
+    iniciado = threading.Event()
+
+    def _escanear_lento(data, cache_variantes=None):
+        iniciado.set()
+        time.sleep(0.8)
+        return ({"success": True, "metodo": "ocr-tesseract", "campos": {}}, 200)
+
+    monkeypatch.setattr(server, "_escanear", _escanear_lento)
+    assert cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")}).status_code == 202
+    assert iniciado.wait(2)
+
+    ocupado = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert ocupado.status_code == 429
+    assert "varios minutos" in ocupado.get_json()["message"]

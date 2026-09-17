@@ -1887,6 +1887,7 @@ const handleScannedFileUpload = async (e) => {
     const avanceLento = setInterval(() => {
       if (token === tokenEscaneoOcr && ocrProgress.value < 80) ocrProgress.value += 1
     }, 7000)
+    let jobId = null // visible en el catch para cancelar el trabajo abandonado
     try {
       ocrProgress.value = 35
       ocrStepMessage.value = 'Motor Python leyendo el documento… (puede tardar unos minutos)'
@@ -1896,21 +1897,33 @@ const handleScannedFileUpload = async (e) => {
       // ERR_NETWORK_IO_SUSPENDED) se toleran: el trabajo sigue vivo en el
       // motor aunque esta consulta puntual falle.
       const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-      const jobId = await permisosService.iniciarEscaneoAsincrono(event.target.result, file.name, file.type || 'application/pdf')
+      jobId = await permisosService.iniciarEscaneoAsincrono(event.target.result, file.name, file.type || 'application/pdf')
+      // Al abandonar el escaneo (re-selección, techo, error fatal) se cancela
+      // el trabajo para liberar el único slot del motor — si no, seguiría
+      // OCR-eando en vano por minutos y el reintento recibiría 429.
+      const cancelarTrabajoAbandonado = () => {
+        if (jobId) permisosService.cancelarEscaneoAsincrono(jobId).catch(() => {})
+      }
       let escaneo = null
       let fallosRedSeguidos = 0
       const inicioEscaneo = Date.now()
       while (token === tokenEscaneoOcr) {
         await esperar(4000)
-        if (token !== tokenEscaneoOcr) return
+        if (token !== tokenEscaneoOcr) { cancelarTrabajoAbandonado(); return }
         let consulta
         try {
           consulta = await permisosService.consultarEscaneoAsincrono(jobId)
           fallosRedSeguidos = 0
-        } catch (errRed) {
-          if (errRed?.codigo === 'no-disponible' || errRed?.status === 504 || errRed?.status === 404) throw errRed
+        } catch (errConsulta) {
+          // Veredictos DEFINITIVOS del trabajo: 400 ilegible (ya con el
+          // reintento interno del motor agotado), 404 trabajo perdido (el
+          // motor se reinició), 413 peso — el mensaje es real y ninguna
+          // consulta posterior lo cambiará.
+          if ([400, 404, 413].includes(errConsulta?.status)) throw errConsulta
+          // 503/504/500/502 o red caída: falla transitoria DE ESTA CONSULTA —
+          // el trabajo sigue vivo en el motor y la siguiente puede llegar.
           fallosRedSeguidos += 1
-          if (fallosRedSeguidos >= 5) throw errRed
+          if (fallosRedSeguidos >= 5) throw errConsulta
           continue
         }
         if (consulta?.estado === 'listo') { escaneo = consulta; break }
@@ -1918,7 +1931,7 @@ const handleScannedFileUpload = async (e) => {
           throw new Error('El escaneo superó 10 minutos de espera — reintente o diligencie manualmente')
         }
       }
-      if (token !== tokenEscaneoOcr) return
+      if (token !== tokenEscaneoOcr) { cancelarTrabajoAbandonado(); return }
       ocrProgress.value = 85
       ocrStepMessage.value = 'Interpretando los datos del permiso…'
       aplicarCampos(escaneo.campos || {})
@@ -1930,12 +1943,15 @@ const handleScannedFileUpload = async (e) => {
     } catch (err) {
       if (token !== tokenEscaneoOcr) return
       falloOcr = true
+      // El escaneo fracasó: se libera el slot del motor ya mismo (si el
+      // trabajo seguía vivo) para que el reintento no herede un 429.
+      if (jobId) permisosService.cancelarEscaneoAsincrono(jobId).catch(() => {})
       console.info('[OCR] Falló el escaneo con el motor Python:', err?.status || '', err?.codigo || '', err?.message)
       // El motivo real, no un mensaje genérico: peso, espera agotada u otro.
       if (err?.status === 413) {
         ocrStepMessage.value = 'Documento demasiado pesado para el servidor (máx ~3 MB) — comprima el PDF y reintente'
       } else if (err?.status === 429) {
-        ocrStepMessage.value = 'El motor está procesando otro documento — espere unos segundos y reintente'
+        ocrStepMessage.value = 'El motor está ocupado con otro escaneo (puede tardar unos minutos) — espere e intente de nuevo'
       } else if (err?.status === 404) {
         ocrStepMessage.value = 'El motor se reinició a mitad del escaneo — intente de nuevo'
       } else if (err?.status === 504 || err?.codigo === 'no-disponible') {

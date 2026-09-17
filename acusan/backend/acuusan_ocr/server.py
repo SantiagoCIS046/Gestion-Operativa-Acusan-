@@ -288,14 +288,27 @@ def crear_trabajo():
             if activos >= TRABAJOS_SIMULTANEOS:
                 return jsonify({"success": False,
                                 "message": "El motor ya está procesando otro documento — "
-                                           "espere a que termine e intente de nuevo."}), 429
+                                           "puede tardar varios minutos; espere e intente "
+                                           "de nuevo."}), 429
             job_id = uuid.uuid4().hex
             TRABAJOS[job_id] = {"estado": "procesando", "respuesta": None,
                                 "codigo": None, "creado_en": time.time(),
                                 "finalizado": None}
 
-        threading.Thread(target=_ejecutar_trabajo, args=(job_id, data),
-                         daemon=True).start()
+        try:
+            threading.Thread(target=_ejecutar_trabajo, args=(job_id, data),
+                             daemon=True).start()
+        except Exception:
+            # Si el hilo no arranca (p.ej. RuntimeError por presión de RAM), la
+            # entrada quedaría 'procesando' para siempre y el contador de
+            # activos bloquearía TODOS los escaneos con 429 hasta reiniciar.
+            # Se purga y el cliente ve un 500 reintentable.
+            with TRABAJOS_LOCK:
+                TRABAJOS.pop(job_id, None)
+            logger.exception("No se pudo iniciar el hilo del trabajo %s:", job_id)
+            return jsonify({"success": False,
+                            "message": "El motor no pudo iniciar el escaneo (sin "
+                                       "memoria para un hilo más) — intente de nuevo."}), 500
         logger.info("Trabajo %s iniciado (%s)", job_id, dominio)
         return jsonify({"success": True, "jobId": job_id,
                         "estado": "procesando"}), 202
@@ -318,6 +331,27 @@ def consultar_trabajo(job_id):
     return jsonify({"success": True, "estado": "listo",
                     "respuesta": trabajo["respuesta"],
                     "codigo": trabajo["codigo"]}), 200
+
+
+@app.route("/api/ocr/trabajos/<job_id>", methods=["DELETE"])
+def cancelar_trabajo(job_id):
+    """Cancela un trabajo: lo saca de TRABAJOS y libera el slot de inmediato.
+
+    El hilo sigue corriendo hasta terminar (tesseract no es interrumpible a
+    mitad de pase), pero su resultado se descarta — el finally de
+    _ejecutar_trabajo solo escribe si el trabajo sigue en el dict. Así, un
+    escaneo abandonado por el cliente (re-selección de archivo, techo de
+    espera) no bloquea el único slot de TRABAJOS_SIMULTANEOS por minutos.
+    Idempotente: borrar un trabajo inexistente da 404 tipado (el cliente lo
+    trata como éxito — ya no está)."""
+    with TRABAJOS_LOCK:
+        borrado = TRABAJOS.pop(job_id, None)
+    if borrado is None:
+        return jsonify({"success": False,
+                        "message": "Trabajo no encontrado o expirado."}), 404
+    if borrado["finalizado"] is None:
+        logger.info("Trabajo %s cancelado por el cliente", job_id)
+    return jsonify({"success": True, "estado": "cancelado"}), 200
 
 
 # ── Alias de compatibilidad (contrato legacy de la integración 9a51158) ─────

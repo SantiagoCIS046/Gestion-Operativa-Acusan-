@@ -28,4 +28,12 @@ router.get(
   OcrController.estadoTrabajo
 )
 
+// Cancelar un trabajo abandonado: libera el único slot del motor en vez de
+// dejarlo procesando en vano (re-selección de archivo, techo de espera).
+router.delete(
+  '/trabajos/:jobId',
+  verificarRol('ENCARGADO', 'ADMIN'),
+  OcrController.cancelarTrabajo
+)
+
 export default router

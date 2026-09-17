@@ -164,5 +164,38 @@ export const OcrController = {
         message: `Error en el puente del motor OCR: ${error.message}`
       })
     }
+  },
+
+  /**
+   * DELETE /api/ocr/trabajos/:jobId — cancela un escaneo abandonado (el
+   * cliente cambió de archivo, agotó su techo de espera o recibió un error
+   * fatal) para liberar el único slot del motor. 404 = ya no existe: éxito
+   * silencioso (idempotente desde la vista del cliente).
+   */
+  async cancelarTrabajo (req, res) {
+    try {
+      const { jobId } = req.params
+      if (!jobId) {
+        return res.status(400).json({ success: false, message: "Se requiere 'jobId'" })
+      }
+
+      const { status, cuerpo } = await OcrService.cancelarTrabajoPython(jobId)
+      if (status === 200) {
+        logger.info('OCR-PY', 'TRABAJO CANCELADO', jobId)
+        return res.status(200).json({ success: true, data: { estado: 'cancelado' } })
+      }
+      if (status === 404) {
+        return res.status(200).json({ success: true, data: { estado: 'cancelado' } })
+      }
+      // 503/504/502: la cancelación es best-effort; se informa sin drama.
+      logger.warn('OCR-PY', `TRABAJO CANCELAR ${status}`, `${jobId} · ${cuerpo?.message || ''}`)
+      return res.status(200).json({ success: true, data: { estado: 'cancelado', advertencia: cuerpo?.message } })
+    } catch (error) {
+      logger.error('OCR-PY', 'ERROR 500', error.message)
+      return res.status(500).json({
+        success: false,
+        message: `Error en el puente del motor OCR: ${error.message}`
+      })
+    }
   }
 }

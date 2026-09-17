@@ -298,7 +298,12 @@ def _ocr_un_pase(imagen_np, psm):
     # _configurar_pytesseract); reasegurar aquí cubre flujos que lleguen sin
     # pasar por estado_motores.
     os.environ["TESSDATA_PREFIX"] = _tessdata_dir()
-    timeout = _env_int("OCR_TIMEOUT_TESS", 20)
+    # 90s (no 20): en el worker free de Render (0.1 CPU) un pase LSTM sobre una
+    # página 300dpi tarda 25-40s — con el tope de 20s TODOS los pases morían al
+    # vencerse y el documento salía 'ilegible' con texto vacío (medido en
+    # producción: 6 pases × 20s + preproceso ≈ los 183s de las corridas). Local
+    # (CPU de escritorio) un pase toma 1-2s y el tope nunca se toca.
+    timeout = _env_int("OCR_TIMEOUT_TESS", 90)
     try:
         datos = pytesseract.image_to_data(
             imagen_np, lang=LENGUAJE, config=_config_psm(psm),

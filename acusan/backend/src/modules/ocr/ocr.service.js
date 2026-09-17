@@ -224,4 +224,15 @@ const consultarTrabajoPython = (jobId) =>
     headers: { 'Content-Type': 'application/json' }
   }, OCR_PY_TIMEOUT_CONSULTA_MS)
 
-export const OcrService = { escanearEnPython, iniciarTrabajoPython, consultarTrabajoPython, MAX_BASE64_LENGTH }
+/**
+ * Cancela un trabajo abandonado por el cliente: libera el único slot del
+ * motor en vez de dejarlo OCR-eando en vano por minutos. Best-effort — un
+ * 404 (ya expiró o terminó) se considera éxito silencioso.
+ * @returns {Promise<{ status, codigo, cuerpo }>}
+ */
+const cancelarTrabajoPython = (jobId) =>
+  _llamarPython(`/api/ocr/trabajos/${encodeURIComponent(jobId)}`, {
+    method: 'DELETE'
+  }, OCR_PY_TIMEOUT_CONSULTA_MS)
+
+export const OcrService = { escanearEnPython, iniciarTrabajoPython, consultarTrabajoPython, cancelarTrabajoPython, MAX_BASE64_LENGTH }
