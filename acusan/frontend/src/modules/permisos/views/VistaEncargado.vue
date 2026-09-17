@@ -1880,9 +1880,16 @@ const handleScannedFileUpload = async (e) => {
     isScanningOCR.value = true
     ocrProgress.value = 15
     ocrStepMessage.value = 'Enviando al motor Python…'
+    let falloOcr = false
+    // El progreso real del motor no es observable desde el cliente: este
+    // avance lento (35→80, +1 cada 7 s) solo señala vida — un permiso
+    // escaneado tarda ~3 min por página en el motor remoto.
+    const avanceLento = setInterval(() => {
+      if (token === tokenEscaneoOcr && ocrProgress.value < 80) ocrProgress.value += 1
+    }, 7000)
     try {
       ocrProgress.value = 35
-      ocrStepMessage.value = 'Motor Python leyendo el documento…'
+      ocrStepMessage.value = 'Motor Python leyendo el documento… (puede tardar unos minutos)'
       const escaneo = await permisosService.escanearDocumento(event.target.result, file.name, file.type || 'application/pdf')
       if (token !== tokenEscaneoOcr) return
       ocrProgress.value = 85
@@ -1895,15 +1902,25 @@ const handleScannedFileUpload = async (e) => {
       ocrStepMessage.value = `Lectura completa (${escaneo.metodo})`
     } catch (err) {
       if (token !== tokenEscaneoOcr) return
-      console.info('[OCR] Motor Python no disponible — diligencie manualmente:', err?.message)
-      ocrStepMessage.value = 'Motor Python no disponible — diligencie manualmente'
+      falloOcr = true
+      console.info('[OCR] Falló el escaneo con el motor Python:', err?.status || '', err?.codigo || '', err?.message)
+      // El motivo real, no un mensaje genérico: peso, espera agotada u otro.
+      if (err?.status === 413) {
+        ocrStepMessage.value = 'Documento demasiado pesado para el servidor (máx ~3 MB) — comprima el PDF y reintente'
+      } else if (err?.status === 504 || err?.codigo === 'no-disponible') {
+        ocrStepMessage.value = 'El motor tardó más de la espera máxima — reintente o diligencie manualmente'
+      } else {
+        ocrStepMessage.value = err?.message || 'Motor Python no disponible — diligencie manualmente'
+      }
     } finally {
+      clearInterval(avanceLento)
       if (token === tokenEscaneoOcr) {
         // El panel de progreso se recogé un instante después para que el
-        // 100% sea visible; una re-selección lo cancela.
+        // 100% sea visible; si falló, se deja 7 s para leer el motivo.
+        // Una re-selección lo cancela.
         setTimeout(() => {
           if (token === tokenEscaneoOcr) isScanningOCR.value = false
-        }, 600)
+        }, falloOcr ? 7000 : 600)
       }
     }
   }

@@ -15,6 +15,16 @@ import logger from '../../config/logger.js'
 const OCR_PY_URL = process.env.OCR_PY_URL || process.env.URL_PY_OCR || 'http://127.0.0.1:5001'
 const OCR_PY_TIMEOUT_MS = Number(process.env.OCR_PY_TIMEOUT_MS || 90000)
 
+// Permisos arrastra la ronda de refuerzo por campos faltantes: en el motor
+// free de Render una SOLA página medida tardó ~174s (87s ronda 1 + 87s
+// refuerzo) — un techo de 115s lo aborta siempre y el permiso queda vacío.
+// Techo propio para permisos, siempre por debajo del maxDuration 300 del
+// lambda. Radicados (sin refuerzo, ~35s/pág) conserva OCR_PY_TIMEOUT_MS.
+const timeoutPara = (dominio) =>
+  dominio === 'permisos'
+    ? Number(process.env.OCR_PY_TIMEOUT_PERMISOS_MS || 280000)
+    : OCR_PY_TIMEOUT_MS
+
 // Valor especial "DISABLED": usado en Vercel/producción donde no existe el
 // servicio Python. Devuelve 503 instantáneamente sin abrir ninguna conexión
 // (evita el timeout de 30s que Vercel aplica a sus Serverless Functions).
@@ -48,7 +58,8 @@ const escanearEnPython = async (payload) => {
   }
 
   const controlador = new AbortController()
-  const temporizador = setTimeout(() => controlador.abort(), OCR_PY_TIMEOUT_MS)
+  const timeoutMs = timeoutPara(payload?.dominio)
+  const temporizador = setTimeout(() => controlador.abort(), timeoutMs)
 
   try {
     const respuesta = await fetch(`${OCR_PY_URL}/api/ocr/escanear`, {
@@ -88,7 +99,7 @@ const escanearEnPython = async (payload) => {
           success: false,
           motor: 'python',
           disponible: true,
-          message: `El motor OCR excedió ${Math.round(OCR_PY_TIMEOUT_MS / 1000)}s de espera`
+          message: `El motor OCR excedió ${Math.round(timeoutMs / 1000)}s de espera`
         }
       }
     }

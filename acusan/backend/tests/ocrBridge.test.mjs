@@ -5,6 +5,7 @@
 //   2. Python caído (ECONNREFUSED) → 503 no-disponible (fallback navegador)
 //   3. Python responde 500    → 502 error-python
 //   4. Python colgado         → 504 timeout (OCR_PY_TIMEOUT_MS corto)
+//   5. Permisos colgado       → 504 timeout (OCR_PY_TIMEOUT_PERMISOS_MS corto)
 // Ejecutar: node acusan/backend/tests/ocrBridge.test.mjs
 
 import http from 'node:http'
@@ -115,6 +116,26 @@ const cerrar = (servidor) => new Promise((resolve) => servidor.close(resolve))
   verificar('Python colgado → status 504', status === 504)
   verificar('Python colgado → codigo timeout', codigo === 'timeout')
   verificar('Timeout respeta OCR_PY_TIMEOUT_MS (300ms)', duracion >= 250 && duracion < 3000, `(tardó ${duracion}ms)`)
+  servidor.closeAllConnections?.()
+  await cerrar(servidor)
+}
+
+// ── 5. Permisos usa su propio techo (OCR_PY_TIMEOUT_PERMISOS_MS) ────────────
+// El pipeline de permisos arrastra la ronda de refuerzo (~3 min/pág en el
+// motor free): su espera máxima es independiente de la de radicados.
+{
+  const { servidor, puerto } = await escuchar(() => { /* nunca responde */ })
+
+  process.env.OCR_PY_TIMEOUT_PERMISOS_MS = '250'
+  const { OcrService } = await importarServicio(`http://127.0.0.1:${puerto}`, 60000)
+  const inicio = Date.now()
+  const { status, codigo } = await OcrService.escanearEnPython({ dominio: 'permisos', texto: 'x' })
+  const duracion = Date.now() - inicio
+  delete process.env.OCR_PY_TIMEOUT_PERMISOS_MS
+
+  verificar('Permisos colgado → status 504', status === 504)
+  verificar('Permisos colgado → codigo timeout', codigo === 'timeout')
+  verificar('Permisos respeta OCR_PY_TIMEOUT_PERMISOS_MS (250ms), no el de radicados (60s)', duracion >= 200 && duracion < 3000, `(tardó ${duracion}ms)`)
   servidor.closeAllConnections?.()
   await cerrar(servidor)
 }
