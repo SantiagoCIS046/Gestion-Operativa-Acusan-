@@ -107,7 +107,7 @@
             <p>Se previsualiza y se lee automáticamente para llenar el formulario</p>
           </div>
           <input type="file" ref="fileInput" accept="application/pdf,image/*" style="display:none" @change="onFileSelected">
-          <button type="button" class="btn btn-primary btn-sm" @click="$refs.fileInput.click()">
+          <button type="button" class="btn btn-primary btn-sm" @click="precalentarMotorOCR(), $refs.fileInput.click()">
             <span>📂 Cargar PDF / Archivo</span>
           </button>
         </div>
@@ -935,6 +935,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import radicadosService from '../services/radicadosService.js'
 import ocrRadicados from '../services/ocrRadicados.js'
 import compressorRadicados from '../services/compressorRadicados.js'
+import precalentarMotorOCR from '../../../services/ocrWarmup.service.js'
 import authService from '../../auth/services/authService.js'
 import PanelRespuestas from '../components/PanelRespuestas.vue'
 
@@ -1171,6 +1172,7 @@ const proximosAVencer = computed(() => {
 const onFileSelected = async (event) => {
   const file = event.target.files[0]
   if (!file) return
+  precalentarMotorOCR()
   // Reset del input: sin esto, re-seleccionar el MISMO archivo no dispara change
   event.target.value = ''
 

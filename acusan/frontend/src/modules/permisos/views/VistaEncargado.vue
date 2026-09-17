@@ -119,6 +119,7 @@
               <!-- BOTÓN ÚNICO SELECTOR DE ARCHIVO (Cargar o Reemplazar) -->
               <div>
                 <label
+                  @click="precalentarMotorOCR"
                   class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5 mb-0"
                   style="font-size: 0.77rem; background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
                   :title="documentLoaded ? 'Cambiar por otro documento PDF' : 'Seleccionar archivo PDF, Word, TXT o imagen del computador'"
@@ -932,6 +933,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
 import adjuntosOffline from '../../../services/adjuntosOffline.js'
+import precalentarMotorOCR from '../../../services/ocrWarmup.service.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
 // Controls view mode: 'formulario' | 'historial'
@@ -1851,6 +1853,7 @@ const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
   if (e && e.target) e.target.value = ''
   if (!file) return
+  precalentarMotorOCR()
   const token = ++tokenEscaneoOcr
 
   resetFormData()

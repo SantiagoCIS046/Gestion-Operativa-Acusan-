@@ -13,9 +13,19 @@ import { usePqrStore } from '../stores/pqrStore'
  */
 let socket = null
 
+// En Vercel (serverless) el servidor socket.io jamás arranca (app.js lo
+// guarda con !process.env.VERCEL): sin VITE_BACKEND_URL apuntando a un
+// backend persistente, conectar solo produce el bucle infinito de
+// reconexión "Error de conexión WS: server error". Mejor no conectar.
+const serverlessSinBackend =
+  !import.meta.env.VITE_BACKEND_URL &&
+  typeof window !== 'undefined' &&
+  window.location.hostname.endsWith('.vercel.app')
+
 export const conectarSocketPQR = (token) => {
   if (socket) return socket
   if (!token) return null
+  if (serverlessSinBackend) return null
 
   const pqrStore = usePqrStore()
 

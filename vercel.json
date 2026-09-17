@@ -5,7 +5,7 @@
   "functions": {
     "api/index.js": {
       "memory": 1024,
-      "maxDuration": 30,
+      "maxDuration": 300,
       "includeFiles": "acusan/backend/node_modules/.prisma/client/**"
     }
   },
