@@ -18,8 +18,12 @@ Estrategia (máxima extracción sin inventar):
 Presupuesto de cómputo (documentos arbitrarios → límites duros):
   · OCR_MAX_PAGINAS (6) páginas procesadas como máximo.
   · Render directo en gris a OCR_DPI (300) con tope de 3200 px por lado.
-  · timeout de Tesseract por pase (OCR_TIMEOUT_TESS, 20 s): un binario
+  · timeout de Tesseract por pase (OCR_TIMEOUT_TESS, 90 s): un binario
     colgado no cuelga el request.
+  · deadline del TRABAJO completo (epoch, calcula server.py con
+    OCR_TRABAJO_PRESUPUESTO_S=420): se respeta entre páginas y entre pases
+    — el trabajo siempre entrega lo llevado hasta ahí (campos parciales +
+    faltantes), nunca queda moliendo sin techo.
 
 REGLA DE ORO compartida con los parsers: aquí solo se compite y selecciona
 texto; ninguna etapa genera o interpreta contenido. El dato sale del
@@ -35,6 +39,7 @@ import io
 import os
 import re
 import shutil
+import time
 import unicodedata
 
 # ── Dependencias con degradación (ninguna es obligatoria para importar) ─────
@@ -332,7 +337,7 @@ def _ocr_un_pase(imagen_np, psm):
     return texto, conf_media, n_palabras
 
 
-def _mejor_ocr(imagenes_por_pase, conf_suficiente=None):
+def _mejor_ocr(imagenes_por_pase, conf_suficiente=None, deadline=None):
     """Corre los pases indicados sobre imágenes preprocesadas y devuelve el
     TEXTO del pase ganador (mayor confianza media; desempate por nº de
     palabras). Los pases nunca se mezclan entre sí.
@@ -340,9 +345,16 @@ def _mejor_ocr(imagenes_por_pase, conf_suficiente=None):
     conf_suficiente: si un pase alcanza esa confianza media, los pases
     siguientes no se corren — en páginas limpias el primero (A/PSM6) ya era
     el ganador y los restantes solo competían para perder. El pase del
-    sello y los pases del refuerzo no usan el corte (cobertura primero)."""
+    sello y los pases del refuerzo no usan el corte (cobertura primero).
+
+    deadline: epoch de tiempo agotado del TRABAJO — al vencerse no se
+    arranca ningún pase más y se devuelve lo mejor ya leído (un pase en
+    curso no se interrumpe: tesseract es imparable, pero su propio
+    OCR_TIMEOUT_TESS lo acota)."""
     mejor = ("", -1.0, 0)
     for imagen_np, psm in imagenes_por_pase:
+        if deadline is not None and time.time() > deadline:
+            break
         texto, conf, n = _ocr_un_pase(imagen_np, psm)
         if texto and (conf, n) > (mejor[1], mejor[2]):
             mejor = (texto, conf, n)
@@ -351,7 +363,7 @@ def _mejor_ocr(imagenes_por_pase, conf_suficiente=None):
     return mejor
 
 
-def _ocr_con_sello(img_gris, es_pagina1, cache=None, clave=None):
+def _ocr_con_sello(img_gris, es_pagina1, cache=None, clave=None, deadline=None):
     """Multi-pase completo de una página. En la página 1 añade el pase del
     sello (40% superior, PSM 6, variante B) que se CONCATENA al ganador: el
     sello físico de ventanilla casi nunca sobrevive al OCR de página completa.
@@ -366,12 +378,15 @@ def _ocr_con_sello(img_gris, es_pagina1, cache=None, clave=None):
     # Pase adaptativo: umbral de confianza a partir del cual no se corren
     # los pases restantes de la página (OCR_SALTO_CONF=0 lo desactiva).
     conf_suficiente = _env_float("OCR_SALTO_CONF", 80.0) or None
-    texto, conf, _ = _mejor_ocr(pases, conf_suficiente=conf_suficiente)
+    texto, conf, _ = _mejor_ocr(pases, conf_suficiente=conf_suficiente,
+                                deadline=deadline)
 
     if es_pagina1:
         alto = b.shape[0]
         alto_sello = int(alto * 0.40)
         if alto_sello >= MIN_ALTO_STAMP:
+            if deadline is not None and time.time() > deadline:
+                return texto, conf
             texto_sello, _, _ = _ocr_un_pase(b[:alto_sello, :], 6)
             if texto_sello.strip():
                 texto = texto_sello.strip() + "\n" + texto
@@ -387,7 +402,8 @@ def _ocr_con_sello(img_gris, es_pagina1, cache=None, clave=None):
 PSM_REFUERZO = (4, 12)
 
 
-def _ocr_variantes_pagina(img_gris, es_pagina1, cache=None, clave=None):
+def _ocr_variantes_pagina(img_gris, es_pagina1, cache=None, clave=None,
+                          deadline=None):
     """Pases adicionales del refuerzo sobre una página ya rasterizada.
     Devuelve [(texto, conf)] de los pases que produjeron texto; en la página 1
     el sello (40% superior) se antepone igual que en la primera pasada."""
@@ -397,11 +413,15 @@ def _ocr_variantes_pagina(img_gris, es_pagina1, cache=None, clave=None):
     if es_pagina1:
         alto_sello = int(b.shape[0] * 0.40)
         if alto_sello >= MIN_ALTO_STAMP:
+            if deadline is not None and time.time() > deadline:
+                return []
             texto_sello, _, _ = _ocr_un_pase(b[:alto_sello, :], 6)
             sello = texto_sello.strip()
 
     textos = []
     for imagen_np, psm in zip((a, b), PSM_REFUERZO):
+        if deadline is not None and time.time() > deadline:
+            break
         texto, conf, _ = _ocr_un_pase(imagen_np, psm)
         if texto.strip():
             textos.append(((sello + "\n" + texto) if sello else texto, conf))
@@ -409,7 +429,7 @@ def _ocr_variantes_pagina(img_gris, es_pagina1, cache=None, clave=None):
 
 
 def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
-                             on_etapa=None, cache_variantes=None):
+                             on_etapa=None, cache_variantes=None, deadline=None):
     """Segunda recolección FORZADA del documento, dirigida a los campos que la
     primera pasada dejó vacíos. Devuelve {'texto', 'texto_pagina1'} con los
     pases EXTRA concatenados — un texto DISTINTO al de la primera pasada, no
@@ -417,11 +437,16 @@ def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
     de correr ya la tomó el servidor (había campos vacíos y el documento era
     escaneado). Degradación elegante: sin motor o con entrada rara → vacío.
 
+    deadline: si el trabajo ya agotó su presupuesto, el refuerzo NI corre —
+    es la etapa más prescindible (la ronda 1 ya entregó lo que entregó).
+
     cache_variantes: el dict de variantes A de la ronda 1 (ver
     _variantes_ab) — el refuerzo reutiliza el preproceso caro de las mismas
     páginas en vez de recalcular fastNlMeansDenoising sobre píxeles idénticos."""
     vacio = {"texto": "", "texto_pagina1": ""}
     if not bytes_archivo:
+        return vacio
+    if deadline is not None and time.time() > deadline:
         return vacio
     if pytesseract is None or Image is None or not estado_motores()["tesseract_disponible"]:
         return vacio
@@ -432,7 +457,8 @@ def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
                 on_etapa("Refuerzo: OCR de imagen (campos faltantes)", 0.1)
             img = Image.open(io.BytesIO(bytes_archivo)).convert("L")
             variantes = _ocr_variantes_pagina(img, es_pagina1=True,
-                                              cache=cache_variantes, clave=0)
+                                              cache=cache_variantes, clave=0,
+                                              deadline=deadline)
             texto = "\n".join(t for t, _ in variantes)
             return {"texto": texto, "texto_pagina1": texto}
         if tipo != "pdf" or fitz is None:
@@ -450,6 +476,8 @@ def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
                     pass
             total = doc.page_count
             for indice in range(min(total, max_paginas)):
+                if deadline is not None and time.time() > deadline:
+                    break
                 if on_etapa:
                     on_etapa(f"Refuerzo página {indice + 1} (campos faltantes)",
                              indice / max(total, 1))
@@ -457,7 +485,7 @@ def refuerzo_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
                 img_gris = _pixmap_a_imagen_gris(pix)
                 textos_pagina = _ocr_variantes_pagina(
                     img_gris, es_pagina1=(indice == 0),
-                    cache=cache_variantes, clave=indice)
+                    cache=cache_variantes, clave=indice, deadline=deadline)
                 if textos_pagina:
                     paginas.append("\n".join(t for t, _ in textos_pagina))
         return {"texto": "\n\n".join(paginas),
@@ -483,10 +511,14 @@ def _pixmap_a_imagen_gris(pix):
     return img
 
 
-def _pdf_a_texto(bytes_pdf, on_etapa=None, cache_variantes=None):
+def _pdf_a_texto(bytes_pdf, on_etapa=None, cache_variantes=None, deadline=None):
     """Recorre el PDF página a página: texto embebido si es sustancial, si no
     rasterizado + OCR. Devuelve (textos_por_pagina, confianzas_ocr,
-    n_paginas_doc, hubo_digital, hubo_ocr)."""
+    n_paginas_doc, hubo_digital, hubo_ocr).
+
+    deadline: al agotarse el presupuesto del trabajo no se abren MÁS páginas
+    — las ya leídas se entregan y el resto queda como faltantes (regla de
+    oro: campo vacío, nunca inventado)."""
     dpi = _env_int("OCR_DPI", 300)
     max_paginas = _env_int("OCR_MAX_PAGINAS", 6)
     zoom = dpi / 72.0
@@ -505,6 +537,8 @@ def _pdf_a_texto(bytes_pdf, on_etapa=None, cache_variantes=None):
                 pass
         total = doc.page_count
         for indice in range(min(total, max_paginas)):
+            if deadline is not None and time.time() > deadline:
+                break
             if on_etapa:
                 on_etapa(f"Página {indice + 1} de {min(total, max_paginas)}", indice / max(total, 1))
             pagina = doc[indice]
@@ -525,7 +559,8 @@ def _pdf_a_texto(bytes_pdf, on_etapa=None, cache_variantes=None):
             if on_etapa:
                 on_etapa(f"OCR página {indice + 1} (documento escaneado)", indice / max(total, 1))
             texto_ocr, conf = _ocr_con_sello(img_gris, es_pagina1=(indice == 0),
-                                              cache=cache_variantes, clave=indice)
+                                              cache=cache_variantes, clave=indice,
+                                              deadline=deadline)
             puntaje_digital = _puntaje_capa_digital(texto_digital)
             puntaje_ocr = _puntaje_capa_digital(texto_ocr)
             usa_ocr = bool(texto_ocr.strip()) and (
@@ -569,11 +604,14 @@ def _clasificar(bytes_archivo, nombre_archivo, mime_type):
 
 
 def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
-                            on_etapa=None, cache_variantes=None):
+                            on_etapa=None, cache_variantes=None, deadline=None):
     """Punto de entrada del pipeline. Devuelve
     {texto, texto_pagina1, metodo, paginas, confianza} — sin lanzar jamás.
     metodo ∈ 'pdf-digital' | 'ocr-tesseract' | 'hibrido' | 'imagen-ocr' |
     'texto-plano' | 'sin-motor' | 'ilegible'.
+
+    deadline: epoch (segundos) en que se agota el presupuesto del TRABAJO
+    completo — lo calcula server.py y se respeta entre páginas/pases.
 
     cache_variantes: dict opcional (uno por request) donde se memoiza la
     variante A de cada página OCR-eada, para que el refuerzo posterior no
@@ -601,7 +639,8 @@ def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
             img = Image.open(io.BytesIO(bytes_archivo))
             img_gris = img.convert("L")
             texto, conf = _ocr_con_sello(img_gris, es_pagina1=True,
-                                         cache=cache_variantes, clave=0)
+                                         cache=cache_variantes, clave=0,
+                                         deadline=deadline)
             return {"texto": texto, "texto_pagina1": texto,
                     "metodo": "imagen-ocr" if texto else "ilegible",
                     "paginas": 1, "confianza": round(max(conf, 0.0), 1)}
@@ -616,7 +655,7 @@ def extraer_texto_documento(bytes_archivo, nombre_archivo="", mime_type="",
             if on_etapa:
                 on_etapa("Abriendo documento", 0.0)
             texto_paginas, confianzas, total, hubo_digital, hubo_ocr = \
-                _pdf_a_texto(bytes_archivo, on_etapa, cache_variantes)
+                _pdf_a_texto(bytes_archivo, on_etapa, cache_variantes, deadline)
         except Exception:
             return vacio
         if not any(t.strip() for t in texto_paginas):

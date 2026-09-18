@@ -97,12 +97,16 @@ def decodificar_base64(data_base64):
         return None
 
 
-def _escanear(data, cache_variantes=None):
+def _escanear(data, cache_variantes=None, deadline=None):
     """Lógica unificada del endpoint. Devuelve (respuesta_dict, codigo_http).
 
     cache_variantes: dict por request donde extraction memoiza la variante A
     de cada página — el refuerzo y un eventual reintento reutilizan el
-    preproceso caro (fastNlMeansDenoising) en vez de recalcularlo."""
+    preproceso caro (fastNlMeansDenoising) en vez de recalcularlo.
+
+    deadline: epoch en que se agota el presupuesto del TRABAJO (ver
+    _ejecutar_trabajo) — el pipeline lo respeta entre páginas y pases y
+    entrega lo leído hasta ahí en vez de moler sin techo."""
     if cache_variantes is None:
         cache_variantes = {}
     archivo_base64 = data.get("archivoBase64") or data.get("archivo") or ""
@@ -132,7 +136,7 @@ def _escanear(data, cache_variantes=None):
         resultado = extraer_texto_documento(
             bytes_archivo, nombre_archivo=nombre_archivo,
             mime_type=mime_type, on_etapa=on_etapa,
-            cache_variantes=cache_variantes)
+            cache_variantes=cache_variantes, deadline=deadline)
         logger.info("Extracción %s → metodo=%s paginas=%s confianza=%s etapas=%s",
                     nombre_archivo or "(sin nombre)", resultado["metodo"],
                     resultado["paginas"], resultado["confianza"], etapas[-1] if etapas else "-")
@@ -142,6 +146,16 @@ def _escanear(data, cache_variantes=None):
 
     texto = resultado["texto"]
     if not texto.strip():
+        # Presupuesto agotado SIN texto: mensaje honesto de tiempo, no de
+        # ilegible (el documento quizá era legible — el plan gratuito no dio
+        # abasto). Con texto parcial el flujo sigue normal más abajo.
+        if deadline is not None and time.time() > deadline:
+            return {"success": False,
+                    "message": "El escaneo agotó el tiempo del motor (plan gratuito: "
+                               "CPU muy limitada) — intente con una foto más nítida, "
+                               "menos páginas o diligencie manualmente.",
+                    "metodo": resultado["metodo"], "paginas": resultado["paginas"],
+                    "campos": {}, "confianza": 0, "faltantes": ["Todos"]}, 400
         return {"success": False,
                 "message": "No se pudo extraer texto del documento (¿ilegible o sin motor OCR?).",
                 "metodo": resultado["metodo"], "paginas": resultado["paginas"],
@@ -164,12 +178,13 @@ def _escanear(data, cache_variantes=None):
         # los vacíos: lo ya llenado por la primera pasada queda congelado.
         refuerzo_llenados = []
         if (evaluacion["faltantes"] and archivo_base64
-                and resultado["metodo"] in ("ocr-tesseract", "hibrido", "imagen-ocr")):
+                and resultado["metodo"] in ("ocr-tesseract", "hibrido", "imagen-ocr")
+                and not (deadline is not None and time.time() > deadline)):
             on_etapa("Verificando campos: recolección forzada de faltantes", 0.85)
             extra = refuerzo_texto_documento(
                 bytes_archivo, nombre_archivo=nombre_archivo,
                 mime_type=mime_type, on_etapa=on_etapa,
-                cache_variantes=cache_variantes)
+                cache_variantes=cache_variantes, deadline=deadline)
             if extra["texto"].strip():
                 campos_extra = parsear_texto_permiso(
                     extra["texto"], nombre_archivo=nombre_archivo,
@@ -243,19 +258,31 @@ def escanear():
 def _ejecutar_trabajo(job_id, data):
     """Corre _escanear en un hilo daemon y deja el resultado en TRABAJOS.
 
+    Presupuesto total del trabajo (OCR_TRABAJO_PRESUPUESTO_S, 420 s): sin él,
+    un documento ruidoso real a 0.1 CPU corría TODOS los pases + refuerzo +
+    reintento y superaba los 10 min de espera del cliente (medido en
+    producción: techo del frontend disparado con el trabajo aún 'procesando').
+    El deadline se respeta entre páginas/pases y acota TAMBIÉN al reintento:
+    el trabajo SIEMPRE termina con un veredicto en ~presupuesto + un pase.
+
     Reintento único ante texto vacío: en el worker free de 512MB se midieron
     fallos intermitentes donde tesseract corría completo y devolvía vacío (una
     misma imagen: 200 la primera vez, 400 'ilegible' en las siguientes). Con
     el cache de variantes compartido, el reintento no repite el preproceso
     caro — solo los pases de tesseract."""
     cache = {}
+    deadline = time.time() + int(
+        os.environ.get("OCR_TRABAJO_PRESUPUESTO_S", "420") or 420)
     try:
-        respuesta, codigo = _escanear(data, cache_variantes=cache)
+        respuesta, codigo = _escanear(data, cache_variantes=cache,
+                                      deadline=deadline)
         tiene_archivo = bool(data.get("archivoBase64") or data.get("archivo"))
         if (codigo == 400 and tiene_archivo
-                and "No se pudo extraer" in (respuesta.get("message") or "")):
+                and "No se pudo extraer" in (respuesta.get("message") or "")
+                and time.time() <= deadline):
             logger.info("Trabajo %s: texto vacío en ronda 1 — reintentando una vez", job_id)
-            respuesta, codigo = _escanear(data, cache_variantes=cache)
+            respuesta, codigo = _escanear(data, cache_variantes=cache,
+                                          deadline=deadline)
     except Exception as error:  # noqa: BLE001 - el hilo jamás mata el servicio
         logger.exception("Error en el trabajo %s:", job_id)
         respuesta = {"success": False,

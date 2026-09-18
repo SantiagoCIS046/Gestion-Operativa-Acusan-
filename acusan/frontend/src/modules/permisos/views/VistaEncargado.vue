@@ -1910,15 +1910,23 @@ const handleScannedFileUpload = async (e) => {
       while (token === tokenEscaneoOcr) {
         await esperar(4000)
         if (token !== tokenEscaneoOcr) { cancelarTrabajoAbandonado(); return }
+        // Techo de ESPERA del cliente (respaldo): el motor tiene su propio
+        // presupuesto (~7 min + el pase en curso) y SIEMPRE dictamina antes;
+        // este techo solo dispara si el veredicto se pierde. Se evalúa al
+        // tope del ciclo para que las consultas fallidas (continue) no lo
+        // salten.
+        if (Date.now() - inicioEscaneo > 11 * 60 * 1000) {
+          throw new Error('El escaneo superó 11 minutos de espera — reintente o diligencie manualmente')
+        }
         let consulta
         try {
           consulta = await permisosService.consultarEscaneoAsincrono(jobId)
           fallosRedSeguidos = 0
         } catch (errConsulta) {
-          // Veredictos DEFINITIVOS del trabajo: 400 ilegible (ya con el
-          // reintento interno del motor agotado), 404 trabajo perdido (el
-          // motor se reinició), 413 peso — el mensaje es real y ninguna
-          // consulta posterior lo cambiará.
+          // Veredictos DEFINITIVOS del trabajo: 400 ilegible/presupuesto
+          // agotado (ya con el reintento interno del motor), 404 trabajo
+          // perdido (el motor se reinició), 413 peso — el mensaje es real y
+          // ninguna consulta posterior lo cambiará.
           if ([400, 404, 413].includes(errConsulta?.status)) throw errConsulta
           // 503/504/500/502 o red caída: falla transitoria DE ESTA CONSULTA —
           // el trabajo sigue vivo en el motor y la siguiente puede llegar.
@@ -1927,9 +1935,6 @@ const handleScannedFileUpload = async (e) => {
           continue
         }
         if (consulta?.estado === 'listo') { escaneo = consulta; break }
-        if (Date.now() - inicioEscaneo > 10 * 60 * 1000) {
-          throw new Error('El escaneo superó 10 minutos de espera — reintente o diligencie manualmente')
-        }
       }
       if (token !== tokenEscaneoOcr) { cancelarTrabajoAbandonado(); return }
       ocrProgress.value = 85

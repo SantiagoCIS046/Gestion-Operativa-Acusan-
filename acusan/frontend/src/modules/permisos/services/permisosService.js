@@ -112,16 +112,35 @@ export const permisosService = {
    * escanearDocumento (503/504 → 'no-disponible'; otro !ok → message+status).
    */
   async iniciarEscaneoAsincrono(dataUrl, nombreArchivo, mimeType) {
-    const res = await fetch("/api/ocr/trabajos", {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({
-        archivoBase64: dataUrl,
-        nombreArchivo,
-        mimeType,
-        dominio: "permisos",
-      }),
-    });
+    // Techo propio del navegador: sin él, un POST colgado (agujero negro de
+    // red) dejaría el banner "Enviando al motor…" para siempre — el techo de
+    // minutos de la vista solo se evalúa entre consultas, no durante un fetch.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    let res;
+    try {
+      res = await fetch("/api/ocr/trabajos", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          archivoBase64: dataUrl,
+          nombreArchivo,
+          mimeType,
+          dominio: "permisos",
+        }),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      const error = new Error(
+        e?.name === "AbortError"
+          ? "La subida del documento no completó (conexión muy lenta) — intente de nuevo"
+          : "No se pudo contactar el motor OCR — verifique su conexión"
+      );
+      error.codigo = "no-disponible";
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (res.status === 503 || res.status === 504) {
       const error = new Error("Motor OCR Python no disponible");
       error.codigo = "no-disponible";
@@ -152,9 +171,27 @@ export const permisosService = {
    * 404 (motor reiniciado) sale con status para que la vista lo explique.
    */
   async consultarEscaneoAsincrono(jobId) {
-    const res = await fetch(`/api/ocr/trabajos/${encodeURIComponent(jobId)}`, {
-      headers: getHeaders(),
-    });
+    // Techo propio por consulta: sin él, un GET colgado (agujero negro de red)
+    // congela el ciclo de polling del cliente y el techo de minutos de la
+    // vista jamás se evaluaría. Al abortar se lanza SIN status → la vista lo
+    // cuenta como falla transitoria (fallosRedSeguidos++) y el ciclo respira.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    let res;
+    try {
+      res = await fetch(`/api/ocr/trabajos/${encodeURIComponent(jobId)}`, {
+        headers: getHeaders(),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      throw new Error(
+        e?.name === "AbortError"
+          ? "La consulta del escaneo no completó (conexión muy lenta)"
+          : "No se pudo consultar el escaneo — verifique su conexión"
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (res.status === 503 || res.status === 504) {
       const error = new Error("Motor OCR Python no disponible");
       error.codigo = "no-disponible";

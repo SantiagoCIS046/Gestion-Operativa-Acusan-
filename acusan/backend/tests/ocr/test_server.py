@@ -166,11 +166,11 @@ def test_refuerzo_llena_solo_campos_vacios(cliente, monkeypatch):
     (NOMBRE: OTRA PERSONA) se ignora."""
     texto_1a = "SOLICITUD DE PERMISO\nNOMBRE: MARIA GOMEZ\nFECHA: 18-08-2026"
 
-    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None, deadline=None):
         return {"texto": texto_1a, "texto_pagina1": texto_1a,
                 "metodo": "ocr-tesseract", "paginas": 1, "confianza": 80.0}
 
-    def _refuerzo(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
+    def _refuerzo(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None, deadline=None):
         return {"texto": "CARGO: Fontanero\nHORA: 2:00 p.m. a 4:00 p.m.\nNOMBRE: OTRA PERSONA",
                 "texto_pagina1": "CARGO: Fontanero"}
 
@@ -208,11 +208,11 @@ def test_refuerzo_no_corre_sin_faltantes(cliente, monkeypatch):
         "OBSERVACIONES: sin novedad",
     ])
 
-    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None, deadline=None):
         return {"texto": texto_completo, "texto_pagina1": texto_completo,
                 "metodo": "ocr-tesseract", "paginas": 1, "confianza": 85.0}
 
-    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
+    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None, deadline=None):
         raise AssertionError("sin campos faltantes el refuerzo no debe correr")
 
     monkeypatch.setattr(server, "extraer_texto_documento", _primera)
@@ -233,11 +233,11 @@ def test_refuerzo_no_corre_para_pdf_digital(cliente, monkeypatch):
     campos no se fuerza OCR (un formato en blanco digital es un vacío real)."""
     texto = "SOLICITUD DE PERMISO\nNOMBRE: MARIA GOMEZ\nFECHA: 18-08-2026"
 
-    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
+    def _primera(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None, deadline=None):
         return {"texto": texto, "texto_pagina1": texto,
                 "metodo": "pdf-digital", "paginas": 1, "confianza": 99.0}
 
-    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None):
+    def _refuerzo_prohibido(bytes_archivo, nombre_archivo="", mime_type="", on_etapa=None, cache_variantes=None, deadline=None):
         raise AssertionError("un pdf-digital limpio no debe pasar por refuerzo")
 
     monkeypatch.setattr(server, "extraer_texto_documento", _primera)
@@ -268,7 +268,7 @@ def _esperar_listo(cliente, job_id, techo_s=5.0):
 
 
 def test_trabajo_asincrono_ciclo_completo(cliente, monkeypatch):
-    def _escanear_ok(data, cache_variantes=None):
+    def _escanear_ok(data, cache_variantes=None, deadline=None):
         return ({"success": True, "metodo": "ocr-tesseract", "paginas": 1,
                  "campos": {"nombreFuncionario": "GOMEZ MARIA"}}, 200)
 
@@ -286,7 +286,7 @@ def test_trabajo_asincrono_ciclo_completo(cliente, monkeypatch):
 def test_trabajo_cancelado_libera_el_slot(cliente, monkeypatch):
     iniciado = threading.Event()
 
-    def _escanear_lento(data, cache_variantes=None):
+    def _escanear_lento(data, cache_variantes=None, deadline=None):
         iniciado.set()
         time.sleep(1.0)
         return ({"success": True, "metodo": "ocr-tesseract", "campos": {}}, 200)
@@ -338,7 +338,7 @@ def test_fallo_al_iniciar_hilo_no_deja_zombie(cliente, monkeypatch):
 def test_trabajo_ocupado_responde_429(cliente, monkeypatch):
     iniciado = threading.Event()
 
-    def _escanear_lento(data, cache_variantes=None):
+    def _escanear_lento(data, cache_variantes=None, deadline=None):
         iniciado.set()
         time.sleep(0.8)
         return ({"success": True, "metodo": "ocr-tesseract", "campos": {}}, 200)
@@ -352,3 +352,76 @@ def test_trabajo_ocupado_responde_429(cliente, monkeypatch):
         "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
     assert ocupado.status_code == 429
     assert "varios minutos" in ocupado.get_json()["message"]
+
+
+# ── Presupuesto total del trabajo (OCR_TRABAJO_PRESUPUESTO_S) ────────────────
+
+def test_trabajo_con_presupuesto_agotado_dictamina_rapido(cliente, monkeypatch):
+    """Presupuesto 0 → el trabajo NO muele pases ni reintenta: dictamina 400
+    con el mensaje honesto de tiempo (no 'ilegible') en segundos. Es el caso
+    real de producción: documento ruidoso a 0.1 CPU superaba los 10 min del
+    cliente con el trabajo aún 'procesando'."""
+    monkeypatch.setenv("OCR_TRABAJO_PRESUPUESTO_S", "0")
+    alta = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert alta.status_code == 202
+    job_id = alta.get_json()["jobId"]
+
+    final = _esperar_listo(cliente, job_id, techo_s=15)
+    assert final["codigo"] == 400
+    assert "agotó el tiempo" in final["respuesta"]["message"]
+
+
+def test_presupuesto_agotado_no_reintenta(cliente, monkeypatch):
+    """El reintento por texto vacío queda acotado por el deadline: con el
+    presupuesto ya vencido, _escanear corre UNA sola vez."""
+    llamadas = []
+
+    def _escanear_espiado(data, cache_variantes=None, deadline=None):
+        llamadas.append(deadline)
+        # Simula el resultado real con presupuesto vencido: 400 de tiempo.
+        return ({"success": False,
+                 "message": "El escaneo agotó el tiempo del motor (plan gratuito: "
+                            "CPU muy limitada) — intente con una foto más nítida, "
+                            "menos páginas o diligencie manualmente.",
+                 "campos": {}, "confianza": 0, "faltantes": ["Todos"]}, 400)
+
+    monkeypatch.setattr(server, "_escanear", _escanear_espiado)
+    alta = cliente.post("/api/ocr/trabajos", json={
+        "dominio": "permisos", "archivoBase64": _data_url(b"%PDF-falso")})
+    assert alta.status_code == 202
+    final = _esperar_listo(cliente, alta.get_json()["jobId"])
+    assert final["codigo"] == 400
+    assert len(llamadas) == 1, f"el reintento corrió pese al deadline: {llamadas}"
+
+
+def test_mejor_ocr_respeta_el_deadline(monkeypatch):
+    """Deadline vencido → _mejor_ocr no arranca NI un pase."""
+    extraction_mod = sys.modules["extraction"]
+
+    def _pase_prohibido(imagen_np, psm):
+        raise AssertionError("con el deadline vencido no debe correr ningún pase")
+
+    monkeypatch.setattr(extraction_mod, "_ocr_un_pase", _pase_prohibido)
+    texto, conf, n = extraction_mod._mejor_ocr(
+        [("imagen-falsa", 6)], deadline=time.time() - 1)
+    assert (texto, conf, n) == ("", -1.0, 0)
+
+
+def test_pdf_a_texto_deadline_corta_el_ciclo_de_paginas():
+    """Deadline vencido → no se abren más páginas; lo ya leído se entrega."""
+    extraction_mod = sys.modules["extraction"]
+    doc = fitz.open()
+    for i in range(2):
+        pagina = doc.new_page()
+        pagina.insert_text((72, 100), f"Pagina {i + 1} con texto suficiente 12345",
+                           fontsize=12, fontname="helv")
+    bytes_pdf = doc.tobytes()
+
+    textos, _, total, _, _ = extraction_mod._pdf_a_texto(
+        bytes_pdf, None, {}, None)
+    assert total == 2 and len(textos) == 2
+
+    textos_cortados, _, total_c, _, _ = extraction_mod._pdf_a_texto(
+        bytes_pdf, None, {}, time.time() - 1)
+    assert total_c == 2 and textos_cortados == []
