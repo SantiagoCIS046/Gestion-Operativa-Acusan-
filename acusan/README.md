@@ -9,12 +9,15 @@ Proyecto empresarial para la administración, digitalización OCR, supervisión 
 El proyecto está unificado y estructurado dentro de la carpeta principal `acusan/`, manteniendo una separación clara entre el **Frontend (SPA en Vue 3 + Vite + Bootstrap 5)** y el **Backend (API REST en Node.js + Express + Prisma ORM + MongoDB Atlas)**.
 
 ```text
-Codigo Aquasan/
-├── package.json                       # Configuración raíz para despliegue automatizado en Vercel
-├── vercel.json                        # Reglas de enrutamiento SPA y build para Vercel
-├── vite.config.js                     # Configuración de compilación Vite raíz
-├── README.md                          # Documentación oficial del sistema
-└── acusan/                            # Núcleo del sistema empresarial
+Codigo Aquasan/                        # Repositorio Git (la raíz solo tiene .git y .gitignore)
+└── acusan/                            # Núcleo del sistema empresarial — TODO vive aquí
+    ├── package.json                   # Instalación y build (Vercel instala solo esta)
+    ├── vercel.json                    # Reglas de enrutamiento SPA y build para Vercel
+    ├── vite.config.js                 # Configuración Vite de compilación (build/preview)
+    ├── Dockerfile                     # Imagen Docker del motor OCR Python
+    ├── api/                           # Lambda serverless de Vercel (re-exporta el backend)
+    ├── scripts/                       # Arranque de desarrollo (API + WEB + OCR-PY)
+    ├── docs/                          # Bitácoras y guías técnicas
     ├── backend/                       # API REST & Servicios Backend
     │   ├── prisma/
     │   │   └── schema.prisma          # Modelos Prisma ORM (Usuario, Permiso, Radicado, HorasExtras, PQR)
@@ -117,16 +120,23 @@ Codigo Aquasan/
 El proyecto cuenta con integración continua para compilación y despliegue automático en **Vercel**:
 
 - **URL de Producción:** `https://gestion-operativa-acusan.vercel.app`
-- **Build Pipeline:** `vite build` automatizado en raíz.
-- **Salida:** `dist`
+- **Build Pipeline:** `npm run build` desde `acusan/` (Root Directory del proyecto en Vercel).
+- **Salida:** `dist` (queda en `acusan/dist`)
 
 ---
 
 ## 🚀 Puesta en Marcha Local
 
+### 0. Arranque todo-en-uno (recomendado)
+```bash
+cd acusan
+npm install        # instala raíz + backend + frontend (postinstall)
+npm run dev        # API (3000) + WEB (5173) + OCR Python (5001)
+```
+
 ### 1. Servidor Backend API
 ```bash
-cd acusan/backend
+cd backend
 npm install
 npx prisma generate
 npm run dev
@@ -135,9 +145,9 @@ npm run dev
 
 ### 2. Aplicación Cliente Frontend
 ```bash
-cd acusan/frontend
+cd frontend
 npm install
 npm run dev
 ```
 - Aplicación Frontend escuchando en: `http://localhost:5173`
-- Compilación de producción: `npm run build` o `npx vite build` (desde la raíz)
+- Compilación de producción: `npm run build` o `npx vite build` (desde `acusan/`)

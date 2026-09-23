@@ -23,7 +23,7 @@ const procesos = [
   {
     nombre: 'API',
     color: AZUL,
-    cmd: 'npm --prefix acusan/backend run dev',
+    cmd: 'npm --prefix backend run dev',
   },
   {
     nombre: 'WEB',
@@ -32,9 +32,9 @@ const procesos = [
   },
 ]
 
-// Motor OCR Python: prefiere el venv del repo; si no existe, python del PATH.
+// Motor OCR Python: prefiere el venv de acusan/; si no existe, python del PATH.
 const pythonVenv = join(RAIZ, '.venv', 'Scripts', 'python.exe')
-const servidorOcr = join('acusan', 'backend', 'acuusan_ocr', 'server.py')
+const servidorOcr = join('backend', 'acuusan_ocr', 'server.py')
 const cmdPython = `"${pythonVenv}" ${servidorOcr}`
 
 if (existsSync(pythonVenv)) {
@@ -47,7 +47,7 @@ if (existsSync(pythonVenv)) {
   })
 } else {
   process.stdout.write(
-    `${AMARILLO}[OCR-PY] sin .venv en la raíz — motor Python no arrancado (el OCR del navegador queda como motor).${RESET}\n`
+    `${AMARILLO}[OCR-PY] sin .venv en acusan/ — motor Python no arrancado (el OCR del navegador queda como motor).${RESET}\n`
   )
 }
 
@@ -84,7 +84,7 @@ const hijos = procesos.map((p) => {
     // tomado) no debe sepultar la consola: un aviso y a correr.
     if (p.opcional && Date.now() - arranque < 3000) {
       process.stdout.write(
-        `${AMARILLO}[OCR-PY] no disponible (código ${code}) — el OCR del navegador queda como motor. Instale con: .venv\\Scripts\\python -m pip install -r acusan/backend/acuusan_ocr/requirements.txt${RESET}\n`
+        `${AMARILLO}[OCR-PY] no disponible (código ${code}) — el OCR del navegador queda como motor. Instale con (desde acusan/): .venv\\Scripts\\python -m pip install -r backend/acuusan_ocr/requirements.txt${RESET}\n`
       )
     } else {
       process.stdout.write(

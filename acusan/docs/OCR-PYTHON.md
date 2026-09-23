@@ -37,7 +37,7 @@ nunca ve un error.
 - Al OCR viaja el archivo **original**; la compresión (para guardar en BD)
   sigue su curso en paralelo — la fidelidad del OCR no se sacrifica.
 
-## Puesta en marcha local
+## Puesta en marcha local (comandos desde `acusan/`)
 
 1. **Tesseract OCR** (una sola vez): instalador UB-Mannheim
    (`winget install UB-Mannheim.TesseractOCR`). El idioma **español NO hace
@@ -46,9 +46,9 @@ nunca ve un error.
    `OCR_TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe`.
 2. **Dependencias Python** (Python 3.10+):
    ```
-   .venv\Scripts\python -m pip install -r acusan/backend/acuusan_ocr/requirements.txt
+   .venv\Scripts\python -m pip install -r backend/acuusan_ocr/requirements.txt
    ```
-3. **Arrancar todo**: `npm run dev` (levanta API + WEB + OCR-PY). El proceso
+3. **Arrancar todo**: `npm run dev` desde `acusan/` (levanta API + WEB + OCR-PY). El proceso
    OCR-PY es opcional: si falla, avisa una vez y el resto sigue.
 
 Verificación rápida:
@@ -74,13 +74,13 @@ curl http://127.0.0.1:5001/api/health
 
 ```
 # Parsers + pipeline + servidor (Python)
-.venv\Scripts\python -m pytest acusan/backend/tests/ocr -q
+.venv\Scripts\python -m pytest backend/tests/ocr -q
 
 # Puente Node contra un stub del servicio Python
-node acusan/backend/tests/ocrBridge.test.mjs
+node backend/tests/ocrBridge.test.mjs
 
 # Parser JS (fallback del navegador — tocar un parser obliga a correr ambos)
-node acusan/backend/tests/radicadosParser.test.mjs
+node backend/tests/radicadosParser.test.mjs
 ```
 
 ## Deriva de parsers (nota de mantenimiento)
@@ -94,7 +94,7 @@ para mantener la paridad de la regla de oro.
 
 ## Fase 2 — producción (Vercel), AÚN NO IMPLEMENTADA
 
-Hoy Vercel solo ejecuta la función Node (`api/index.js`): sin servicio
+Hoy Vercel solo ejecuta la función Node (`acusan/api/index.js`): sin servicio
 Python, `/api/ocr/escanear` devuelve 503 en milisegundos y el frontend cae
 al OCR del navegador — todo sigue funcionando. Para activar Python en
 producción:

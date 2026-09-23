@@ -11,11 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Instalar dependencias Python
-COPY acusan/backend/acuusan_ocr/requirements.txt .
+COPY backend/acuusan_ocr/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código del servicio OCR
-COPY acusan/backend/acuusan_ocr/ .
+COPY backend/acuusan_ocr/ .
 
 ENV PORT=10000
 EXPOSE 10000

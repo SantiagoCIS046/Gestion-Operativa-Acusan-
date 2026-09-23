@@ -6,7 +6,7 @@
     "api/index.js": {
       "memory": 1024,
       "maxDuration": 300,
-      "includeFiles": "acusan/backend/node_modules/.prisma/client/**"
+      "includeFiles": "backend/node_modules/.prisma/client/**"
     }
   },
   "rewrites": [

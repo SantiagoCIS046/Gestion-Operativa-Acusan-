@@ -3,11 +3,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
-  root: 'acusan/frontend',
+  root: 'frontend',
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./acusan/frontend/src', import.meta.url))
+      '@': fileURLToPath(new URL('./frontend/src', import.meta.url))
     }
   },
   // Proxy para que las llamadas /api lleguen al backend Express (puerto 3000)
@@ -28,7 +28,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../../dist',
+    outDir: '../dist',
     emptyOutDir: true
   }
 })
