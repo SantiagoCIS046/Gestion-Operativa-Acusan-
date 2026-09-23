@@ -52,8 +52,6 @@ export const AuthController = {
   /**
    * POST /api/auth/recuperar-password
    * Registra la solicitud; el restablecimiento lo media el Administrador
-   * (no hay canal de correo para un código, y devolverlo por HTTP lo
-   * expondría a un atacante).
    */
   async solicitarRecuperacion(req, res) {
     try {
@@ -85,6 +83,29 @@ export const AuthController = {
       })
     } catch (error) {
       res.status(500).json({ success: false, message: 'Error al obtener perfil del usuario' })
+    }
+  },
+
+  /**
+   * POST /api/auth/token-empleado
+   * Genera un JWT de 12h para empleados de campo (app externa de Horas Extras).
+   * Solo requiere cédula + nombre. Sin contraseña.
+   */
+  async tokenEmpleado(req, res) {
+    try {
+      const { cedula, nombre } = req.body
+      const resultado = await AuthService.tokenEmpleado({ cedula, nombre })
+      res.json({
+        success: true,
+        message: `Bienvenido, ${resultado.nombre}. Tu acceso es válido por 12 horas.`,
+        data: resultado
+      })
+    } catch (error) {
+      const status = error.status || 400
+      res.status(status).json({
+        success: false,
+        message: error.message || 'Error al generar token de empleado'
+      })
     }
   }
 }

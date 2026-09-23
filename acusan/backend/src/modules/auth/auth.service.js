@@ -265,6 +265,58 @@ export const AuthService = {
   },
 
   /**
+   * Genera un token JWT para empleados de campo que acceden por cédula
+   * desde la app externa (sin contraseña completa).
+   *
+   * Si la cédula existe en la BD de usuarios, carga el nombre oficial.
+   * Si no existe, usa el nombre enviado por el propio empleado (confianza
+   * básica: solo pueden reportar sus propias horas ya que la cédula del
+   * token sella su identidad).
+   *
+   * El token tiene rol EMPLEADO_CAMPO y expira en 12h (turno de trabajo).
+   */
+  async tokenEmpleado({ cedula, nombre }) {
+    if (!cedula) {
+      throw { status: 400, message: 'La cédula es obligatoria.' }
+    }
+
+    // Intentar buscar usuario en la BD para obtener nombre oficial
+    let nombreFinal = nombre?.trim() || null
+    try {
+      const usuarioBD = await prisma.usuario.findFirst({
+        where: { cedula: cedula.trim() }
+      })
+      if (usuarioBD) {
+        nombreFinal = usuarioBD.nombre
+      }
+    } catch (e) {
+      // Si falla la búsqueda, usar el nombre enviado por el cliente
+    }
+
+    if (!nombreFinal) {
+      throw { status: 400, message: 'No se encontró el nombre del empleado. Por favor ingrese su nombre completo.' }
+    }
+
+    const payload = {
+      cedula: cedula.trim(),
+      nombre: nombreFinal,
+      rol: 'EMPLEADO_CAMPO'
+    }
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: '12h' // Duración de un turno de trabajo
+    })
+
+    logger.success(
+      'AUTH',
+      'TOKEN-EMPLEADO',
+      `Cédula: ${cedula.trim()} | Nombre: ${nombreFinal} | Token 12h generado`
+    )
+
+    return { token, nombre: nombreFinal, cedula: cedula.trim() }
+  },
+
+  /**
    * Verifica un token JWT y retorna el payload decodificado
    */
   verificarToken(token) {

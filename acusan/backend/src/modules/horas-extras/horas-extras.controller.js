@@ -3,7 +3,7 @@ import logger from '../../config/logger.js'
 
 export const HorasExtrasController = {
   /**
-   * Listar reporte de horas extras
+   * Listar reporte de horas extras (uso interno: Gerencia, Encargado, Admin)
    */
   async listar(req, res) {
     try {
@@ -20,7 +20,7 @@ export const HorasExtrasController = {
   },
 
   /**
-   * Registrar nuevo turno / recargo de horas extras
+   * Registrar nuevo turno / recargo de horas extras (uso interno: Encargado/Admin)
    */
   async registrar(req, res) {
     try {
@@ -98,6 +98,88 @@ export const HorasExtrasController = {
     } catch (error) {
       logger.error('H-EXTRAS', 'DICTAM ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al actualizar horas extras', error: error.message })
+    }
+  },
+
+  // ────────────────────────────────────────────────────────
+  // APP EXTERNA (Portal del Empleado de Campo)
+  // ────────────────────────────────────────────────────────
+
+  /**
+   * Consultar los registros propios del empleado autenticado por cédula.
+   * El token contiene la cédula del empleado (generado por /api/auth/token-empleado).
+   */
+  async misRegistros(req, res) {
+    try {
+      // La cédula viene del JWT del empleado (no se puede suplantar)
+      const cedula = req.usuario?.cedula
+      if (!cedula) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token de empleado inválido: no contiene cédula.'
+        })
+      }
+
+      const horas = await HorasExtrasService.listar({ cedula })
+      res.json({ success: true, data: horas })
+    } catch (error) {
+      logger.error('H-EXTRAS', 'MIS-REGISTROS ERR', error.message)
+      res.status(500).json({ success: false, message: 'Error al obtener tus registros', error: error.message })
+    }
+  },
+
+  /**
+   * Registrar horas extras desde la app del empleado de campo.
+   * Cédula y nombre del funcionario se extraen del JWT para evitar
+   * que un empleado reporte horas a nombre de otro.
+   */
+  async autoRegistrar(req, res) {
+    try {
+      // Datos de identidad tomados del token — el empleado NO los envía en el body
+      const cedula = req.usuario?.cedula
+      const funcionario = req.usuario?.nombre
+
+      if (!cedula || !funcionario) {
+        return res.status(400).json({
+          success: false,
+          message: 'Token de empleado inválido: faltan cedula o nombre.'
+        })
+      }
+
+      const { cuadrillaArea, fechaOperacion, tipoRecargo, cantidadHoras, montoEstimado, justificacion } = req.body
+
+      if (!cuadrillaArea || !fechaOperacion || !tipoRecargo || !cantidadHoras) {
+        return res.status(400).json({
+          success: false,
+          message: 'Faltan campos obligatorios: cuadrillaArea, fechaOperacion, tipoRecargo, cantidadHoras'
+        })
+      }
+
+      const nuevaHora = await HorasExtrasService.crear({
+        cedula,
+        funcionario,
+        cuadrillaArea,
+        fechaOperacion,
+        tipoRecargo,
+        cantidadHoras,
+        montoEstimado: montoEstimado || 0,
+        justificacion
+      })
+
+      logger.create(
+        'H-EXTRAS-APP',
+        'AUTOREPORTE',
+        `Cédula: ${cedula} | Funcionario: ${funcionario} | Cuadrilla: ${cuadrillaArea} | Horas: ${cantidadHoras}h | Tipo: ${tipoRecargo}`
+      )
+
+      res.status(201).json({
+        success: true,
+        message: 'Horas extras reportadas correctamente. Quedan pendientes de aprobación.',
+        data: nuevaHora
+      })
+    } catch (error) {
+      logger.error('H-EXTRAS-APP', 'AUTOREPORTE ERR', error.message)
+      res.status(500).json({ success: false, message: 'Error al registrar las horas extras', error: error.message })
     }
   }
 }

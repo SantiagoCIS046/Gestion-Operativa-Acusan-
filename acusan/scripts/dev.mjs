@@ -30,7 +30,14 @@ const procesos = [
     color: MAGENTA,
     cmd: 'npm run dev:web',
   },
+  {
+    nombre: 'HORAS-APP',
+    color: VERDE,
+    cmd: 'npm --prefix horas-extras-app run dev',
+    opcional: true,
+  },
 ]
+
 
 // Motor OCR Python: prefiere el venv de acusan/; si no existe, python del PATH.
 const pythonVenv = join(RAIZ, '.venv', 'Scripts', 'python.exe')
