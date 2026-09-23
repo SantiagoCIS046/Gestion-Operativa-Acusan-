@@ -1,114 +1,106 @@
-﻿<template>
-  <div class="page">
-    <!-- Top Bar -->
-    <header class="top-bar">
-      <div class="top-bar__logo">
-        <span style="font-size:1.3rem;">💧</span>
-        <span>Mis Registros</span>
-      </div>
-      <div class="top-bar__user">
-        <div class="top-bar__avatar">{{ iniciales }}</div>
-        <span>{{ empleado?.nombre?.split(' ')[0] }}</span>
-      </div>
-    </header>
+<template>
+  <LayoutApp activo="historial" :empleado="empleado">
 
-    <!-- Contenido -->
-    <main class="content">
-
-      <!-- Resumen KPI -->
-      <div class="kpi-row" v-if="registros.length > 0">
-        <div class="kpi-card">
-          <span class="kpi-val kpi-val--cyan">{{ totalHoras }}h</span>
-          <span class="kpi-lbl">Total Reportadas</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-val" style="color:var(--acuasan-success);">{{ aprobadas }}</span>
-          <span class="kpi-lbl">Aprobadas</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-val" style="color:var(--acuasan-warning);">{{ pendientes }}</span>
-          <span class="kpi-lbl">Pendientes</span>
-        </div>
+    <!-- Resumen KPI -->
+    <div class="kpi-row" v-if="registros.length > 0">
+      <div class="kpi-card">
+        <span class="kpi-val kpi-val--cyan">{{ totalHoras }}h</span>
+        <span class="kpi-lbl">Total Reportadas</span>
       </div>
-
-      <!-- Cargando -->
-      <div v-if="cargando" class="empty-state">
-        <div class="spinner" style="margin: 0 auto 12px;"></div>
-        <p>Cargando tus registros...</p>
+      <div class="kpi-card">
+        <span class="kpi-val" style="color:var(--acuusan-success);">{{ aprobadas }}</span>
+        <span class="kpi-lbl">Aprobadas</span>
       </div>
-
-      <!-- Sin registros -->
-      <div v-else-if="registros.length === 0" class="empty-state">
-        <div class="empty-state__icon">📋</div>
-        <div class="empty-state__title">Sin registros aún</div>
-        <div class="empty-state__sub">Tus horas reportadas aparecerán aquí.</div>
+      <div class="kpi-card">
+        <span class="kpi-val" style="color:var(--acuusan-warning);">{{ pendientes }}</span>
+        <span class="kpi-lbl">Pendientes</span>
       </div>
+    </div>
 
-      <!-- Lista de registros -->
-      <div v-else>
-        <div v-for="reg in registros" :key="reg.id" class="registro-card">
-          <div class="reg-header">
-            <div class="reg-area">{{ reg.cuadrillaArea }}</div>
+    <!-- Cargando -->
+    <div v-if="cargando" class="empty-state">
+      <div class="spinner" style="margin: 0 auto 12px;"></div>
+      <p>Cargando tus registros...</p>
+    </div>
+
+    <!-- Sin registros -->
+    <div v-else-if="registros.length === 0" class="empty-state">
+      <div class="empty-state__icon">📋</div>
+      <div class="empty-state__title">Sin registros aún</div>
+      <div class="empty-state__sub">Tus horas reportadas aparecerán aquí.</div>
+    </div>
+
+    <!-- Lista de registros -->
+    <div v-else>
+      <div v-for="reg in registros" :key="reg.id" class="registro-card">
+        <div class="reg-header">
+          <div class="reg-area">{{ reg.cuadrillaArea }}</div>
+          <div class="reg-badges">
+            <span
+              v-if="reg.numEvidencias"
+              class="badge badge--camara"
+              :title="`${reg.numEvidencias} fotos de evidencia`"
+            >📷 {{ reg.numEvidencias }}</span>
             <span :class="['badge', `badge--${(reg.estado || '').toLowerCase()}`]">
               {{ estadoLabel(reg.estado) }}
             </span>
           </div>
-          <div class="reg-meta">
-            <span class="reg-meta-item">
-              <span class="meta-icon">📅</span>
-              {{ formatFecha(reg.fechaOperacion) }}
-            </span>
-            <span class="reg-meta-item">
-              <span class="meta-icon">⏱️</span>
-              {{ reg.cantidadHoras }}h — {{ tipoLabel(reg.tipoRecargo) }}
-            </span>
+        </div>
+
+        <div v-if="reg.estadoEvidencia" class="reg-evidencia">
+          <span :class="['badge', 'badge--ev', claseEvidencia(reg.estadoEvidencia)]">
+            {{ evidenciaLabel(reg.estadoEvidencia) }}
+          </span>
+        </div>
+
+        <div class="reg-meta">
+          <span class="reg-meta-item">
+            <span class="meta-icon">📅</span>
+            {{ formatFecha(reg.fechaOperacion) }}
+          </span>
+          <span class="reg-meta-item">
+            <span class="meta-icon">⏱️</span>
+            {{ reg.cantidadHoras }}h — {{ tipoLabel(reg.tipoRecargo) }}
+          </span>
+        </div>
+
+        <!-- Mini-timeline inicio → fin (sesiones con evidencia) -->
+        <div v-if="reg.fechaInicio && reg.fechaFin" class="mini-timeline">
+          <div class="mt-nodo">
+            <span class="mt-punto"></span>
+            <span class="mt-hora">{{ formatHora(reg.fechaInicio) }}</span>
           </div>
-          <div v-if="reg.justificacion" class="reg-just">
-            "{{ reg.justificacion }}"
-          </div>
-          <div v-if="reg.autorizadoPor" class="reg-autorizado">
-            ✅ Autorizado por: {{ reg.autorizadoPor }}
+          <div class="mt-linea"></div>
+          <div class="mt-nodo">
+            <span class="mt-punto mt-punto--fin"></span>
+            <span class="mt-hora">{{ formatHora(reg.fechaFin) }}</span>
           </div>
         </div>
+
+        <div v-if="reg.justificacion" class="reg-just">
+          "{{ reg.justificacion }}"
+        </div>
+        <div v-if="reg.autorizadoPor" class="reg-autorizado">
+          ✅ Autorizado por: {{ reg.autorizadoPor }}
+        </div>
       </div>
+    </div>
 
-      <!-- Botón de actualizar -->
-      <button class="btn btn--ghost" style="margin-top: 8px;" @click="cargar" :disabled="cargando">
-        🔄 Actualizar
-      </button>
-    </main>
-
-    <!-- Bottom Nav -->
-    <nav class="bottom-nav">
-      <RouterLink to="/registrar" class="bottom-nav__item">
-        <span class="nav-icon">➕</span>
-        <span>Reportar</span>
-      </RouterLink>
-      <RouterLink to="/historial" class="bottom-nav__item active">
-        <span class="nav-icon">📋</span>
-        <span>Mis Registros</span>
-      </RouterLink>
-      <button class="bottom-nav__item" @click="cerrarSesion">
-        <span class="nav-icon">🚪</span>
-        <span>Salir</span>
-      </button>
-    </nav>
-  </div>
+    <!-- Botón de actualizar -->
+    <button class="btn btn--ghost" style="margin-top: 8px;" @click="cargar" :disabled="cargando">
+      🔄 Actualizar
+    </button>
+  </LayoutApp>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
 import { authService, horasExtrasService } from '@/services/api.js'
+import LayoutApp from '@/components/LayoutApp.vue'
 
-const router = useRouter()
 const empleado = authService.getEmpleado()
 const registros = ref([])
 const cargando = ref(false)
-
-const iniciales = computed(() => {
-  return (empleado?.nombre || 'E').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
-})
 
 const totalHoras = computed(() =>
   registros.value.reduce((a, r) => a + (Number(r.cantidadHoras) || 0), 0)
@@ -132,13 +124,33 @@ const formatFecha = (fecha) => {
   return new Date(fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-const estadoLabel = (e) => ({ PENDIENTE: '⏳ Pendiente', APROBADO: '✅ Aprobado', RECHAZADO: '❌ Rechazado' }[e] || e)
-const tipoLabel = (t) => ({ DIURNA: 'HED', NOCTURNA: 'HEN', FESTIVA_DIURNA: 'HEFD', FESTIVA_NOCTURNA: 'HEFN' }[t] || t)
-
-const cerrarSesion = () => {
-  authService.cerrarSesion()
-  router.push({ name: 'identificacion' })
+const formatHora = (fecha) => {
+  if (!fecha) return ''
+  return new Date(fecha).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 }
+
+const estadoLabel = (e) => ({
+  PENDIENTE: '⏳ Pendiente',
+  APROBADO: '✅ Aprobado',
+  RECHAZADO: '❌ Rechazado',
+  EN_CURSO: '🔵 En curso',
+  ANULADO: '🚫 Anulado',
+  ENVIADO_NOMINA: '📤 Enviada a Nómina'
+}[e] || e)
+
+const evidenciaLabel = (e) => ({
+  PENDIENTE_REVISION: '📷 Por revisar',
+  REVISADA: '📷 Revisada',
+  OBSERVADA: '📷 Observada'
+}[e] || e)
+
+const claseEvidencia = (e) => ({
+  PENDIENTE_REVISION: 'badge--ev-pendiente_revision',
+  REVISADA: 'badge--ev-revisada',
+  OBSERVADA: 'badge--ev-observada'
+}[e] || '')
+
+const tipoLabel = (t) => ({ DIURNA: 'HED', NOCTURNA: 'HEN', FESTIVA_DIURNA: 'HEFD', FESTIVA_NOCTURNA: 'HEFN' }[t] || t)
 
 onMounted(cargar)
 </script>
@@ -152,8 +164,8 @@ onMounted(cargar)
 }
 
 .kpi-card {
-  background: var(--acuasan-slate);
-  border: 1px solid var(--acuasan-border);
+  background: var(--acuusan-slate);
+  border: 1px solid var(--acuusan-border);
   border-radius: var(--radius-sm);
   padding: 12px 10px;
   display: flex;
@@ -165,23 +177,23 @@ onMounted(cargar)
 .kpi-val {
   font-size: 1.1rem;
   font-weight: 800;
-  color: var(--acuasan-text);
+  color: var(--acuusan-text);
   font-family: monospace;
 }
 
-.kpi-val--cyan { color: var(--acuasan-cyan); }
+.kpi-val--cyan { color: var(--acuusan-cyan); }
 
 .kpi-lbl {
   font-size: 0.62rem;
   font-weight: 600;
-  color: var(--acuasan-muted);
+  color: var(--acuusan-muted);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
 .registro-card {
-  background: var(--acuasan-slate);
-  border: 1px solid var(--acuasan-border);
+  background: var(--acuusan-slate);
+  border: 1px solid var(--acuusan-border);
   border-radius: var(--radius-sm);
   padding: 14px;
   margin-bottom: 10px;
@@ -201,8 +213,20 @@ onMounted(cargar)
 .reg-area {
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--acuasan-text);
+  color: var(--acuusan-text);
   line-height: 1.3;
+}
+
+.reg-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.reg-evidencia {
+  margin-bottom: 8px;
 }
 
 .reg-meta {
@@ -214,7 +238,7 @@ onMounted(cargar)
 
 .reg-meta-item {
   font-size: 0.78rem;
-  color: var(--acuasan-muted);
+  color: var(--acuusan-muted);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -224,16 +248,16 @@ onMounted(cargar)
 
 .reg-just {
   font-size: 0.78rem;
-  color: var(--acuasan-muted);
+  color: var(--acuusan-muted);
   font-style: italic;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--acuasan-border);
+  border-top: 1px solid var(--acuusan-border);
 }
 
 .reg-autorizado {
   font-size: 0.72rem;
-  color: var(--acuasan-success);
+  color: var(--acuusan-success);
   margin-top: 6px;
 }
 </style>

@@ -45,7 +45,14 @@
           <option value="PENDIENTE">⏳ Pendientes</option>
           <option value="APROBADO">✔ Aprobados</option>
           <option value="RECHAZADO">✖ Rechazados</option>
+          <option value="EN_CURSO">▶ En curso</option>
+          <option value="ANULADO">⊘ Anulados</option>
+          <option value="ENVIADO_NOMINA">📤 Enviados a nómina</option>
         </select>
+        <label class="check-evidencias" title="Mostrar solo registros con fotos de evidencia">
+          <input type="checkbox" v-model="soloConEvidencias" />
+          📷 Solo con evidencias
+        </label>
       </div>
 
       <div class="export-actions">
@@ -71,6 +78,8 @@
             <th class="col-letter text-end">F</th>
             <th class="col-letter text-center">G</th>
             <th class="col-letter text-center">H</th>
+            <th class="col-letter text-center">I</th>
+            <th class="col-letter text-center">J</th>
           </tr>
 
           <!-- Excel Main Header Row -->
@@ -82,89 +91,140 @@
             <th class="text-center">TIPO RECARGO</th>
             <th class="text-center">HORAS</th>
             <th class="text-end">MONTO ESTIMADO</th>
+            <th class="text-center">EVIDENCIAS</th>
             <th class="text-center">ESTADO</th>
             <th class="text-center">ACCIONES</th>
+            <th class="text-center">DETALLE</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="filteredList.length === 0">
-            <td colspan="9" class="text-center py-5 text-muted font-mono">
+            <td colspan="11" class="text-center py-5 text-muted font-mono">
               [Hoja vacía] No se encontraron registros de horas extras que coincidan con la búsqueda.
             </td>
           </tr>
-          <tr
-            v-for="(hora, index) in filteredList"
-            :key="hora.id || index"
-            :class="{ 'row-even': index % 2 === 1, 'row-pending': hora.estado === 'PENDIENTE' }"
-          >
-            <!-- Excel Row Number Header Column -->
-            <td class="col-excel-index">{{ index + 1 }}</td>
+          <template v-for="(hora, index) in filteredList" :key="hora.id || index">
+            <tr
+              :class="{ 'row-even': index % 2 === 1, 'row-pending': hora.estado === 'PENDIENTE' }"
+            >
+              <!-- Excel Row Number Header Column -->
+              <td class="col-excel-index">{{ index + 1 }}</td>
 
-            <!-- A: Funcionario & Cédula -->
-            <td>
-              <div class="cell-user">
-                <span class="user-name">{{ hora.funcionario }}</span>
-                <span class="user-sub font-mono">C.C. {{ hora.cedula }}</span>
-              </div>
-            </td>
+              <!-- A: Funcionario & Cédula -->
+              <td>
+                <div class="cell-user">
+                  <span class="user-name">{{ hora.funcionario }}</span>
+                  <span class="user-sub font-mono">C.C. {{ hora.cedula }}</span>
+                </div>
+              </td>
 
-            <!-- B: Cuadrilla / Área -->
-            <td>
-              <span class="cell-dep">{{ hora.area }}</span>
-            </td>
+              <!-- B: Cuadrilla / Área -->
+              <td>
+                <span class="cell-dep">{{ hora.cuadrillaArea || hora.area }}</span>
+              </td>
 
-            <!-- C: Fecha Operación -->
-            <td class="text-center">
-              <span class="font-mono small text-dark fw-bold">{{ hora.fecha }}</span>
-            </td>
+              <!-- C: Fecha Operación -->
+              <td class="text-center">
+                <span class="font-mono small text-dark fw-bold">{{ formatearFechaCorta(hora.fechaOperacion || hora.fecha) }}</span>
+              </td>
 
-            <!-- D: Tipo Recargo -->
-            <td class="text-center">
-              <span class="badge-tipo" :class="'tipo-' + (hora.tipo || '').toLowerCase()">
-                {{ hora.tipo }}
-              </span>
-            </td>
+              <!-- D: Tipo Recargo -->
+              <td class="text-center">
+                <span class="badge-tipo" :class="'tipo-' + (hora.tipoRecargo || hora.tipo || '').toLowerCase()">
+                  {{ hora.tipoRecargo || hora.tipo }}
+                </span>
+              </td>
 
-            <!-- E: Horas -->
-            <td class="text-center">
-              <span class="hours-badge">{{ hora.cantidadHoras }}h</span>
-            </td>
+              <!-- E: Horas -->
+              <td class="text-center">
+                <span class="hours-badge">{{ hora.cantidadHoras }}h</span>
+              </td>
 
-            <!-- F: Monto Estimado -->
-            <td class="text-end font-mono fw-bold text-success">
-              ${{ formatCurrency(hora.montoEstimado) }}
-            </td>
+              <!-- F: Monto Estimado -->
+              <td class="text-end font-mono fw-bold text-success">
+                ${{ formatCurrency(hora.montoEstimado) }}
+              </td>
 
-            <!-- G: Estado -->
-            <td class="text-center">
-              <span class="status-badge" :class="'status-' + (hora.estado || '').toLowerCase()">
-                {{ hora.estado }}
-              </span>
-            </td>
-
-            <!-- H: Acciones -->
-            <td class="text-center">
-              <div v-if="hora.estado === 'PENDIENTE'" class="d-inline-flex gap-1">
+              <!-- G: Evidencias fotográficas -->
+              <td class="text-center">
                 <button
+                  v-if="tieneEvidencias(hora)"
                   type="button"
-                  class="btn-action btn-approve"
-                  @click="$emit('approve', hora)"
-                  title="Aprobar registro de horas"
+                  class="badge-evidencias"
+                  :class="{ 'evidencia-pendiente': hora.estadoEvidencia === 'PENDIENTE_REVISION' }"
+                  title="Ver evidencias fotográficas del registro"
+                  @click="$emit('evidencias', hora)"
                 >
-                  ✔ Aprobar
+                  📷 {{ hora.numEvidencias }}
                 </button>
+                <span v-else class="text-muted font-mono sin-evidencias">—</span>
+              </td>
+
+              <!-- H: Estado -->
+              <td class="text-center">
+                <span class="status-badge" :class="'status-' + (hora.estado || '').toLowerCase()">
+                  {{ hora.estado }}
+                </span>
+              </td>
+
+              <!-- I: Acciones -->
+              <td class="text-center">
+                <div v-if="hora.estado === 'PENDIENTE'" class="d-inline-flex gap-1">
+                  <button
+                    type="button"
+                    class="btn-action btn-approve"
+                    @click="$emit('approve', hora)"
+                    title="Aprobar registro de horas"
+                  >
+                    ✔ Aprobar
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-action btn-reject"
+                    @click="$emit('reject', hora)"
+                    title="Rechazar registro de horas"
+                  >
+                    ✖ Rechazar
+                  </button>
+                </div>
+                <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">Procesado</span>
+              </td>
+
+              <!-- J: Detalle expandible (desglose del clasificador) -->
+              <td class="text-center">
                 <button
+                  v-if="tieneDetalle(hora)"
                   type="button"
-                  class="btn-action btn-reject"
-                  @click="$emit('reject', hora)"
-                  title="Rechazar registro de horas"
+                  class="btn-detalle"
+                  :title="filaAbierta(hora.id) ? 'Ocultar desglose del cálculo' : 'Ver desglose del cálculo'"
+                  @click="alternarFila(hora.id)"
                 >
-                  ✖ Rechazar
+                  {{ filaAbierta(hora.id) ? '▾' : '▸' }}
                 </button>
-              </div>
-              <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">Procesado</span>
-            </td>
-          </tr>
+                <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">—</span>
+              </td>
+            </tr>
+
+            <!-- Fila expandible: turno aplicado + desglose del clasificador -->
+            <tr v-if="filaAbierta(hora.id)" class="fila-detalle">
+              <td :colspan="11" class="celda-detalle">
+                <div class="d-flex flex-wrap gap-4">
+                  <div v-if="hora.turnoNombre">
+                    <span class="detalle-label">Turno aplicado</span>
+                    <span class="detalle-valor font-mono">🕒 {{ hora.turnoNombre }}</span>
+                  </div>
+                  <div v-for="campo in entradasDesglose(hora.recargoDesglose)" :key="campo.clave">
+                    <span class="detalle-label">{{ campo.etiqueta }}</span>
+                    <span class="detalle-valor font-mono">{{ campo.valor }}</span>
+                  </div>
+                  <div v-if="hora.justificacion">
+                    <span class="detalle-label">Justificación / descripción</span>
+                    <span class="detalle-valor">{{ hora.justificacion }}</span>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -181,23 +241,41 @@ const props = defineProps({
   }
 })
 
-defineEmits(['approve', 'reject', 'export'])
+defineEmits(['approve', 'reject', 'export', 'evidencias'])
 
 const busqueda = ref('')
 const filtroTipo = ref('')
 const filtroEstado = ref('')
+const soloConEvidencias = ref(false)
+
+// Filas expandibles (Set de ids con el desglose abierto)
+const filasAbiertas = ref(new Set())
+const filaAbierta = (id) => filasAbiertas.value.has(String(id))
+const alternarFila = (id) => {
+  const nueva = new Set(filasAbiertas.value)
+  if (nueva.has(String(id))) {
+    nueva.delete(String(id))
+  } else {
+    nueva.add(String(id))
+  }
+  filasAbiertas.value = nueva
+}
 
 const filteredList = computed(() => {
   return props.items.filter((item) => {
+    const termino = busqueda.value.toLowerCase()
     const matchBusqueda =
-      (item.funcionario || '').toLowerCase().includes(busqueda.value.toLowerCase()) ||
-      (item.area || '').toLowerCase().includes(busqueda.value.toLowerCase()) ||
+      (item.funcionario || '').toLowerCase().includes(termino) ||
+      (item.cuadrillaArea || item.area || '').toLowerCase().includes(termino) ||
       (item.cedula || '').includes(busqueda.value)
 
-    const matchTipo = !filtroTipo.value || item.tipo === filtroTipo.value
+    // CORREGIDO: el campo del modelo es tipoRecargo (antes leía item.tipo y
+    // el filtro nunca matcheaba); se mantiene el respaldo para espejos viejos
+    const matchTipo = !filtroTipo.value || (item.tipoRecargo || item.tipo) === filtroTipo.value
     const matchEstado = !filtroEstado.value || item.estado === filtroEstado.value
+    const matchEvidencias = !soloConEvidencias.value || (Number(item.numEvidencias) || 0) > 0
 
-    return matchBusqueda && matchTipo && matchEstado
+    return matchBusqueda && matchTipo && matchEstado && matchEvidencias
   })
 })
 
@@ -211,6 +289,50 @@ const totalMontoFiltrado = computed(() => {
 
 const formatCurrency = (val) => {
   return new Intl.NumberFormat('es-CO').format(val || 0)
+}
+
+const formatearFechaCorta = (iso) => {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d)) return String(iso)
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+const tieneEvidencias = (hora) => (Number(hora.numEvidencias) || 0) > 0
+
+const tieneDetalle = (hora) =>
+  Boolean(hora.turnoNombre) || entradasDesglose(hora.recargoDesglose).length > 0
+
+// Etiquetas en español para las claves conocidas del desglose del clasificador;
+// las desconocidas se muestran con su nombre de campo tal cual
+const ETIQUETAS_DESGLOSE = {
+  horasDiurnas: 'Horas diurnas',
+  horasNocturnas: 'Horas nocturnas',
+  horasFestivas: 'Horas festivas',
+  recargo: 'Recargo',
+  factor: 'Factor',
+  monto: 'Monto',
+  valorHora: 'Valor hora',
+  turno: 'Turno'
+}
+
+const entradasDesglose = (desglose) => {
+  if (!desglose || typeof desglose !== 'object' || Array.isArray(desglose)) return []
+  return Object.entries(desglose)
+    .filter(([, valor]) => valor !== null && valor !== undefined && valor !== '')
+    .map(([clave, valor]) => {
+      let texto
+      if (typeof valor === 'number') {
+        texto = Math.round(valor * 100) / 100
+      } else if (typeof valor === 'boolean') {
+        texto = valor ? 'Sí' : 'No'
+      } else if (typeof valor === 'object') {
+        texto = JSON.stringify(valor)
+      } else {
+        texto = valor
+      }
+      return { clave, etiqueta: ETIQUETAS_DESGLOSE[clave] || clave, valor: texto }
+    })
 }
 </script>
 
@@ -355,6 +477,27 @@ const formatCurrency = (val) => {
   border-color: #107c41;
 }
 
+.check-evidencias {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.check-evidencias input {
+  accent-color: #107c41;
+  cursor: pointer;
+}
+
 .btn-export-excel {
   display: inline-flex;
   align-items: center;
@@ -387,7 +530,7 @@ const formatCurrency = (val) => {
 
 .excel-table {
   width: 100%;
-  min-width: 960px;
+  min-width: 1100px;
   border-collapse: collapse;
   font-size: 0.76rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -471,17 +614,53 @@ const formatCurrency = (val) => {
   color: #0f172a;
 }
 
+/* Insignia de evidencias (clic → modal de fotos) */
+.badge-evidencias {
+  background: #ffffff;
+  border: 1px solid #0e7490;
+  color: #0e7490;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.badge-evidencias:hover {
+  background: #0e7490;
+  color: #ffffff;
+}
+
+/* Registro con evidencia pendiente de revisión: borde ámbar de atención */
+.badge-evidencias.evidencia-pendiente {
+  border-color: #d97706;
+  color: #b45309;
+  background: #fffbeb;
+}
+.badge-evidencias.evidencia-pendiente:hover {
+  background: #d97706;
+  color: #ffffff;
+}
+
+.sin-evidencias { font-size: 0.72rem; }
+
 .status-badge {
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .status-pendiente { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 .status-aprobado { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
 .status-rechazado { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.status-en_curso { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.status-anulado { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+.status-enviado_nomina { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
 
 .btn-action {
   padding: 3px 8px;
@@ -509,5 +688,52 @@ const formatCurrency = (val) => {
 
 .btn-reject:hover {
   background: #b91c1c;
+}
+
+/* Botón de detalle expandible */
+.btn-detalle {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 800;
+  width: 24px;
+  height: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.btn-detalle:hover {
+  background: #004884;
+  border-color: #004884;
+  color: #ffffff;
+}
+
+/* Fila expandible de desglose */
+.fila-detalle .celda-detalle {
+  background: #f8fafc !important;
+  border-left: 4px solid #73be28;
+  padding: 8px 12px;
+}
+
+.detalle-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.detalle-valor {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0f172a;
+  max-width: 260px;
+  overflow-wrap: break-word;
 }
 </style>

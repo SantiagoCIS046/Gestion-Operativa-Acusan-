@@ -62,6 +62,15 @@
                   <router-link to="/horas-extras/gerencia" class="nav-child" active-class="child-active">
                     <span class="child-icon">🖥️</span> Panel de Horas Extras
                   </router-link>
+                  <router-link to="/horas-extras/turnos" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🕒</span> Turnos y Festivos
+                  </router-link>
+                  <router-link to="/horas-extras/dashboard" class="nav-child" active-class="child-active">
+                    <span class="child-icon">📊</span> Dashboard
+                  </router-link>
+                  <router-link to="/horas-extras/nomina" class="nav-child" active-class="child-active">
+                    <span class="child-icon">🧾</span> Cierre de Nómina
+                  </router-link>
                 </div>
               </transition>
             </div>
@@ -144,17 +153,31 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- ENCARGADO: Horas Extras (solo su área) -->
-          <router-link
-            v-if="tieneAcceso(['ENCARGADO'])"
-            to="/horas-extras/gerencia"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">⏱️</span>
-            <span class="nav-text">Horas Extras</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
+          <!-- ENCARGADO: Horas Extras (panel, turnos y dashboard; nómina es exclusiva de GERENCIA/ADMIN) -->
+          <div v-if="tieneAcceso(['ENCARGADO'])" class="nav-group">
+            <button
+              class="nav-group-header"
+              :class="{ 'group-active': menuExpandido.horasExtras }"
+              @click="toggleMenu('horasExtras')"
+            >
+              <span class="nav-icon">⏱️</span>
+              <span class="nav-text">Horas Extras</span>
+              <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.horasExtras }">›</span>
+            </button>
+            <transition name="slide-down">
+              <div v-if="menuExpandido.horasExtras" class="nav-group-children">
+                <router-link to="/horas-extras/gerencia" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🖥️</span> Panel de Horas Extras
+                </router-link>
+                <router-link to="/horas-extras/turnos" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🕒</span> Turnos y Festivos
+                </router-link>
+                <router-link to="/horas-extras/dashboard" class="nav-child" active-class="child-active">
+                  <span class="child-icon">📊</span> Dashboard
+                </router-link>
+              </div>
+            </transition>
+          </div>
 
           <!-- GERENCIA: Historial de Permisos (visión completa) -->
           <router-link
@@ -168,17 +191,31 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- GERENCIA: Historial de Horas Extras (visión completa) -->
-          <router-link
-            v-if="tieneAcceso(['GERENCIA'])"
-            to="/horas-extras/gerencia"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">⏱️</span>
-            <span class="nav-text">Historial de Horas Extras</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
+          <!-- GERENCIA: Historial de Horas Extras (visión completa, dashboard y cierre de nómina) -->
+          <div v-if="tieneAcceso(['GERENCIA'])" class="nav-group">
+            <button
+              class="nav-group-header"
+              :class="{ 'group-active': menuExpandido.horasExtras }"
+              @click="toggleMenu('horasExtras')"
+            >
+              <span class="nav-icon">⏱️</span>
+              <span class="nav-text">Horas Extras</span>
+              <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.horasExtras }">›</span>
+            </button>
+            <transition name="slide-down">
+              <div v-if="menuExpandido.horasExtras" class="nav-group-children">
+                <router-link to="/horas-extras/gerencia" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🖥️</span> Historial de Horas Extras
+                </router-link>
+                <router-link to="/horas-extras/dashboard" class="nav-child" active-class="child-active">
+                  <span class="child-icon">📊</span> Dashboard
+                </router-link>
+                <router-link to="/horas-extras/nomina" class="nav-child" active-class="child-active">
+                  <span class="child-icon">🧾</span> Cierre de Nómina
+                </router-link>
+              </div>
+            </transition>
+          </div>
 
           <!-- OPERATIVO: su área PQR (solo su área) -->
           <router-link

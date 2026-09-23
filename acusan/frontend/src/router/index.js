@@ -40,6 +40,24 @@ const routes = [
     component: () => import('../modules/horas-extras/views/VistaGerenciaHoras.vue'),
     meta: { title: 'Horas Extras - Control Operativo', requiresAuth: true, roles: ['ENCARGADO', 'GERENCIA', 'ADMIN'] }
   },
+  {
+    path: '/horas-extras/turnos',
+    name: 'HorasExtrasTurnos',
+    component: () => import('../modules/horas-extras/views/VistaTurnosHoras.vue'),
+    meta: { title: 'Horas Extras - Turnos y Festivos', requiresAuth: true, roles: ['ENCARGADO', 'ADMIN'] }
+  },
+  {
+    path: '/horas-extras/dashboard',
+    name: 'HorasExtrasDashboard',
+    component: () => import('../modules/horas-extras/views/VistaDashboardHoras.vue'),
+    meta: { title: 'Horas Extras - Dashboard', requiresAuth: true, roles: ['ENCARGADO', 'GERENCIA', 'ADMIN'] }
+  },
+  {
+    path: '/horas-extras/nomina',
+    name: 'HorasExtrasNomina',
+    component: () => import('../modules/horas-extras/views/VistaNominaHoras.vue'),
+    meta: { title: 'Horas Extras - Cierre de Nómina', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
+  },
 
   // --- MÓDULO DE PQR ---
   {

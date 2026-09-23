@@ -79,6 +79,25 @@ enum EstadoHoraExtra {
   PENDIENTE
   APROBADO
   RECHAZADO
+  // Sesión de evidencias abierta (foto inicial tomada, sin foto final)
+  EN_CURSO
+  // Sesión descartada por el empleado o el supervisor (no es un rechazo)
+  ANULADO
+  // Exportado a Nómina en el cierre mensual (acción de Gerencia/Admin)
+  ENVIADO_NOMINA
+}
+
+// Tipo de foto dentro de la sesión de evidencias (inicio / fin de jornada)
+enum TipoEvidencia {
+  INICIAL
+  FINAL
+}
+
+// Estado de revisión de las evidencias de un registro
+enum EstadoEvidencia {
+  PENDIENTE_REVISION
+  REVISADA
+  OBSERVADA
 }
 
 model HoraExtra {
@@ -94,10 +113,91 @@ model HoraExtra {
   justificacion   String?
   autorizadoPor   String?
   fechaAprobacion DateTime?
+
+  // ── Sesión de evidencias (foto inicio → foto fin) ────────────────────────
+  // Todos opcionales: MongoDB no retro-defaultea los documentos legacy que
+  // carecen de estos campos (null = registro manual sin evidencias).
+  fechaInicio     DateTime?         // marcación de entrada = captura foto inicial
+  fechaFin        DateTime?         // marcación de salida = captura foto final
+  origen          String?           // "MANUAL" | "EVIDENCIA" (null = legacy)
+  numEvidencias   Int?              // 0|1|2, desnormalizado para listados
+  estadoEvidencia EstadoEvidencia?
+
+  // ── Cálculo con turnos (Fase 2) ──────────────────────────────────────────
+  turnoId         String?           @db.ObjectId
+  turnoNombre     String?
+  recargoDesglose Json?            // snapshot auditable del cálculo por tipo
+
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   @@map("horas_extras")
+}
+
+// Foto de evidencia de una sesión de horas extras. Se enlaza al registro
+// padre por horaExtraId SIN @relation deliberadamente (mismo patrón que
+// RespuestaRadicado): el modelo HoraExtra queda intacto y la cédula va
+// desnormalizada para listar sin cruzar colecciones. fotoBase64 es un data
+// URL y JAMÁS se selecciona en los listados (select explícito siempre).
+model EvidenciaHoraExtra {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  horaExtraId  String        @db.ObjectId
+  tipo         TipoEvidencia
+  cedula       String
+  funcionario  String?
+  descripcion  String?
+
+  fotoBase64   String?
+  fotoNombre   String?
+
+  latitud      Float?
+  longitud     Float?
+  precisionGps Float?
+
+  // Fecha/hora en que se tomó la foto EN EL DISPOSITIVO (offline-friendly);
+  // registradaEn es cuándo llegó al servidor (auditoría de divergencia)
+  capturadaEn  DateTime
+  registradaEn DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("evidencias_hora_extra")
+}
+
+// Turno de referencia por cuadrilla/área. El match contra los registros es
+// textual sobre HoraExtra.cuadrillaArea. Las horas están en hora local de
+// Colombia (UTC-5 fijo) y se admite cruce de medianoche (ej: 22:00→06:00).
+model Turno {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  nombre          String   @unique
+  cuadrillaArea   String
+  horaInicio      String
+  horaFin         String
+  jornadaEstandar Float    @default(8)
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("turnos")
+}
+
+// Cierre mensual exportado a Nómina. Registro inmutable de trazabilidad:
+// qué periodo se envió, quién lo generó, totales y snapshot de ids incluidos.
+model EnvioNomina {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  periodo        String   @unique // "2026-09"
+  mes            Int
+  anio           Int
+  totalRegistros Int
+  totalHoras     Float
+  desgloseHoras  Json?
+  idsRegistros   Json?
+  emailEnviadoA  String?
+  emailError     String?
+  generadoPor    String
+  generadoEn     DateTime @default(now())
+
+  @@map("envios_nomina")
 }
 
 // -------------------------------------------------------------

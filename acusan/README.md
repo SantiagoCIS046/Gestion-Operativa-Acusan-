@@ -32,7 +32,7 @@ Codigo Aquasan/                        # Repositorio Git (la raíz solo tiene .g
     │   │       └── pqr/               # Peticiones, quejas, recursos y términos legales
     │   └── package.json
     │
-    └── frontend/                      # SPA Cliente Vue 3 + Vite
+    ├── frontend/                      # SPA Cliente Vue 3 + Vite
         ├── src/
         │   ├── main.js                # Inicializador Vue y carga de Bootstrap 5
         │   ├── App.vue                # Layout corporativo con Sidebar, Avatar y botón Cerrar Sesión
@@ -56,13 +56,30 @@ Codigo Aquasan/                        # Repositorio Git (la raíz solo tiene .g
         │       │   │   ├── VisorPDF.vue
         │       │   │   └── FormularioValidacionOCR.vue
         │       │   └── services/permisosService.js
-        │       ├── horas-extras/      # Control Presupuestal de Horas Extras
-        │       │   ├── views/VistaGerenciaHoras.vue
-        │       │   └── components/TablaHorasExtras.vue
+        │       ├── horas-extras/      # Gestión de Horas Extras & Evidencias
+        │       │   ├── views/
+        │       │   │   ├── VistaGerenciaHoras.vue    # Supervisión, dictamen y envío a Nómina
+        │       │   │   ├── VistaTurnosHoras.vue      # Configuración de turnos por cuadrilla
+        │       │   │   ├── VistaDashboardHoras.vue   # Dashboard mensual de horas
+        │       │   │   └── VistaNominaHoras.vue      # Historial de envíos a Nómina
+        │       │   ├── components/
+        │       │   │   ├── TablaHorasExtras.vue      # Tabla con desglose y badge de evidencias
+        │       │   │   └── ModalEvidencias.vue       # Fotos inicio/fin, GPS y revisión
+        │       │   └── services/horasExtrasService.js
         │       └── pqr/               # Atención al Usuario & Cuadrillas
         │           ├── views/VistaGestionPQR.vue
         │           └── components/PanelAtencionPQR.vue
         ├── package.json
+        └── vite.config.js
+    │
+    └── horas-extras-app/               # PWA móvil del empleado de campo (Vue 3 + Vite)
+        ├── src/
+        │   ├── views/
+        │   │   ├── VistaEvidencias.vue    # Sesión foto inicio/fin con GPS y cola offline
+        │   │   ├── VistaRegistro.vue      # Autoreporte manual
+        │   │   └── VistaHistorial.vue     # Historial con KPIs del mes
+        │   ├── components/LayoutApp.vue
+        │   └── services/                  # api.js, compresión de fotos, geolocalización, IndexedDB
         └── vite.config.js
 ```
 
@@ -97,9 +114,13 @@ Codigo Aquasan/                        # Repositorio Git (la raíz solo tiene .g
   - 👥 **Módulo 3: Acumulados por Empleado:** Control de recurrencia y horas acumuladas por funcionario.
   - 📁 **Módulo 4: Expedientes & Soportes:** Visualización del documento escaneado original.
 
-### 4. ⏱️ Control de Horas Extras (`horas-extras`)
-- Consolidado presupuestal de recargos nocturnos, festivos y diurnos por cuadrilla operativa.
-- Aprobación / Rechazo gerencial directo con notificaciones instantáneas.
+### 4. ⏱️ Gestión Inteligente de Horas Extras (`horas-extras`)
+- **Marcación por evidencias fotográficas:** el empleado de campo abre la sesión con foto inicial (fecha/hora y GPS automáticos del móvil) y la cierra con foto final (`horas-extras-app/`, PWA con cola offline en IndexedDB).
+- **Cálculo automático de recargos:** clasificador en hora local de Colombia (UTC−5) que trocea la jornada en tramos diurnos (06:00–21:00), nocturnos (21:00–06:00), dominicales y festivos colombianos reales (Ley 51/1982, calculados sin dependencias). Desglose completo auditable por registro.
+- **Turnos por cuadrilla:** si la sesión inicia dentro del turno configurado del área, las extras cuentan desde la salida del turno (las horas dentro quedan como ordinarias informativas).
+- **Revisión y dictamen:** un nivel de aprobación (PENDIENTE → APROBADO/RECHAZADO) con revisión previa de evidencias (fotos, GPS con enlace al mapa, divergencia horaria dispositivo/servidor).
+- **Nómina:** cierre de periodo por Gerencia que marca los aprobados como enviados, genera CSV para Excel (BOM + `;`) y lo envía por correo (SMTP opcional; el cierre nunca se bloquea por fallo de correo).
+- **Dashboard mensual:** KPIs y gráficas de horas por tipo, área y trabajador, sin dependencias externas.
 
 ### 5. 📋 Atención al Usuario & PQR (`pqr`)
 - Peticiones, Quejas, Reclamos y Recursos con seguimiento de vencimientos.
@@ -131,7 +152,7 @@ El proyecto cuenta con integración continua para compilación y despliegue auto
 ```bash
 cd acusan
 npm install        # instala raíz + backend + frontend (postinstall)
-npm run dev        # API (3000) + WEB (5173) + OCR Python (5001)
+npm run dev        # API (3000) + WEB (5173) + APP Horas (5174) + OCR Python (5001)
 ```
 
 ### 1. Servidor Backend API

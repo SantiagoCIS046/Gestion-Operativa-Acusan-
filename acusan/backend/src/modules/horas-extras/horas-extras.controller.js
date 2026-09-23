@@ -68,7 +68,7 @@ export const HorasExtrasController = {
   async dictaminar(req, res) {
     try {
       const { id } = req.params
-      const { estado, autorizadoPor } = req.body
+      const { estado, observaciones } = req.body
 
       if (!['APROBADO', 'RECHAZADO'].includes(estado)) {
         return res.status(400).json({
@@ -77,9 +77,13 @@ export const HorasExtrasController = {
         })
       }
 
+      // La identidad del dictaminador sale del JWT, jamás del body
+      const autorizadoPor = req.usuario?.nombre || req.usuario?.email || 'Gerencia Acuasan'
+
       const horaActualizada = await HorasExtrasService.dictaminar(id, {
         estado,
-        autorizadoPor: autorizadoPor || 'Gerencia Acuasan'
+        autorizadoPor,
+        observaciones
       })
 
       const usuario = req.usuario?.email || 'anónimo'
@@ -87,7 +91,7 @@ export const HorasExtrasController = {
       logger[nivel](
         'H-EXTRAS',
         'DICTAMINAR',
-        `Por: ${usuario} | ID: ${id} | Estado: ${estado} | Autorizó: ${autorizadoPor || 'Gerencia'}`
+        `Por: ${usuario} | ID: ${id} | Estado: ${estado} | Autorizó: ${autorizadoPor}`
       )
 
       res.json({
@@ -96,8 +100,35 @@ export const HorasExtrasController = {
         data: horaActualizada
       })
     } catch (error) {
+      if (error.status) {
+        return res.status(error.status).json({ success: false, message: error.message })
+      }
       logger.error('H-EXTRAS', 'DICTAM ERR', `ID: ${req.params.id} — ${error.message}`)
       res.status(500).json({ success: false, message: 'Error al actualizar horas extras', error: error.message })
+    }
+  },
+
+  /**
+   * Re-ejecutar el clasificador sobre un registro PENDIENTE con sesión
+   * inicio/fin (corrige horas/tipo si el turno del área cambió o el cálculo
+   * quedó desactualizado). Responde con "aviso" describiendo la corrección.
+   */
+  async recalcular(req, res) {
+    try {
+      const { id } = req.params
+      const { horaExtra, aviso } = await HorasExtrasService.recalcular(id)
+      logger.update(
+        'H-EXTRAS',
+        'RECALCULAR',
+        `Por: ${req.usuario?.email || 'anónimo'} | ID: ${id} | ${aviso}`
+      )
+      res.json({ success: true, message: aviso, data: horaExtra, aviso })
+    } catch (error) {
+      if (error.status) {
+        return res.status(error.status).json({ success: false, message: error.message })
+      }
+      logger.error('H-EXTRAS', 'RECALC ERR', `ID: ${req.params.id} — ${error.message}`)
+      res.status(500).json({ success: false, message: 'Error al recalcular horas extras', error: error.message })
     }
   },
 

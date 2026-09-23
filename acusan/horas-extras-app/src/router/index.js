@@ -14,6 +14,11 @@ const routes = [
     component: () => import('@/views/VistaRegistro.vue')
   },
   {
+    path: '/evidencias',
+    name: 'evidencias',
+    component: () => import('@/views/VistaEvidencias.vue')
+  },
+  {
     path: '/historial',
     name: 'historial',
     component: () => import('@/views/VistaHistorial.vue')
