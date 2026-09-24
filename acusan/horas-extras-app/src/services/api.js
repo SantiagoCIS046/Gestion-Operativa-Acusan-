@@ -12,12 +12,25 @@ const EMPLEADO_KEY = 'acuasan_empleado_info'
 // ── Token de empleado ────────────────────────────────────────────────────────
 
 export const authService = {
+  /** Verifica si la cédula está registrada en la base de datos */
+  async verificarCedula(cedula) {
+    if (!cedula || String(cedula).trim().length < 5) return { registrada: false }
+    try {
+      const res = await fetch(`${AUTH_BASE}/verificar-cedula/${encodeURIComponent(String(cedula).trim())}`)
+      if (!res.ok) return { registrada: false }
+      const data = await res.json()
+      return data.data || { registrada: false }
+    } catch {
+      return { registrada: false }
+    }
+  },
+
   /** Solicita token JWT al backend usando cedula + nombre */
   async identificar({ cedula, nombre }) {
     const res = await fetch(`${AUTH_BASE}/token-empleado`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cedula, nombre })
+      body: JSON.stringify({ cedula, nombre: nombre ? nombre.trim() : undefined })
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.message || 'No se pudo identificar al empleado')

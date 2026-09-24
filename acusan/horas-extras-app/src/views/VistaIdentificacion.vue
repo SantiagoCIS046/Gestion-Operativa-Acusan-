@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page page--center">
     <div class="ident-wrap">
 
@@ -24,18 +24,35 @@
         <form @submit.prevent="identificar">
           <div class="field">
             <label for="cedula">Número de Cédula</label>
-            <input
-              id="cedula"
-              v-model="cedula"
-              type="tel"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="Ej: 1234567890"
-              autocomplete="off"
-              required
-            />
+            <div class="input-wrap">
+              <input
+                id="cedula"
+                v-model="cedula"
+                type="tel"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                placeholder="Ej: 1100976876"
+                autocomplete="off"
+                required
+                @input="onCedulaInput"
+              />
+              <span v-if="buscando" class="input-spinner"></span>
+            </div>
+            
+            <!-- Indicador de empleado encontrado -->
+            <div v-if="empleadoEncontrado" class="badge-empleado">
+              <span class="badge-icon">✅</span>
+              <div class="badge-info">
+                <strong>{{ empleadoEncontrado.nombre }}</strong>
+                <small>{{ empleadoEncontrado.cargo }}</small>
+              </div>
+            </div>
+            <span v-else-if="cedula.length >= 6 && !buscando" class="field-hint field-hint--nuevo">
+              ℹ️ Cédula no registrada aún. Escribe tu nombre abajo para ingresar.
+            </span>
           </div>
-          <div class="field">
+
+          <div class="field" v-if="!empleadoEncontrado">
             <label for="nombre">Nombre Completo</label>
             <input
               id="nombre"
@@ -43,12 +60,13 @@
               type="text"
               placeholder="Ej: Carlos Ramírez"
               autocomplete="name"
-              required
             />
-            <span class="field-hint">Si tu cédula está registrada, el sistema verificará tu nombre automáticamente.</span>
+            <span class="field-hint">Si tu cédula ya está en el sistema, tu nombre se detecta solo.</span>
           </div>
-          <button type="submit" class="btn btn--primary" :disabled="cargando">
+
+          <button type="submit" class="btn btn--primary" :disabled="cargando || buscando">
             <span v-if="cargando" class="spinner"></span>
+            <span v-else-if="empleadoEncontrado">Ingresar como {{ primerNombre }} →</span>
             <span v-else>Ingresar al Portal →</span>
           </button>
         </form>
@@ -60,7 +78,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { authService } from '@/services/api.js'
 
@@ -68,16 +86,71 @@ const router = useRouter()
 const cedula = ref('')
 const nombre = ref('')
 const cargando = ref(false)
+const buscando = ref(false)
 const error = ref('')
+const empleadoEncontrado = ref(null)
+
+let debounceTimer = null
+
+const primerNombre = computed(() => {
+  if (!empleadoEncontrado.value?.nombre) return ''
+  return empleadoEncontrado.value.nombre.split(' ')[0]
+})
+
+const onCedulaInput = () => {
+  error.value = ''
+  clearTimeout(debounceTimer)
+  
+  const val = cedula.value.trim()
+  if (val.length < 5) {
+    empleadoEncontrado.value = null
+    return
+  }
+
+  buscando.value = true
+  debounceTimer = setTimeout(async () => {
+    try {
+      const res = await authService.verificarCedula(val)
+      if (res && res.registrada) {
+        empleadoEncontrado.value = {
+          nombre: res.nombre,
+          cargo: res.cargo || 'Funcionario Acuasan'
+        }
+        nombre.value = res.nombre
+      } else {
+        empleadoEncontrado.value = null
+      }
+    } catch {
+      empleadoEncontrado.value = null
+    } finally {
+      buscando.value = false
+    }
+  }, 350)
+}
 
 const identificar = async () => {
   error.value = ''
+  
+  if (!cedula.value.trim()) {
+    error.value = 'Por favor ingresa tu número de cédula.'
+    return
+  }
+
+  // Si no se encontró en BD y no ha digitado nombre
+  if (!empleadoEncontrado.value && !nombre.value.trim()) {
+    error.value = 'Por favor escribe tu nombre completo para ingresar por primera vez.'
+    return
+  }
+
   cargando.value = true
   try {
-    await authService.identificar({ cedula: cedula.value, nombre: nombre.value })
+    await authService.identificar({
+      cedula: cedula.value.trim(),
+      nombre: empleadoEncontrado.value?.nombre || nombre.value.trim()
+    })
     router.push({ name: 'registrar' })
   } catch (e) {
-    error.value = e.message || 'No se pudo ingresar. Intenta de nuevo.'
+    error.value = e.message || 'No se pudo ingresar. Verifica la conexión con el servidor.'
   } finally {
     cargando.value = false
   }
@@ -142,12 +215,67 @@ const identificar = async () => {
   line-height: 1.5;
 }
 
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrap input {
+  width: 100%;
+}
+
+.input-spinner {
+  position: absolute;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(14,165,233,0.2);
+  border-top-color: var(--acuasan-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.badge-empleado {
+  margin-top: 8px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge-icon {
+  font-size: 1.1rem;
+}
+
+.badge-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.badge-info strong {
+  color: #34d399;
+  font-size: 0.88rem;
+}
+
+.badge-info small {
+  color: var(--acuasan-muted);
+  font-size: 0.75rem;
+}
+
 .field-hint {
   font-size: 0.72rem;
   color: var(--acuasan-muted);
   margin-top: 5px;
   display: block;
   line-height: 1.4;
+}
+
+.field-hint--nuevo {
+  color: #fbbf24;
 }
 
 .ident-footer {

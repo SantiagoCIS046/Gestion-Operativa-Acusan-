@@ -11,7 +11,8 @@ const router = Router()
 router.post('/login', AuthController.login)
 router.post('/registro', AuthController.registro)
 router.post('/recuperar-password', AuthController.solicitarRecuperacion)
-// App externa Horas Extras: genera JWT de 12h para empleados de campo por cédula
+// App externa Horas Extras: verificar si la cédula existe y generar JWT de 12h para empleados de campo
+router.get('/verificar-cedula/:cedula', AuthController.verificarCedula)
 router.post('/token-empleado', AuthController.tokenEmpleado)
 
 // --- RUTAS PRIVADAS ---

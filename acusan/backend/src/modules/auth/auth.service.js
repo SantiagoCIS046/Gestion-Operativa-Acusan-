@@ -275,6 +275,30 @@ export const AuthService = {
    *
    * El token tiene rol EMPLEADO_CAMPO y expira en 12h (turno de trabajo).
    */
+  /**
+   * Busca si una cédula existe en la base de datos de usuarios
+   */
+  async buscarPorCedula(cedula) {
+    if (!cedula) return { registrada: false }
+    const cedulaLimpia = String(cedula).trim()
+    try {
+      const usuarioBD = await prisma.usuario.findFirst({
+        where: { cedula: cedulaLimpia },
+        select: { nombre: true, cargo: true, activo: true }
+      })
+      if (usuarioBD) {
+        return {
+          registrada: true,
+          nombre: usuarioBD.nombre,
+          cargo: usuarioBD.cargo || 'Funcionario Acuasan'
+        }
+      }
+    } catch (e) {
+      logger.warn('AUTH', 'BUSCAR CEDULA ERR', e.message)
+    }
+    return { registrada: false }
+  },
+
   async tokenEmpleado({ cedula, nombre }) {
     if (!cedula) {
       throw { status: 400, message: 'La cédula es obligatoria.' }

@@ -87,6 +87,26 @@ export const AuthController = {
   },
 
   /**
+   * GET /api/auth/verificar-cedula/:cedula
+   * Consulta si una cédula está registrada en la base de datos de usuarios
+   */
+  async verificarCedula(req, res) {
+    try {
+      const { cedula } = req.params
+      const resultado = await AuthService.buscarPorCedula(cedula)
+      res.json({
+        success: true,
+        data: resultado
+      })
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error al verificar la cédula'
+      })
+    }
+  },
+
+  /**
    * POST /api/auth/token-empleado
    * Genera un JWT de 12h para empleados de campo (app externa de Horas Extras).
    * Solo requiere cédula + nombre. Sin contraseña.
@@ -109,3 +129,4 @@ export const AuthController = {
     }
   }
 }
+
