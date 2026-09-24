@@ -2,8 +2,8 @@
 // Todas las peticiones usan el JWT almacenado en localStorage.
 
 // URL base del backend: vacia en desarrollo (el proxy de Vite redirige /api)
-// y completa en produccion via VITE_API_URL (ver .env.example)
-const BASE = import.meta.env.VITE_API_URL || ''
+const RAW_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'https://acuasan.vercel.app')
+const BASE = (typeof RAW_BASE === 'string' ? RAW_BASE : '').trim().replace(/\/+$/, '')
 const API_BASE = `${BASE}/api/horas-extras`
 const AUTH_BASE = `${BASE}/api/auth`
 const TOKEN_KEY = 'acuasan_empleado_token'

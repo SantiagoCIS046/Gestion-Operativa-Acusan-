@@ -36,12 +36,15 @@ const PORT = process.env.PORT || 3000
 // variable de entorno FRONTEND_URLS (separados por coma). Siempre se incluyen
 // los dominios institucionales fijos y los entornos de desarrollo local.
 const ORIGENES_FIJOS = [
-  'https://acuusan.vercel.app',         // Sistema principal Acuasan
-  'https://horasextras-iota.vercel.app', // App externa de Horas Extras (empleados campo)
+  'https://acuasan.vercel.app',          // Sistema principal Acuasan
+  'https://acuusan.vercel.app',          // Alias secundario Acuasan
+  'https://horasextras-iota.vercel.app', // App externa de Horas Extras
   'http://localhost:5173',               // Dev frontend principal
   'http://127.0.0.1:5173',
   'http://localhost:5174',               // Dev app horas extras
   'http://127.0.0.1:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
 ]
 const origenesExtra = (process.env.FRONTEND_URLS || '')
   .split(',')
@@ -53,7 +56,9 @@ app.use(cors({
   origin: (origin, callback) => {
     // Peticiones sin origen (curl, Postman, server-to-server) siempre OK
     if (!origin) return callback(null, true)
-    if (ORIGENES_PERMITIDOS.includes(origin)) return callback(null, true)
+    if (ORIGENES_PERMITIDOS.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true)
+    }
     callback(new Error(`CORS: origen no autorizado → ${origin}`))
   },
   credentials: true,
