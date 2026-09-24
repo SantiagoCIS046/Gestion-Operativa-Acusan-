@@ -32,7 +32,34 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // ─── Middlewares globales ─────────────────────────────────────────────────────
-app.use(cors())
+// CORS: lista de orígenes autorizados. En producción se controla con la
+// variable de entorno FRONTEND_URLS (separados por coma). Siempre se incluyen
+// los dominios institucionales fijos y los entornos de desarrollo local.
+const ORIGENES_FIJOS = [
+  'https://acuusan.vercel.app',         // Sistema principal Acuasan
+  'https://horasextras-iota.vercel.app', // App externa de Horas Extras (empleados campo)
+  'http://localhost:5173',               // Dev frontend principal
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',               // Dev app horas extras
+  'http://127.0.0.1:5174',
+]
+const origenesExtra = (process.env.FRONTEND_URLS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+const ORIGENES_PERMITIDOS = [...new Set([...ORIGENES_FIJOS, ...origenesExtra])]
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Peticiones sin origen (curl, Postman, server-to-server) siempre OK
+    if (!origin) return callback(null, true)
+    if (ORIGENES_PERMITIDOS.includes(origin)) return callback(null, true)
+    callback(new Error(`CORS: origen no autorizado → ${origin}`))
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256'],
+}))
 // verify() conserva el cuerpo crudo del JSON: el webhook de WhatsApp lo
 // necesita para validar la firma X-Hub-Signature-256 de Meta (byte-exacta)
 app.use(express.json({ limit: '50mb', verify: (req, res, buf) => { req.rawBody = buf } }))
