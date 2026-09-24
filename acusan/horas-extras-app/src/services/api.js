@@ -107,12 +107,14 @@ export const horasExtrasService = {
     return data.data
   },
 
-  /** Envia un nuevo reporte de horas extras desde el portal del empleado */
-  async reportar({ cuadrillaArea, fechaOperacion, tipoRecargo, cantidadHoras, justificacion }) {
+  /** Envia un nuevo reporte de horas extras desde el portal del empleado.
+   *  Flujo plantilla: fechaOperacion + horaInicio/horaFin (el servidor calcula
+   *  tipo y horas). Flujo legado: tipoRecargo + cantidadHoras manuales. */
+  async reportar({ cuadrillaArea, fechaOperacion, horaInicio, horaFin, tipoRecargo, cantidadHoras, justificacion }) {
     const res = await fetch(`${API_BASE}/autoreporte`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ cuadrillaArea, fechaOperacion, tipoRecargo, cantidadHoras, justificacion })
+      body: JSON.stringify({ cuadrillaArea, fechaOperacion, horaInicio, horaFin, tipoRecargo, cantidadHoras, justificacion })
     })
     if (res.status === 401) {
       authService.cerrarSesion()
@@ -121,7 +123,8 @@ export const horasExtrasService = {
     }
     const data = await res.json()
     if (!data.success) throw new Error(data.message)
-    return data.data
+    // El clasificador puede corregir el cálculo: el aviso viaja con el registro
+    return data.aviso ? { ...data.data, aviso: data.aviso } : data.data
   }
 }
 

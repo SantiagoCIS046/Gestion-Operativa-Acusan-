@@ -161,8 +161,8 @@ const identificar = async () => {
 .page--center {
   align-items: center;
   justify-content: flex-start;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(14,165,233,0.12) 0%, transparent 60%),
-              var(--acuasan-navy);
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0, 72, 132, 0.07) 0%, transparent 60%),
+              var(--bg-main);
 }
 
 .ident-wrap {
@@ -186,23 +186,23 @@ const identificar = async () => {
 .ident-logo-ring {
   width: 80px; height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(14,165,233,0.2), rgba(14,165,233,0.05));
-  border: 2px solid rgba(14,165,233,0.3);
+  background: linear-gradient(135deg, rgba(0, 72, 132, 0.1), rgba(0, 163, 224, 0.04));
+  border: 2px solid rgba(0, 72, 132, 0.25);
   display: flex; align-items: center; justify-content: center;
   font-size: 2.2rem;
-  box-shadow: 0 0 40px rgba(14,165,233,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: 0 4px 20px rgba(0, 72, 132, 0.1);
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 30px rgba(14,165,233,0.15), inset 0 1px 0 rgba(255,255,255,0.05); }
-  50%       { box-shadow: 0 0 55px rgba(14,165,233,0.3),  inset 0 1px 0 rgba(255,255,255,0.05); }
+  0%, 100% { box-shadow: 0 4px 18px rgba(0, 72, 132, 0.1); }
+  50%      { box-shadow: 0 4px 32px rgba(0, 72, 132, 0.2); }
 }
 
 .ident-title {
   font-size: 1.8rem;
   font-weight: 900;
-  background: linear-gradient(135deg, #e2e8f0, var(--acuasan-cyan));
+  background: linear-gradient(135deg, var(--acuusan-text), var(--acuusan-blue));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -230,16 +230,16 @@ const identificar = async () => {
   right: 12px;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(14,165,233,0.2);
-  border-top-color: var(--acuasan-cyan);
+  border: 2px solid rgba(0, 72, 132, 0.2);
+  border-top-color: var(--acuusan-blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .badge-empleado {
   margin-top: 8px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: var(--acuusan-green-light);
+  border: 1px solid #bbf7d0;
   border-radius: var(--radius-sm);
   padding: 8px 12px;
   display: flex;
@@ -257,7 +257,7 @@ const identificar = async () => {
 }
 
 .badge-info strong {
-  color: #34d399;
+  color: var(--acuusan-success-text);
   font-size: 0.88rem;
 }
 
@@ -275,13 +275,13 @@ const identificar = async () => {
 }
 
 .field-hint--nuevo {
-  color: #fbbf24;
+  color: var(--acuusan-warning-text);
 }
 
 .ident-footer {
   text-align: center;
   font-size: 0.72rem;
   color: var(--acuasan-muted);
-  opacity: 0.6;
+  opacity: 0.7;
 }
 </style>

@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Acuasan · Horas Extras: gota con "A" en azul #0ea5e9 sobre fondo #0f172a -->
+  <!-- Acuasan · Horas Extras: gota con "A" en cyan #00a3e0 sobre azul institucional #004884 -->
   <defs>
     <linearGradient id="gota" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0ea5e9"/>
-      <stop offset="1" stop-color="#0284c7"/>
+      <stop offset="0" stop-color="#00a3e0"/>
+      <stop offset="1" stop-color="#002d57"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <rect width="64" height="64" rx="14" fill="#004884"/>
   <path d="M32 7 C32 7 13 30.5 13 41.5 C13 51 21.5 57.5 32 57.5 C42.5 57.5 51 51 51 41.5 C51 30.5 32 7 32 7 Z" fill="url(#gota)"/>
   <ellipse cx="24.5" cy="27" rx="4" ry="6.5" fill="#ffffff" opacity="0.18" transform="rotate(-18 24.5 27)"/>
   <path d="M25.5 47 L32 31.5 L38.5 47 M27.6 41 L36.4 41" fill="none" stroke="#0f172a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>

@@ -177,8 +177,44 @@ export const HorasExtrasController = {
         })
       }
 
-      const { cuadrillaArea, fechaOperacion, tipoRecargo, cantidadHoras, montoEstimado, justificacion } = req.body
+      const { cuadrillaArea, fechaOperacion, horaInicio, horaFin, tipoRecargo, cantidadHoras, montoEstimado, justificacion } = req.body
 
+      // Flujo plantilla: fecha + hora de entrada y hora de salida. El
+      // clasificador del servidor determina diurna/nocturna/dominical/
+      // festiva y las horas reconocidas — el empleado NO las declara.
+      if (horaInicio || horaFin) {
+        if (!cuadrillaArea || !fechaOperacion || !horaInicio || !horaFin) {
+          return res.status(400).json({
+            success: false,
+            message: 'Faltan campos obligatorios: cuadrillaArea, fechaOperacion, horaInicio, horaFin'
+          })
+        }
+
+        const { horaExtra, aviso } = await HorasExtrasService.crearDesdeHorario({
+          cedula,
+          funcionario,
+          cuadrillaArea,
+          fechaOperacion,
+          horaInicio,
+          horaFin,
+          justificacion
+        })
+
+        logger.create(
+          'H-EXTRAS-APP',
+          'AUTOREPORTE',
+          `Cédula: ${cedula} | Funcionario: ${funcionario} | Cuadrilla: ${cuadrillaArea} | ${fechaOperacion} ${horaInicio}→${horaFin} | Horas: ${horaExtra.cantidadHoras}h | Tipo: ${horaExtra.tipoRecargo}`
+        )
+
+        return res.status(201).json({
+          success: true,
+          message: aviso || 'Horas extras reportadas correctamente. Quedan pendientes de aprobación.',
+          data: horaExtra,
+          ...(aviso && { aviso })
+        })
+      }
+
+      // Flujo manual legado: el empleado declara tipo y cantidad (compatibilidad)
       if (!cuadrillaArea || !fechaOperacion || !tipoRecargo || !cantidadHoras) {
         return res.status(400).json({
           success: false,
@@ -209,6 +245,9 @@ export const HorasExtrasController = {
         data: nuevaHora
       })
     } catch (error) {
+      if (error.status) {
+        return res.status(error.status).json({ success: false, message: error.message })
+      }
       logger.error('H-EXTRAS-APP', 'AUTOREPORTE ERR', error.message)
       res.status(500).json({ success: false, message: 'Error al registrar las horas extras', error: error.message })
     }
