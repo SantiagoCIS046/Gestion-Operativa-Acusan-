@@ -1,4 +1,4 @@
-﻿import { fileURLToPath, URL } from 'node:url'
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -20,8 +20,8 @@ export default defineConfig({
         start_url: '/',
         icons: [
           { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'logo-acuusan.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'logo-acuusan.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+          { src: 'logo-acuasan.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: 'logo-acuasan.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
         ]
       },
       workbox: {

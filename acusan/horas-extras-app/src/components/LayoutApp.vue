@@ -3,7 +3,7 @@
     <!-- Top Bar compartida -->
     <header class="top-bar">
       <div class="top-bar__logo">
-        <img src="/logo-acuusan.svg" alt="Logo Acuasan" />
+        <img src="/logo-acuasan.svg" alt="Acuasan E.S.P." />
         <span>Horas Extras</span>
       </div>
       <div class="top-bar__user">

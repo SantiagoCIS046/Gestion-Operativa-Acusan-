@@ -105,7 +105,7 @@ body {
   letter-spacing: -0.2px;
 }
 
-.top-bar__logo img { height: 28px; width: auto; border-radius: 7px; }
+.top-bar__logo img { height: 32px; width: 32px; object-fit: contain; }
 
 .top-bar__user {
   font-size: 0.8rem;

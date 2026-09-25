@@ -5,7 +5,7 @@
       <!-- Logo & Branding -->
       <div class="ident-hero">
         <div class="ident-logo-ring">
-          <span class="ident-logo-icon">💧</span>
+          <img src="/logo-acuasan.svg" alt="Acuasan E.S.P." class="ident-logo-img" />
         </div>
         <h1 class="ident-title">Acuasan</h1>
         <p class="ident-subtitle">Portal de Horas Extras<br/>Para Empleados de Campo</p>
@@ -184,14 +184,21 @@ const identificar = async () => {
 }
 
 .ident-logo-ring {
-  width: 80px; height: 80px;
+  width: 90px; height: 90px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(0, 72, 132, 0.1), rgba(0, 163, 224, 0.04));
-  border: 2px solid rgba(0, 72, 132, 0.25);
+  background: #ffffff;
+  border: 2px solid rgba(0, 72, 132, 0.15);
   display: flex; align-items: center; justify-content: center;
-  font-size: 2.2rem;
-  box-shadow: 0 4px 20px rgba(0, 72, 132, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 72, 132, 0.12);
   animation: pulse-glow 3s ease-in-out infinite;
+  padding: 4px;
+}
+
+.ident-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 @keyframes pulse-glow {
