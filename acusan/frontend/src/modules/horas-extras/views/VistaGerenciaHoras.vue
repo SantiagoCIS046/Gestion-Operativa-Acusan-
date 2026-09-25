@@ -4,19 +4,37 @@
     <!-- Encabezado con identidad del usuario autenticado -->
     <PageHeader
       titulo="Historial de Horas Extras"
-      subtitulo="Plantilla Excel de consolidado operativo, recargos y autorizaciones presupuestales de cuadrillas"
+      subtitulo="Plantilla Excel consolidada por funcionario: horas del mes, recargos, autorizaciones y evidencias por usuario"
       icono="⏱️"
     />
+
+    <!-- Selector de periodo: la hoja y los KPI se calculan sobre el mes elegido -->
+    <div class="selector-periodo">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="texto-selector">Periodo:</span>
+        <select v-model.number="mes" class="form-select form-select-sm selector">
+          <option v-for="(nombre, i) in MESES" :key="nombre" :value="i + 1">{{ nombre }}</option>
+        </select>
+        <select v-model.number="anio" class="form-select form-select-sm selector selector-anio">
+          <option v-for="a in aniosDisponibles" :key="a" :value="a">{{ a }}</option>
+        </select>
+        <span class="chip-periodo font-monospace">{{ etiquetaPeriodo }}</span>
+      </div>
+    </div>
 
     <!-- KPI row -->
     <div class="kpi-grid" style="margin-bottom: 16px;">
       <div class="kpi-card">
-        <span class="kpi-label">Total Horas Mes</span>
+        <span class="kpi-label">Total Horas {{ etiquetaPeriodoCorta }}</span>
         <span class="kpi-value">{{ totalHoras }}h</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Presupuesto Ejecutado</span>
         <span class="kpi-value text-emerald-600">${{ formatCurrency(totalMonto) }}</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">👷 Funcionarios con Horas</span>
+        <span class="kpi-value">{{ funcionariosDelPeriodo }}</span>
       </div>
       <div class="kpi-card" :class="{ 'kpi-alerta': evidenciasPorRevisar > 0 }">
         <span class="kpi-label">📷 Evidencias por Revisar</span>
@@ -29,9 +47,9 @@
       </div>
     </div>
 
-    <!-- Tabla de Horas Extras -->
+    <!-- Tabla de Horas Extras: un cuadro por funcionario, expandible por mes -->
     <TablaHorasExtras
-      :items="horasData"
+      :items="horasDelPeriodo"
       @approve="aprobarHora"
       @reject="rechazarHora"
       @export="abrirModalPeriodo"
@@ -150,6 +168,27 @@ const puedeRevisarEvidencias = computed(() =>
 
 const horasData = ref([])
 
+// ── Periodo seleccionado: la hoja se filtra y agrupa sobre este mes ─────────
+const mes = ref(mesHoy)
+const anio = ref(anioHoy)
+
+const etiquetaPeriodo = computed(() => `${MESES[mes.value - 1]} ${anio.value}`)
+const etiquetaPeriodoCorta = computed(() => `${MESES[mes.value - 1].slice(0, 3)}.${anio.value}`)
+
+// fechaOperacion se guarda como DateTime UTC: se compara con la fecha local
+// de Colombia ("en-CA" produce YYYY-MM-DD), mismo patrón del dashboard
+const perteneceAlPeriodo = (h) => {
+  const iso = h.fechaOperacion || h.fecha
+  if (!iso) return false
+  const d = new Date(iso)
+  if (isNaN(d)) return false
+  const local = d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+  const [a, m] = local.split('-').map(Number)
+  return m === Number(mes.value) && a === Number(anio.value)
+}
+
+const horasDelPeriodo = computed(() => horasData.value.filter(perteneceAlPeriodo))
+
 // Cargar registros de horas extras desde la base de datos MongoDB
 const cargarHoras = async () => {
   horasData.value = await horasExtrasService.obtenerTodas()
@@ -175,17 +214,23 @@ onUnmounted(() => {
   if (intervaloPolling) clearInterval(intervaloPolling)
 })
 
-const totalHoras = computed(() => {
-  return horasData.value.reduce((acc, curr) => acc + (Number(curr.cantidadHoras) || 0), 0)
-})
+// KPIs del periodo seleccionado
+const totalHoras = computed(() =>
+  Math.round(horasDelPeriodo.value.reduce((acc, curr) => acc + (Number(curr.cantidadHoras) || 0), 0) * 10) / 10
+)
 
 const totalMonto = computed(() => {
-  return horasData.value.reduce((acc, curr) => acc + (Number(curr.montoEstimado) || 0), 0)
+  return horasDelPeriodo.value.reduce((acc, curr) => acc + (Number(curr.montoEstimado) || 0), 0)
 })
+
+// Funcionarios distintos con horas en el periodo (un cuadro por usuario)
+const funcionariosDelPeriodo = computed(() =>
+  new Set(horasDelPeriodo.value.map((h) => String(h.cedula || h.funcionario || '—'))).size
+)
 
 // Registros con evidencia fotográfica esperando dictamen de revisión
 const evidenciasPorRevisar = computed(() =>
-  horasData.value.filter((h) => h.estadoEvidencia === 'PENDIENTE_REVISION').length
+  horasDelPeriodo.value.filter((h) => h.estadoEvidencia === 'PENDIENTE_REVISION').length
 )
 
 // Aprueba el registro de horas extras en la base de datos
@@ -258,6 +303,9 @@ const exportando = ref(false)
 const enviandoNomina = ref(false)
 
 const abrirModalPeriodo = () => {
+  // Arrancar en el mes que la hoja está mostrando (el usuario puede cambiarlo)
+  mesPeriodo.value = mes.value
+  anioPeriodo.value = anio.value
   modalPeriodoVisible.value = true
 }
 
@@ -336,6 +384,38 @@ const formatCurrency = (val) => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* Selector de periodo (mismo lenguaje visual del módulo) */
+.selector-periodo {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.texto-selector {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.selector {
+  width: 140px;
+}
+
+.selector-anio {
+  width: 100px;
+}
+
+.chip-periodo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #004884;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 2px 12px;
 }
 
 .kpi-grid {

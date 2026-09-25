@@ -7,7 +7,9 @@
         <span class="excel-tag">Acuasan_Control_HorasExtras_2026.xlsx</span>
         <span class="excel-sheet-badge">Hoja 1: Cuadrillas_Recargos</span>
       </div>
-      <span class="excel-meta">Total Registros en Hoja: {{ filteredList.length }}</span>
+      <span class="excel-meta">
+        Funcionarios en Hoja: {{ grupos.length }} · Registros: {{ registrosFiltrados.length }}
+      </span>
     </div>
 
     <!-- Excel Formula Bar (fx) -->
@@ -16,7 +18,7 @@
       <div class="fx-icon">fx</div>
       <div class="formula-input">
         <span class="formula-text">
-          =RESUMEN_HORAS_EXTRAS() &rarr; Horas Acumuladas: <strong>{{ totalHorasFiltradas }}h</strong> | Presupuesto Estimado: <strong>${{ formatCurrency(totalMontoFiltrado) }}</strong> | Total Registros: <strong>{{ filteredList.length }}</strong>
+          =CONSOLIDADO_POR_FUNCIONARIO() &rarr; Horas Acumuladas: <strong>{{ totalHorasFiltradas }}h</strong> | Presupuesto Estimado: <strong>${{ formatCurrency(totalMontoFiltrado) }}</strong> | Funcionarios: <strong>{{ grupos.length }}</strong> | Registros: <strong>{{ registrosFiltrados.length }}</strong>
         </span>
       </div>
     </div>
@@ -49,7 +51,7 @@
           <option value="ANULADO">⊘ Anulados</option>
           <option value="ENVIADO_NOMINA">📤 Enviados a nómina</option>
         </select>
-        <label class="check-evidencias" title="Mostrar solo registros con fotos de evidencia">
+        <label class="check-evidencias" title="Mostrar solo funcionarios con fotos de evidencia">
           <input type="checkbox" v-model="soloConEvidencias" />
           📷 Solo con evidencias
         </label>
@@ -74,38 +76,39 @@
             <th class="col-letter">B</th>
             <th class="col-letter text-center">C</th>
             <th class="col-letter text-center">D</th>
-            <th class="col-letter text-center">E</th>
-            <th class="col-letter text-end">F</th>
+            <th class="col-letter text-end">E</th>
+            <th class="col-letter text-center">F</th>
             <th class="col-letter text-center">G</th>
             <th class="col-letter text-center">H</th>
-            <th class="col-letter text-center">I</th>
-            <th class="col-letter text-center">J</th>
           </tr>
 
           <!-- Excel Main Header Row -->
           <tr class="excel-main-header-row">
             <th class="col-excel-index">#</th>
             <th>FUNCIONARIO & CÉDULA</th>
-            <th>CUADRILLA / ÁREA</th>
-            <th class="text-center">FECHA OPERACIÓN</th>
-            <th class="text-center">TIPO RECARGO</th>
-            <th class="text-center">HORAS</th>
+            <th>CUADRILLAS / ÁREAS</th>
+            <th class="text-center">REGISTROS</th>
+            <th class="text-center">HORAS DEL MES</th>
             <th class="text-end">MONTO ESTIMADO</th>
             <th class="text-center">EVIDENCIAS</th>
-            <th class="text-center">ESTADO</th>
-            <th class="text-center">ACCIONES</th>
+            <th class="text-center">ESTADOS DEL MES</th>
             <th class="text-center">DETALLE</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="filteredList.length === 0">
-            <td colspan="11" class="text-center py-5 text-muted font-mono">
-              [Hoja vacía] No se encontraron registros de horas extras que coincidan con la búsqueda.
+          <tr v-if="grupos.length === 0">
+            <td colspan="9" class="text-center py-5 text-muted font-mono">
+              [Hoja vacía] No se encontraron horas extras que coincidan con la búsqueda en este periodo.
             </td>
           </tr>
-          <template v-for="(hora, index) in filteredList" :key="hora.id || index">
+
+          <!-- Un solo cuadro por funcionario: al expandir se ven sus horas del mes -->
+          <template v-for="(grupo, index) in grupos" :key="grupo.clave">
             <tr
-              :class="{ 'row-even': index % 2 === 1, 'row-pending': hora.estado === 'PENDIENTE' }"
+              :class="{
+                'row-even': index % 2 === 1,
+                'row-pending': grupo.pendientes > 0
+              }"
             >
               <!-- Excel Row Number Header Column -->
               <td class="col-excel-index">{{ index + 1 }}</td>
@@ -113,114 +116,206 @@
               <!-- A: Funcionario & Cédula -->
               <td>
                 <div class="cell-user">
-                  <span class="user-name">{{ hora.funcionario }}</span>
-                  <span class="user-sub font-mono">C.C. {{ hora.cedula }}</span>
+                  <span class="user-name">{{ grupo.funcionario }}</span>
+                  <span class="user-sub font-mono">C.C. {{ grupo.cedula }}</span>
                 </div>
               </td>
 
-              <!-- B: Cuadrilla / Área -->
+              <!-- B: Cuadrillas / Áreas (únicas del mes) -->
               <td>
-                <span class="cell-dep">{{ hora.cuadrillaArea || hora.area }}</span>
+                <span class="cell-dep">{{ grupo.areas.join(' · ') || '—' }}</span>
               </td>
 
-              <!-- C: Fecha Operación -->
+              <!-- C: Registros del mes -->
               <td class="text-center">
-                <span class="font-mono small text-dark fw-bold">{{ formatearFechaCorta(hora.fechaOperacion || hora.fecha) }}</span>
+                <span class="hours-badge">{{ grupo.registros.length }}</span>
               </td>
 
-              <!-- D: Tipo Recargo -->
+              <!-- D: Horas totales del mes -->
               <td class="text-center">
-                <span class="badge-tipo" :class="'tipo-' + (hora.tipoRecargo || hora.tipo || '').toLowerCase()">
-                  {{ hora.tipoRecargo || hora.tipo }}
-                </span>
+                <span class="hours-badge hours-badge--total">{{ redondear(grupo.totalHoras) }}h</span>
               </td>
 
-              <!-- E: Horas -->
-              <td class="text-center">
-                <span class="hours-badge">{{ hora.cantidadHoras }}h</span>
-              </td>
-
-              <!-- F: Monto Estimado -->
+              <!-- E: Monto estimado acumulado -->
               <td class="text-end font-mono fw-bold text-success">
-                ${{ formatCurrency(hora.montoEstimado) }}
+                ${{ formatCurrency(grupo.totalMonto) }}
               </td>
 
-              <!-- G: Evidencias fotográficas -->
+              <!-- F: Evidencias fotográficas del mes -->
               <td class="text-center">
-                <button
-                  v-if="tieneEvidencias(hora)"
-                  type="button"
-                  class="badge-evidencias"
-                  :class="{ 'evidencia-pendiente': hora.estadoEvidencia === 'PENDIENTE_REVISION' }"
-                  title="Ver evidencias fotográficas del registro"
-                  @click="$emit('evidencias', hora)"
+                <span
+                  v-if="grupo.numEvidencias > 0"
+                  class="badge-evidencias badge-evidencias--resumen"
+                  :class="{ 'evidencia-pendiente': grupo.evidenciasPorRevisar > 0 }"
+                  :title="`${grupo.numEvidencias} fotos en ${grupo.registrosConEvidencias} registro(s) del mes`"
                 >
-                  📷 {{ hora.numEvidencias }}
-                </button>
+                  📷 {{ grupo.numEvidencias }}
+                </span>
                 <span v-else class="text-muted font-mono sin-evidencias">—</span>
               </td>
 
-              <!-- H: Estado -->
+              <!-- G: Resumen de estados del mes -->
               <td class="text-center">
-                <span class="status-badge" :class="'status-' + (hora.estado || '').toLowerCase()">
-                  {{ hora.estado }}
-                </span>
-              </td>
-
-              <!-- I: Acciones -->
-              <td class="text-center">
-                <div v-if="hora.estado === 'PENDIENTE'" class="d-inline-flex gap-1">
-                  <button
-                    type="button"
-                    class="btn-action btn-approve"
-                    @click="$emit('approve', hora)"
-                    title="Aprobar registro de horas"
-                  >
-                    ✔ Aprobar
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-action btn-reject"
-                    @click="$emit('reject', hora)"
-                    title="Rechazar registro de horas"
-                  >
-                    ✖ Rechazar
-                  </button>
+                <div class="chips-estados-usuario">
+                  <span
+                    v-for="n in grupo.chipsEstado"
+                    :key="n.estado"
+                    class="status-badge"
+                    :class="'status-' + n.estado.toLowerCase()"
+                    :title="`${n.total} ${n.etiqueta}`"
+                  >{{ n.icono }} {{ n.total }}</span>
                 </div>
-                <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">Procesado</span>
               </td>
 
-              <!-- J: Detalle expandible (desglose del clasificador) -->
+              <!-- H: Ver horas del mes del funcionario -->
               <td class="text-center">
                 <button
-                  v-if="tieneDetalle(hora)"
                   type="button"
                   class="btn-detalle"
-                  :title="filaAbierta(hora.id) ? 'Ocultar desglose del cálculo' : 'Ver desglose del cálculo'"
-                  @click="alternarFila(hora.id)"
+                  :title="usuarioAbierto(grupo.clave)
+                    ? 'Ocultar las horas del mes de este funcionario'
+                    : 'Ver las horas extras de este funcionario en el mes'"
+                  @click="alternarUsuario(grupo.clave)"
                 >
-                  {{ filaAbierta(hora.id) ? '▾' : '▸' }}
+                  {{ usuarioAbierto(grupo.clave) ? '▾' : '▸' }}
                 </button>
-                <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">—</span>
               </td>
             </tr>
 
-            <!-- Fila expandible: turno aplicado + desglose del clasificador -->
-            <tr v-if="filaAbierta(hora.id)" class="fila-detalle">
-              <td :colspan="11" class="celda-detalle">
-                <div class="d-flex flex-wrap gap-4">
-                  <div v-if="hora.turnoNombre">
-                    <span class="detalle-label">Turno aplicado</span>
-                    <span class="detalle-valor font-mono">🕒 {{ hora.turnoNombre }}</span>
-                  </div>
-                  <div v-for="campo in entradasDesglose(hora.recargoDesglose)" :key="campo.clave">
-                    <span class="detalle-label">{{ campo.etiqueta }}</span>
-                    <span class="detalle-valor font-mono">{{ campo.valor }}</span>
-                  </div>
-                  <div v-if="hora.justificacion">
-                    <span class="detalle-label">Justificación / descripción</span>
-                    <span class="detalle-valor">{{ hora.justificacion }}</span>
-                  </div>
+            <!-- Fila expandible: todas las horas extras del funcionario en el mes -->
+            <tr v-if="usuarioAbierto(grupo.clave)" class="fila-detalle">
+              <td colspan="9" class="celda-detalle">
+                <div class="detalle-titulo">
+                  🕑 Horas extras de <strong>{{ grupo.funcionario }}</strong> en el periodo ·
+                  {{ grupo.registros.length }} registro{{ grupo.registros.length === 1 ? '' : 's' }} ·
+                  {{ redondear(grupo.totalHoras) }}h
+                </div>
+
+                <div class="table-responsive table-responsive--anidada">
+                  <table class="excel-table tabla-anidada">
+                    <thead>
+                      <tr class="excel-main-header-row">
+                        <th class="text-center">FECHA</th>
+                        <th class="text-center">TIPO RECARGO</th>
+                        <th class="text-center">HORAS</th>
+                        <th class="text-end">MONTO</th>
+                        <th class="text-center">ESTADO</th>
+                        <th class="text-center">EVIDENCIAS</th>
+                        <th class="text-center">ACCIONES</th>
+                        <th class="text-center">DETALLE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template v-for="hora in grupo.registros" :key="hora.id || hora.fechaOperacion">
+                        <tr :class="{ 'row-pending': hora.estado === 'PENDIENTE' }">
+                          <!-- Fecha operación -->
+                          <td class="text-center">
+                            <span class="font-mono small text-dark fw-bold">
+                              {{ formatearFechaCorta(hora.fechaOperacion || hora.fecha) }}
+                            </span>
+                          </td>
+
+                          <!-- Tipo recargo -->
+                          <td class="text-center">
+                            <span
+                              class="badge-tipo"
+                              :class="'tipo-' + (hora.tipoRecargo || hora.tipo || '').toLowerCase()"
+                            >{{ hora.tipoRecargo || hora.tipo }}</span>
+                          </td>
+
+                          <!-- Horas -->
+                          <td class="text-center">
+                            <span class="hours-badge">{{ hora.cantidadHoras }}h</span>
+                          </td>
+
+                          <!-- Monto -->
+                          <td class="text-end font-mono fw-bold text-success">
+                            ${{ formatCurrency(hora.montoEstimado) }}
+                          </td>
+
+                          <!-- Estado -->
+                          <td class="text-center">
+                            <span
+                              class="status-badge"
+                              :class="'status-' + (hora.estado || '').toLowerCase()"
+                            >{{ hora.estado }}</span>
+                          </td>
+
+                          <!-- Evidencias: abre el visor con las fotos del registro -->
+                          <td class="text-center">
+                            <button
+                              v-if="tieneEvidencias(hora)"
+                              type="button"
+                              class="badge-evidencias"
+                              :class="{ 'evidencia-pendiente': hora.estadoEvidencia === 'PENDIENTE_REVISION' }"
+                              title="Ver evidencias fotográficas del registro"
+                              @click="$emit('evidencias', hora)"
+                            >
+                              📷 {{ hora.numEvidencias }}
+                            </button>
+                            <span v-else class="text-muted font-mono sin-evidencias">—</span>
+                          </td>
+
+                          <!-- Acciones -->
+                          <td class="text-center">
+                            <div v-if="hora.estado === 'PENDIENTE'" class="d-inline-flex gap-1">
+                              <button
+                                type="button"
+                                class="btn-action btn-approve"
+                                @click="$emit('approve', hora)"
+                                title="Aprobar registro de horas"
+                              >
+                                ✔ Aprobar
+                              </button>
+                              <button
+                                type="button"
+                                class="btn-action btn-reject"
+                                @click="$emit('reject', hora)"
+                                title="Rechazar registro de horas"
+                              >
+                                ✖ Rechazar
+                              </button>
+                            </div>
+                            <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">Procesado</span>
+                          </td>
+
+                          <!-- Desglose del cálculo -->
+                          <td class="text-center">
+                            <button
+                              v-if="tieneDetalle(hora)"
+                              type="button"
+                              class="btn-detalle"
+                              :title="filaAbierta(hora.id) ? 'Ocultar desglose del cálculo' : 'Ver desglose del cálculo'"
+                              @click="alternarFila(hora.id)"
+                            >
+                              {{ filaAbierta(hora.id) ? '▾' : '▸' }}
+                            </button>
+                            <span v-else class="text-muted font-mono" style="font-size: 0.72rem;">—</span>
+                          </td>
+                        </tr>
+
+                        <!-- Desglose expandible del registro individual -->
+                        <tr v-if="filaAbierta(hora.id)" class="fila-detalle fila-detalle--anidada">
+                          <td colspan="8" class="celda-detalle">
+                            <div class="d-flex flex-wrap gap-4">
+                              <div v-if="hora.turnoNombre">
+                                <span class="detalle-label">Turno aplicado</span>
+                                <span class="detalle-valor font-mono">🕒 {{ hora.turnoNombre }}</span>
+                              </div>
+                              <div v-for="campo in entradasDesglose(hora.recargoDesglose)" :key="campo.clave">
+                                <span class="detalle-label">{{ campo.etiqueta }}</span>
+                                <span class="detalle-valor font-mono">{{ campo.valor }}</span>
+                              </div>
+                              <div v-if="hora.justificacion">
+                                <span class="detalle-label">Justificación / descripción</span>
+                                <span class="detalle-valor">{{ hora.justificacion }}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
                 </div>
               </td>
             </tr>
@@ -235,6 +330,7 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps({
+  // Registros del periodo seleccionado por la vista contenedora
   items: {
     type: Array,
     default: () => []
@@ -248,7 +344,21 @@ const filtroTipo = ref('')
 const filtroEstado = ref('')
 const soloConEvidencias = ref(false)
 
-// Filas expandibles (Set de ids con el desglose abierto)
+// ── Expansiones ──────────────────────────────────────────────────────────────
+// Grupo abierto (cedula del funcionario) → filas de registros visibles
+const usuariosAbiertos = ref(new Set())
+const usuarioAbierto = (clave) => usuariosAbiertos.value.has(String(clave))
+const alternarUsuario = (clave) => {
+  const nueva = new Set(usuariosAbiertos.value)
+  if (nueva.has(String(clave))) {
+    nueva.delete(String(clave))
+  } else {
+    nueva.add(String(clave))
+  }
+  usuariosAbiertos.value = nueva
+}
+
+// Fila de registro con el desglose abierto (id del HoraExtra)
 const filasAbiertas = ref(new Set())
 const filaAbierta = (id) => filasAbiertas.value.has(String(id))
 const alternarFila = (id) => {
@@ -261,7 +371,8 @@ const alternarFila = (id) => {
   filasAbiertas.value = nueva
 }
 
-const filteredList = computed(() => {
+// ── Filtros de registros (se aplican antes de agrupar) ──────────────────────
+const registrosFiltrados = computed(() => {
   return props.items.filter((item) => {
     const termino = busqueda.value.toLowerCase()
     const matchBusqueda =
@@ -279,13 +390,92 @@ const filteredList = computed(() => {
   })
 })
 
-const totalHorasFiltradas = computed(() => {
-  return filteredList.value.reduce((acc, curr) => acc + (Number(curr.cantidadHoras) || 0), 0)
+// ── Agrupación por funcionario: un solo cuadro por usuario ──────────────────
+// La cédula es la clave natural (única por empleado); si un espejo viejo no la
+// trae, se cae al nombre para no perder el registro de la hoja.
+const ICONOS_ESTADO = {
+  PENDIENTE: '⏳',
+  APROBADO: '✔',
+  RECHAZADO: '✖',
+  EN_CURSO: '▶',
+  ANULADO: '⊘',
+  ENVIADO_NOMINA: '📤'
+}
+
+const ETIQUETAS_ESTADO = {
+  PENDIENTE: 'pendiente(s)',
+  APROBADO: 'aprobado(s)',
+  RECHAZADO: 'rechazado(s)',
+  EN_CURSO: 'en curso',
+  ANULADO: 'anulado(s)',
+  ENVIADO_NOMINA: 'enviado(s) a nómina'
+}
+
+const ORDEN_ESTADOS = Object.keys(ICONOS_ESTADO)
+
+const grupos = computed(() => {
+  const mapa = new Map()
+
+  for (const item of registrosFiltrados.value) {
+    const clave = String(item.cedula || item.funcionario || '—')
+    if (!mapa.has(clave)) {
+      mapa.set(clave, {
+        clave,
+        funcionario: item.funcionario || item.cedula || '—',
+        cedula: item.cedula || '—',
+        registros: [],
+        areasSet: new Set(),
+        totalHoras: 0,
+        totalMonto: 0,
+        numEvidencias: 0,
+        registrosConEvidencias: 0,
+        evidenciasPorRevisar: 0,
+        pendientes: 0,
+        porEstado: {}
+      })
+    }
+    const g = mapa.get(clave)
+    g.registros.push(item)
+    if (item.cuadrillaArea || item.area) g.areasSet.add(item.cuadrillaArea || item.area)
+    g.totalHoras += Number(item.cantidadHoras) || 0
+    g.totalMonto += Number(item.montoEstimado) || 0
+    if ((Number(item.numEvidencias) || 0) > 0) g.registrosConEvidencias++
+    g.numEvidencias += Number(item.numEvidencias) || 0
+    if (item.estadoEvidencia === 'PENDIENTE_REVISION') g.evidenciasPorRevisar++
+    if (item.estado) g.porEstado[item.estado] = (g.porEstado[item.estado] || 0) + 1
+    if (item.estado === 'PENDIENTE') g.pendientes++
+  }
+
+  const lista = [...mapa.values()].map((g) => ({
+    ...g,
+    areas: [...g.areasSet],
+    // Chips compactos de estado: ⏳ 2 · ✔ 1 (orden fijo, solo presentes)
+    chipsEstado: ORDEN_ESTADOS
+      .filter((e) => g.porEstado[e])
+      .map((e) => ({ estado: e, total: g.porEstado[e], icono: ICONOS_ESTADO[e], etiqueta: ETIQUETAS_ESTADO[e] }))
+  }))
+
+  // Orden cronológico dentro de cada funcionario
+  for (const g of lista) {
+    g.registros.sort((a, b) =>
+      new Date(a.fechaOperacion || a.fecha || 0) - new Date(b.fechaOperacion || b.fecha || 0)
+    )
+  }
+
+  // Mayor carga de horas primero: el funcionario con más horas encabeza la hoja
+  lista.sort((a, b) => b.totalHoras - a.totalHoras)
+  return lista
 })
 
-const totalMontoFiltrado = computed(() => {
-  return filteredList.value.reduce((acc, curr) => acc + (Number(curr.montoEstimado) || 0), 0)
-})
+const totalHorasFiltradas = computed(() =>
+  redondear(grupos.value.reduce((acc, g) => acc + g.totalHoras, 0))
+)
+
+const totalMontoFiltrado = computed(() =>
+  grupos.value.reduce((acc, g) => acc + g.totalMonto, 0)
+)
+
+const redondear = (valor) => Math.round((Number(valor) || 0) * 100) / 100
 
 const formatCurrency = (val) => {
   return new Intl.NumberFormat('es-CO').format(val || 0)
@@ -614,6 +804,13 @@ const entradasDesglose = (desglose) => {
   color: #0f172a;
 }
 
+/* Total de horas del funcionario en el mes */
+.hours-badge--total {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
 /* Insignia de evidencias (clic → modal de fotos) */
 .badge-evidencias {
   background: #ffffff;
@@ -631,6 +828,11 @@ const entradasDesglose = (desglose) => {
 .badge-evidencias:hover {
   background: #0e7490;
   color: #ffffff;
+}
+
+/* Resumen a nivel de funcionario: informativo (las fotos se abren por registro) */
+.badge-evidencias--resumen {
+  cursor: default;
 }
 
 /* Registro con evidencia pendiente de revisión: borde ámbar de atención */
@@ -661,6 +863,14 @@ const entradasDesglose = (desglose) => {
 .status-en_curso { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
 .status-anulado { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 .status-enviado_nomina { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+
+/* Chips de estado del funcionario: ⏳ 2 · ✔ 1 */
+.chips-estados-usuario {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
 
 .btn-action {
   padding: 3px 8px;
@@ -717,6 +927,41 @@ const entradasDesglose = (desglose) => {
   background: #f8fafc !important;
   border-left: 4px solid #73be28;
   padding: 8px 12px;
+}
+
+.detalle-titulo {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+/* Tabla anidada: registros individuales del funcionario */
+.table-responsive--anidada {
+  max-height: none;
+  min-height: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.tabla-anidada {
+  min-width: 900px;
+  font-size: 0.74rem;
+}
+
+.tabla-anidada .excel-main-header-row th {
+  font-size: 0.64rem;
+  padding: 4px 6px;
+}
+
+.tabla-anidada td {
+  padding: 5px 6px;
+}
+
+.fila-detalle--anidada .celda-detalle {
+  border-left-color: #00a3e0;
+  background: #f8fafc !important;
 }
 
 .detalle-label {
