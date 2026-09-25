@@ -1,15 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import authService from '../modules/auth/services/authService.js'
 
-// ─────────────────────────────────────────────────────────────────
-// BLOQUEO TEMPORAL DEL MÓDULO PQR (conflicto en curso, 2026-09-08).
-// Mientras esté en true, toda ruta /pqr/* redirige a una página de
-// "no disponible". Para reactivar el módulo: poner en false (y borrar
-// el guard y la ruta marcados abajo con [BLOQUEO-PQR]).
-// El código del módulo está además congelado (ver PROTECCION-PQR.md).
-// ─────────────────────────────────────────────────────────────────
-const PQR_BLOQUEADO = true
-
 const routes = [
   // --- LOGIN (PÚBLICO) ---
   {
@@ -51,43 +42,6 @@ const routes = [
     name: 'HorasExtrasDashboard',
     component: () => import('../modules/horas-extras/views/VistaDashboardHoras.vue'),
     meta: { title: 'Horas Extras - Dashboard', requiresAuth: true, roles: ['ENCARGADO', 'GERENCIA', 'ADMIN'] }
-  },
-  {
-    path: '/horas-extras/nomina',
-    name: 'HorasExtrasNomina',
-    component: () => import('../modules/horas-extras/views/VistaNominaHoras.vue'),
-    meta: { title: 'Horas Extras - Cierre de Nómina', requiresAuth: true, roles: ['GERENCIA', 'ADMIN'] }
-  },
-
-  // --- MÓDULO DE PQR ---
-  {
-    path: '/pqr/gestion',
-    name: 'GestionPQR',
-    component: () => import('../modules/pqr/views/VistaGestionPQR.vue'),
-    meta: { title: 'Gestión PQR Acuasan', requiresAuth: true, roles: ['OPERATIVO', 'GERENCIA', 'ADMIN'] }
-  },
-
-  // --- MÓDULO DE PQR: DASHBOARD EN TIEMPO REAL (WebSockets) ---
-  {
-    path: '/pqr/dashboard',
-    component: () => import('../modules/pqr/views/VistaDashboardPQR.vue'),
-    meta: { title: 'Dashboard PQR | Acuasan', requiresAuth: true, roles: ['OPERATIVO', 'GERENCIA', 'ADMIN'] },
-    children: [
-      {
-        path: 'atencion/:telefono',
-        name: 'AtencionEnVivo',
-        component: () => import('../modules/pqr/views/VistaAtencionEnVivo.vue'),
-        meta: { title: 'Atención en Vivo | Acuasan' }
-      }
-    ]
-  },
-
-  // --- [BLOQUEO-PQR] PÁGINA DE BLOQUEO TEMPORAL ---
-  {
-    path: '/pqr/no-disponible',
-    name: 'PQRBloqueada',
-    component: () => import('../views/VistaPQRBloqueada.vue'),
-    meta: { title: 'PQR no disponible', public: true }
   },
 
   // --- MÓDULO DE RADICADOS ---
@@ -148,13 +102,6 @@ const router = createRouter({
 
 // Navigation Guards — Control de Acceso por Autenticación y Rol
 router.beforeEach((to, from, next) => {
-  // [BLOQUEO-PQR] Toda navegación a /pqr/* cae en la página de bloqueo.
-  // Debe ir primero: la ruta de inicio del rol OPERATIVO es /pqr/gestion,
-  // así que redirigir "al inicio" no es opción (sería un bucle).
-  if (PQR_BLOQUEADO && to.path.startsWith('/pqr') && to.name !== 'PQRBloqueada') {
-    return next({ name: 'PQRBloqueada' })
-  }
-
   // Título dinámico en el navegador
   if (to.meta?.title) {
     document.title = `${to.meta.title} | Acuasan E.S.P.`
@@ -165,9 +112,13 @@ router.beforeEach((to, from, next) => {
 
   // Si la ruta es pública, dejar pasar
   if (to.meta?.public) {
-    // Si ya está autenticado y va al login, redirigir al módulo correspondiente
+    // Si ya está autenticado y va al login, redirigir al módulo correspondiente.
+    // Roles sin módulo asignado (p. ej. OPERATIVO tras retirar PQR) resuelven
+    // '/login': quedarse en el login evita el bucle infinito de redirección.
     if (estaAutenticado && to.name === 'Login') {
-      return next(authService.getRutaInicioPorRol(rolActual))
+      const inicio = authService.getRutaInicioPorRol(rolActual)
+      if (inicio !== '/login') return next(inicio)
+      return next()
     }
     return next()
   }

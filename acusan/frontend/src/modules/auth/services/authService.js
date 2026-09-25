@@ -4,7 +4,6 @@
  */
 
 import { reactive } from 'vue'
-import { conectarSocketPQR, desconectarSocket } from '../../../services/socket.service.js'
 
 const API_BASE = '/api/auth'
 const TOKEN_KEY = 'acuasan_token'
@@ -135,9 +134,6 @@ export const authService = {
     state.token = data.token
     state.usuario = data.usuario
 
-    // Alertas PQR en tiempo real: abrir el WebSocket apenas haya sesión
-    conectarSocketPQR(data.token)
-
     return data
   },
 
@@ -167,7 +163,6 @@ export const authService = {
    * Cierra sesión de forma reactiva limpiando el estado y localStorage
    */
   logout() {
-    desconectarSocket()
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     state.token = null
@@ -211,16 +206,18 @@ export const authService = {
 
     const rolNorm = (rol || this.getRol() || '').toUpperCase().trim()
 
-    // Mapeo dinámico de áreas institucionales de Acuasan (actuales y futuras)
+    // Mapeo dinámico de áreas institucionales de Acuasan (actuales y futuras).
+    // Roles cuyo módulo fue retirado (PQR) se quedan en el login: no tienen
+    // vista asignada y redirigirlos a una ruta con roles causaría un bucle.
     const mapaDestinatarios = {
       GERENCIA: '/permisos/gerencia',         // Consulta Gerencial & Visión Global 360°
       ENCARGADO: '/permisos/encargado',       // Permisos OCR & Horas Extras Operativas (Román)
-      OPERATIVO: '/pqr/gestion',              // Atención al Ciudadano PQR
+      OPERATIVO: '/login',                    // Módulo PQR retirado del sistema (2026-09-25)
       RADICADOS: '/radicados/gestion',        // Módulo exclusivo para Eliana
       ADMIN: '/admin/usuarios',               // Panel de Administración del Sistema
       TALENTO_HUMANO: '/permisos/encargado',
       CUADRILLAS_OBRA: '/horas-extras/gerencia',
-      ATENCION_CIUDADANA: '/pqr/gestion'
+      ATENCION_CIUDADANA: '/login'            // Módulo PQR retirado del sistema (2026-09-25)
     }
 
     return mapaDestinatarios[rolNorm] || '/radicados/gestion'

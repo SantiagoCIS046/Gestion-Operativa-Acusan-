@@ -49,7 +49,6 @@
           <option value="RECHAZADO">✖ Rechazados</option>
           <option value="EN_CURSO">▶ En curso</option>
           <option value="ANULADO">⊘ Anulados</option>
-          <option value="ENVIADO_NOMINA">📤 Enviados a nómina</option>
         </select>
         <label class="check-evidencias" title="Mostrar solo funcionarios con fotos de evidencia">
           <input type="checkbox" v-model="soloConEvidencias" />
@@ -238,15 +237,15 @@
                   </button>
                 </div>
 
-                <!-- Botón Salir / Seleccionar a otro funcionario -->
+                <!-- Único botón de salida del cuadro (ESC también cierra) -->
                 <button
                   type="button"
                   class="btn-cerrar-ejecutivo"
                   @click="cerrarModalFuncionario"
-                  title="Salir de este módulo para seleccionar a otro funcionario (ESC)"
+                  title="Salir del reporte para seleccionar otro funcionario (ESC)"
                 >
                   <span class="btn-cerrar-icon">✕</span>
-                  <span class="btn-cerrar-text">Salir / Cambiar Funcionario</span>
+                  <span class="btn-cerrar-text">Salir</span>
                 </button>
               </div>
             </div>
@@ -505,22 +504,12 @@
               </table>
             </div>
 
-            <!-- Footer Ejecutivo con Botón de Salir Destacado -->
+            <!-- Footer Ejecutivo: resumen del reporte (la salida vive solo en el encabezado) -->
             <div class="modal-ejecutivo-footer">
               <div class="footer-summary-text">
                 Registros listados: <strong>{{ registrosModalFiltrados.length }}</strong> de <strong>{{ funcionarioSeleccionado.registros.length }}</strong>
                 · Total Horas: <strong class="text-primary">{{ redondear(funcionarioSeleccionado.totalHoras) }}h</strong>
                 · Liquidación Estimada: <strong class="text-success">${{ formatCurrency(funcionarioSeleccionado.totalMonto) }}</strong>
-              </div>
-              <div class="footer-actions">
-                <button
-                  type="button"
-                  class="btn-salir-principal"
-                  @click="cerrarModalFuncionario"
-                  title="Salir de este módulo para seleccionar a otro funcionario"
-                >
-                  ⬅ Salir y Seleccionar Otro Funcionario
-                </button>
               </div>
             </div>
 
@@ -1973,7 +1962,7 @@ const entradasDesglose = (desglose) => {
   padding: 12px 22px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -1981,34 +1970,6 @@ const entradasDesglose = (desglose) => {
 .footer-summary-text {
   font-size: 0.78rem;
   color: #334155;
-}
-
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.btn-salir-principal {
-  background: linear-gradient(135deg, #003366, #004884);
-  color: #ffffff;
-  border: 1px solid #002244;
-  border-radius: 6px;
-  padding: 8px 18px;
-  font-size: 0.84rem;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 51, 102, 0.25);
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-.btn-salir-principal:hover {
-  background: linear-gradient(135deg, #002244, #003366);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 51, 102, 0.35);
-}
-.btn-salir-principal:active {
-  transform: translateY(0);
 }
 
 /* Transición Modal */

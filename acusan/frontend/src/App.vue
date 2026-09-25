@@ -68,29 +68,6 @@
                   <router-link to="/horas-extras/dashboard" class="nav-child" active-class="child-active">
                     <span class="child-icon">📊</span> Dashboard
                   </router-link>
-                  <router-link to="/horas-extras/nomina" class="nav-child" active-class="child-active">
-                    <span class="child-icon">🧾</span> Cierre de Nómina
-                  </router-link>
-                </div>
-              </transition>
-            </div>
-
-            <!-- PQR -->
-            <div class="nav-group">
-              <button
-                class="nav-group-header"
-                :class="{ 'group-active': menuExpandido.pqr }"
-                @click="toggleMenu('pqr')"
-              >
-                <span class="nav-icon">📋</span>
-                <span class="nav-text">PQR</span>
-                <span class="group-chevron" :class="{ 'chevron-open': menuExpandido.pqr }">›</span>
-              </button>
-              <transition name="slide-down">
-                <div v-if="menuExpandido.pqr" class="nav-group-children">
-                  <router-link to="/pqr/gestion" class="nav-child" active-class="child-active">
-                    <span class="child-icon">🖥️</span> Panel PQR
-                  </router-link>
                 </div>
               </transition>
             </div>
@@ -191,7 +168,7 @@
             <span class="active-indicator-dot"></span>
           </router-link>
 
-          <!-- GERENCIA: Historial de Horas Extras (visión completa, dashboard y cierre de nómina) -->
+          <!-- GERENCIA: Historial de Horas Extras (visión completa y dashboard) -->
           <div v-if="tieneAcceso(['GERENCIA'])" class="nav-group">
             <button
               class="nav-group-header"
@@ -210,36 +187,9 @@
                 <router-link to="/horas-extras/dashboard" class="nav-child" active-class="child-active">
                   <span class="child-icon">📊</span> Dashboard
                 </router-link>
-                <router-link to="/horas-extras/nomina" class="nav-child" active-class="child-active">
-                  <span class="child-icon">🧾</span> Cierre de Nómina
-                </router-link>
               </div>
             </transition>
           </div>
-
-          <!-- OPERATIVO: su área PQR (solo su área) -->
-          <router-link
-            v-if="tieneAcceso(['OPERATIVO'])"
-            to="/pqr/gestion"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">📋</span>
-            <span class="nav-text">PQR</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
-
-          <!-- GERENCIA: Historial de PQR (visión completa) -->
-          <router-link
-            v-if="tieneAcceso(['GERENCIA'])"
-            to="/pqr/gestion"
-            class="nav-btn"
-            active-class="active"
-          >
-            <span class="nav-icon">📋</span>
-            <span class="nav-text">Historial de PQR</span>
-            <span class="active-indicator-dot"></span>
-          </router-link>
 
           <!-- RADICADOS (Eliana y Ramón): su área operativa -->
           <div v-if="tieneAcceso(['RADICADOS', 'ENCARGADO'])" class="nav-group">
@@ -424,7 +374,6 @@ onUnmounted(() => {
 const menuExpandido = ref({
   permisos: false,
   horasExtras: false,
-  pqr: false,
   radicados: false
 })
 
@@ -433,7 +382,6 @@ const sincronizarMenuConRuta = (path) => {
   menuExpandido.value = {
     permisos: p.startsWith('/permisos'),
     horasExtras: p.startsWith('/horas-extras'),
-    pqr: p.startsWith('/pqr'),
     radicados: p.startsWith('/radicados')
   }
 }

@@ -1,11 +1,8 @@
 import { createApp } from 'vue'
-import { createPinia } from 'pinia'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './style.css'
 import App from './App.vue'
 import router from './router'
-import authService from './modules/auth/services/authService.js'
-import { conectarSocketPQR } from './services/socket.service.js'
 import { mantenerDespiertoMotorOCR } from './services/ocrWarmup.service.js'
 
 import SpecularButton from './components/SpecularButton.vue'
@@ -17,21 +14,12 @@ try {
 } catch (e) {}
 
 const app = createApp(App)
-const pinia = createPinia()
 
 // Registro global de componente SpecularButton
 app.component('SpecularButton', SpecularButton)
 
-// Pinia debe montarse antes de que socket.service use usePqrStore()
-app.use(pinia)
 app.use(router)
 app.mount('#app')
-
-// Si el operario ya tenía sesión (F5 / pestaña restaurada), reabrir el
-// WebSocket de alertas PQR sin pasar por el login
-if (authService.estaAutenticado()) {
-  conectarSocketPQR(authService.getToken())
-}
 
 // Motor OCR (Render free) despierto mientras la app esté en uso: primer ping
 // al abrir y latido cada 10 min — ningún escaneo paga el arranque en frío

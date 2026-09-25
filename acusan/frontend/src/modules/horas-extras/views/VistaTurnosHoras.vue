@@ -152,17 +152,18 @@
       </div>
     </div>
 
-    <!-- ══════════ FESTIVOS ══════════ -->
+    <!-- ══════════ FESTIVOS: CALENDARIO MENSUAL ══════════ -->
     <div class="card-modulo mt-3">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
-          <h2 class="titulo-seccion">Días festivos de Colombia</h2>
+          <h2 class="titulo-seccion">Calendario de días festivos de Colombia</h2>
           <p class="text-muted small mb-0">
-            Calendario usado por el clasificador para determinar recargos festivos.
+            Mes a mes, con el día de hoy y cada festivo señalado; es el calendario
+            que usa el clasificador para determinar recargos festivos.
           </p>
         </div>
         <div class="d-flex align-items-center gap-2">
-          <span v-if="totalFestivos > 0" class="badge-total">{{ totalFestivos }} festivos</span>
+          <span v-if="totalFestivos > 0" class="badge-total">{{ totalFestivos }} festivos en {{ anioFestivos }}</span>
           <select v-model.number="anioFestivos" class="form-select form-select-sm selector-anio">
             <option v-for="a in aniosDisponibles" :key="a" :value="a">{{ a }}</option>
           </select>
@@ -175,21 +176,69 @@
       <div v-else-if="festivos.length === 0" class="text-center text-muted py-4">
         No hay festivos para mostrar del año {{ anioFestivos }}.
       </div>
-      <div v-else class="row g-2">
-        <div v-for="f in festivos" :key="f.fecha" class="col-12 col-md-6 col-lg-4">
-          <div class="festivo-item">
-            <span class="festivo-fecha font-mono">{{ formatearFechaCorta(f.fecha) }}</span>
-            <span class="festivo-desc">{{ f.descripcion }}</span>
+      <template v-else>
+        <!-- Navegación del mes -->
+        <div class="cal-mes-nav">
+          <button class="cal-mes-btn" type="button" aria-label="Mes anterior" @click="cambiarMesVista(-1)">‹</button>
+          <div class="cal-mes-etiqueta">
+            <span class="cal-mes-nombre">{{ MESES_CAL[mesVista - 1] }} {{ anioFestivos }}</span>
+            <span class="cal-mes-sub">{{ festivosDelMes.length }} festivo{{ festivosDelMes.length === 1 ? '' : 's' }} en el mes</span>
+          </div>
+          <button class="cal-mes-btn" type="button" aria-label="Mes siguiente" @click="cambiarMesVista(1)">›</button>
+        </div>
+
+        <!-- Leyenda -->
+        <div class="cal-leyenda">
+          <span class="cal-leyenda-item"><span class="cal-dot cal-dot--hoy"></span> Día de hoy</span>
+          <span class="cal-leyenda-item"><span class="cal-dot cal-dot--festivo"></span> Día festivo</span>
+        </div>
+
+        <!-- Malla calendario Lun → Dom -->
+        <div class="cal-grid">
+          <div v-for="d in DIAS_SEMANA" :key="d" class="cal-head">{{ d }}</div>
+          <template v-for="(semana, i) in matrizCalendario" :key="i">
+            <div
+              v-for="(celda, j) in semana"
+              :key="j"
+              class="cal-celda"
+              :class="{
+                'cal-celda--vacia': !celda.dia,
+                'cal-celda--festivo': celda.festivo,
+                'cal-celda--hoy': celda.esHoy
+              }"
+              :title="celda.festivo
+                ? `Festivo: ${celda.descripcion}`
+                : (celda.dia ? `${celda.dia} de ${MESES_CAL[mesVista - 1]} de ${anioFestivos}` : '')"
+            >
+              <template v-if="celda.dia">
+                <div class="cal-celda-top">
+                  <span class="cal-dia">{{ celda.dia }}</span>
+                  <span v-if="celda.esHoy" class="cal-tag-hoy">HOY</span>
+                </div>
+                <span v-if="celda.festivo" class="cal-nombre-festivo">{{ celda.descripcion }}</span>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Flujo completo de festivos del mes -->
+        <div v-if="festivosDelMes.length" class="cal-lista">
+          <div v-for="f in festivosDelMes" :key="f.fecha" class="cal-lista-item">
+            <span class="cal-lista-fecha font-mono">{{ formatearFechaCorta(f.fecha) }}</span>
+            <span class="cal-lista-desc">{{ f.descripcion }}</span>
           </div>
         </div>
-      </div>
+        <div v-else class="text-center text-muted py-3 small">
+          {{ MESES_CAL[mesVista - 1] }} de {{ anioFestivos }} no tiene días festivos.
+        </div>
+      </template>
     </div>
 
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import PageHeader from '../../../components/PageHeader.vue'
 import horasExtrasService from '../services/horasExtrasService.js'
 import notificacionService from '../../../services/notificacionService.js'
@@ -302,14 +351,21 @@ const reactivarTurno = async (t) => {
   }
 }
 
-// ── Festivos ──
-// Año actual en horario de Colombia ("en-CA" produce YYYY-MM-DD)
-const anioColombiaActual = () =>
-  Number(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).split('-')[0])
+// ── Festivos: calendario mensual ──
+const MESES_CAL = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+]
+const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
-const anioActual = anioColombiaActual()
-const aniosDisponibles = [anioActual - 1, anioActual, anioActual + 1]
-const anioFestivos = ref(anioActual)
+// Fecha local de Colombia en YYYY-MM-DD ("en-CA" produce ese formato)
+const hoyColombia = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+const [anioHoy, mesHoy] = hoyColombia.split('-').map(Number)
+
+// Años consecutivos alrededor del actual: el calendario fluye sin saltos
+const aniosDisponibles = [anioHoy - 1, anioHoy, anioHoy + 1]
+const anioFestivos = ref(anioHoy)
+const mesVista = ref(mesHoy)
 const festivos = ref([])
 const totalFestivos = ref(0)
 const cargandoFestivos = ref(false)
@@ -330,6 +386,54 @@ const cargarFestivos = async () => {
     cargandoFestivos.value = false
   }
 }
+
+const cambiarMesVista = (delta) => {
+  let mes = mesVista.value + delta
+  if (mes < 1) mes = 12
+  if (mes > 12) mes = 1
+  mesVista.value = mes
+}
+
+// Festivos del mes visible, en orden cronológico (alimenta lista y celdas)
+const festivosDelMes = computed(() => {
+  const prefijo = `${anioFestivos.value}-${String(mesVista.value).padStart(2, '0')}`
+  return festivos.value
+    .filter((f) => String(f.fecha || '').startsWith(prefijo))
+    .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+})
+
+// Malla Lun→Dom del mes: celdas vacías en el desfase inicial y final.
+// "esHoy" solo enciende en el mes/año en curso (comparación plana YYYY-MM-DD).
+const matrizCalendario = computed(() => {
+  const anio = anioFestivos.value
+  const mes = mesVista.value
+  const diasDelMes = new Date(Date.UTC(anio, mes, 0)).getUTCDate()
+  // getUTCDay(): 0=domingo…6=sábado → desplazar a lunes=0
+  const desfase = (new Date(Date.UTC(anio, mes - 1, 1)).getUTCDay() + 6) % 7
+  const mapaFestivos = new Map(festivosDelMes.value.map((f) => [String(f.fecha), f.descripcion]))
+
+  const semanas = []
+  let semana = new Array(desfase).fill({})
+  for (let dia = 1; dia <= diasDelMes; dia++) {
+    const fechaISO = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+    semana.push({
+      dia,
+      fechaISO,
+      festivo: mapaFestivos.has(fechaISO),
+      descripcion: mapaFestivos.get(fechaISO) || '',
+      esHoy: fechaISO === hoyColombia
+    })
+    if (semana.length === 7) {
+      semanas.push(semana)
+      semana = []
+    }
+  }
+  if (semana.length) {
+    while (semana.length < 7) semana.push({})
+    semanas.push(semana)
+  }
+  return semanas
+})
 
 watch(anioFestivos, () => cargarFestivos())
 
@@ -484,27 +588,230 @@ const formatearFechaCorta = (fecha) => {
   font-size: 0.7rem;
   font-weight: 700;
   padding: 3px 10px;
+  white-space: nowrap;
 }
 
-.festivo-item {
+/* ── Calendario de festivos ── */
+.cal-mes-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.cal-mes-btn {
+  width: 34px;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #004884;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+.cal-mes-btn:hover {
+  background: #f0f9ff;
+  border-color: #004884;
+}
+
+.cal-mes-etiqueta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.cal-mes-nombre {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cal-mes-sub {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cal-leyenda {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.cal-leyenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.cal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.cal-dot--hoy {
+  background: #ffffff;
+  border: 2px solid #004884;
+}
+.cal-dot--festivo {
+  background: #fde68a;
+  border: 1px solid #f59e0b;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.cal-head {
+  text-align: center;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #64748b;
+  padding: 4px 0 5px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.cal-celda {
+  min-height: 62px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 4px 6px;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cal-celda--vacia {
+  background: #f8fafc;
+  border-style: dashed;
+  border-color: #edf2f7;
+}
+
+.cal-celda--festivo {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+.cal-celda--festivo:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);
+}
+
+.cal-celda--hoy {
+  border: 2px solid #004884;
+  box-shadow: 0 2px 8px rgba(0, 72, 132, 0.18);
+}
+.cal-celda--hoy .cal-dia {
+  color: #004884;
+}
+
+.cal-celda-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.cal-dia {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-family: monospace, monospace;
+}
+.cal-celda--festivo .cal-dia {
+  color: #b45309;
+}
+
+.cal-tag-hoy {
+  background: #004884;
+  color: #ffffff;
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.cal-nombre-festivo {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #92400e;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Listado completo de festivos del mes */
+.cal-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+}
+
+.cal-lista-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   background: #fffdf5;
   border: 1px solid #fde68a;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
 }
 
-.festivo-fecha {
-  font-size: 0.76rem;
+.cal-lista-fecha {
+  font-size: 0.74rem;
   font-weight: 700;
   color: #92400e;
   text-transform: capitalize;
 }
 
-.festivo-desc {
+.cal-lista-desc {
   font-size: 0.72rem;
   color: #64748b;
+}
+
+/* Móvil: celdas compactas; el nombre del festivo vive en el listado inferior */
+@media (max-width: 576px) {
+  .cal-celda {
+    min-height: 42px;
+    padding: 3px 4px;
+  }
+  .cal-nombre-festivo {
+    display: none;
+  }
+  .cal-dia {
+    font-size: 0.72rem;
+  }
+  .cal-tag-hoy {
+    font-size: 0.48rem;
+    padding: 1px 3px;
+  }
 }
 </style>

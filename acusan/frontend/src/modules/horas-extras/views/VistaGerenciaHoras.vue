@@ -40,11 +40,6 @@
         <span class="kpi-label">📷 Evidencias por Revisar</span>
         <span class="kpi-value">{{ evidenciasPorRevisar }}</span>
       </div>
-      <div v-if="puedeEnviarNomina" class="kpi-card kpi-accion">
-        <button type="button" class="btn-nomina" @click="abrirModalPeriodo">
-          📤 Enviar a Nómina…
-        </button>
-      </div>
     </div>
 
     <!-- Tabla de Horas Extras: un cuadro por funcionario, expandible por mes -->
@@ -65,7 +60,7 @@
       @revisada="alRevisarEvidencias"
     />
 
-    <!-- ══════════ MODAL DE PERIODO: EXPORTAR CSV / ENVIAR A NÓMINA ══════════ -->
+    <!-- ══════════ MODAL DE PERIODO: EXPORTAR CSV ══════════ -->
     <transition name="fade">
       <div
         v-if="modalPeriodoVisible"
@@ -78,7 +73,7 @@
           <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden bg-white">
             <div class="modal-header border-bottom py-2 px-3 bg-light d-flex align-items-center">
               <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.92rem;">
-                Reporte y Nómina del Periodo
+                Reporte del Periodo
               </h6>
               <button type="button" class="btn-close btn-close-sm ms-auto" @click="cerrarModalPeriodo"></button>
             </div>
@@ -116,17 +111,6 @@
                 <span v-if="exportando" class="spinner-border spinner-border-sm"></span>
                 ⬇ Descargar CSV
               </button>
-              <button
-                v-if="puedeEnviarNomina"
-                type="button"
-                class="btn btn-sm btn-primary fw-bold px-3 rounded-2 d-inline-flex align-items-center gap-1"
-                style="font-size: 0.8rem;"
-                :disabled="enviandoNomina"
-                @click="enviarANomina"
-              >
-                <span v-if="enviandoNomina" class="spinner-border spinner-border-sm"></span>
-                📤 Enviar a Nómina
-              </button>
             </div>
           </div>
         </div>
@@ -158,10 +142,8 @@ const hoyColombia = new Date().toLocaleDateString('en-CA', { timeZone: 'America/
 const [anioHoy, mesHoy] = hoyColombia.split('-').map(Number)
 const aniosDisponibles = [anioHoy - 1, anioHoy, anioHoy + 1]
 
-// El envío a Nómina es exclusivo de GERENCIA/ADMIN (la revisión de evidencias
-// corresponde a los tres roles que acceden a esta vista)
+// La revisión de evidencias corresponde a los tres roles que acceden a esta vista
 const rolActual = () => authService.getRol() || ''
-const puedeEnviarNomina = computed(() => ['GERENCIA', 'ADMIN'].includes(rolActual()))
 const puedeRevisarEvidencias = computed(() =>
   ['ENCARGADO', 'GERENCIA', 'ADMIN'].includes(rolActual())
 )
@@ -295,12 +277,11 @@ const alRevisarEvidencias = (data) => {
   }
 }
 
-// ── Modal de periodo (exportar CSV / enviar a Nómina) ──
+// ── Modal de periodo (exportar CSV del registro de horas) ──
 const modalPeriodoVisible = ref(false)
 const mesPeriodo = ref(mesHoy)
 const anioPeriodo = ref(anioHoy)
 const exportando = ref(false)
-const enviandoNomina = ref(false)
 
 const abrirModalPeriodo = () => {
   // Arrancar en el mes que la hoja está mostrando (el usuario puede cambiarlo)
@@ -330,47 +311,6 @@ const exportarReporte = async () => {
     lanzarAlertaBootstrap('danger', 'Error al exportar', e.message)
   } finally {
     exportando.value = false
-  }
-}
-
-// Cierre del periodo: APROBADO → ENVIADO_NOMINA + correo con CSV adjunto
-const enviarANomina = async () => {
-  const etiqueta = `${MESES[mesPeriodo.value - 1]} de ${anioPeriodo.value}`
-  const ok = window.confirm(
-    `¿Enviar a Nómina el periodo ${etiqueta}?\n\n` +
-    'Los registros APROBADOS del periodo quedarán marcados como ENVIADO_NOMINA ' +
-    'y se enviará el correo con el CSV adjunto.\n\nEsta acción no se puede deshacer.'
-  )
-  if (!ok) return
-  enviandoNomina.value = true
-  try {
-    const r = await horasExtrasService.enviarNomina(mesPeriodo.value, anioPeriodo.value)
-    const partes = []
-    if (r && Number.isFinite(Number(r.totalRegistros))) partes.push(`${r.totalRegistros} registros`)
-    if (r && Number.isFinite(Number(r.totalHoras))) {
-      partes.push(`${Math.round(Number(r.totalHoras) * 10) / 10}h`)
-    }
-    const detalle = partes.length ? `: ${partes.join(', ')}` : ''
-    if (r && r.emailError) {
-      lanzarAlertaBootstrap(
-        'warning',
-        'Enviado con error de correo',
-        `El periodo ${etiqueta} se cerró correctamente${detalle}, pero el correo falló: ${r.emailError}`
-      )
-    } else {
-      const correo = r && r.emailEnviadoA ? ` Correo enviado a ${r.emailEnviadoA}.` : ''
-      lanzarAlertaBootstrap(
-        'success',
-        'Enviado a Nómina',
-        `Periodo ${etiqueta} cerrado correctamente${detalle}.${correo}`
-      )
-    }
-    cerrarModalPeriodo()
-    await cargarHoras()
-  } catch (e) {
-    lanzarAlertaBootstrap('danger', 'Error al enviar a Nómina', e.message)
-  } finally {
-    enviandoNomina.value = false
   }
 }
 
@@ -440,12 +380,6 @@ const formatCurrency = (val) => {
   border-color: #fde68a;
 }
 
-.kpi-accion {
-  justify-content: center;
-  align-items: stretch;
-  flex: 0 0 auto;
-}
-
 .kpi-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -457,23 +391,6 @@ const formatCurrency = (val) => {
   font-size: 1.25rem;
   font-weight: 800;
   color: #0f172a;
-}
-
-.btn-nomina {
-  background: #004884;
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  padding: 8px 16px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.2s ease;
-}
-
-.btn-nomina:hover {
-  background: #00a3e0;
 }
 
 .fade-enter-active,

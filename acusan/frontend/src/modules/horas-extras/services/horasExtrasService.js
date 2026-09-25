@@ -446,28 +446,6 @@ export const horasExtrasService = {
     }
   },
 
-  /** Cierra el periodo: APROBADO → ENVIADO_NOMINA + EnvioNomina + correo. */
-  async enviarNomina(mes, anio) {
-    const res = await fetch(`${API_BASE}/nomina/enviar`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ mes: Number(mes), anio: Number(anio) })
-    })
-    const data = await leerJsonOk(res, 'No fue posible enviar el periodo a Nómina.')
-    return data.data || null
-  },
-
-  /** Historial de envíos a Nómina (EnvioNomina). */
-  async listarEnvios() {
-    const res = await fetch(`${API_BASE}/nomina/envios`, {
-      headers: authService.getAuthHeader()
-    })
-    const data = await leerJsonOk(res, 'No fue posible listar los envíos a Nómina.')
-    if (Array.isArray(data.data)) return data.data
-    if (data.data && Array.isArray(data.data.envios)) return data.data.envios
-    return []
-  },
-
   /** Agregados del dashboard mensual (la vista normaliza la forma). */
   async dashboard(mes, anio) {
     const res = await fetch(`${API_BASE}/dashboard${construirQuery({ mes, anio })}`, {
