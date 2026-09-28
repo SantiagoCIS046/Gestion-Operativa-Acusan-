@@ -18,7 +18,7 @@
       <div class="fx-icon">fx</div>
       <div class="formula-input">
         <span class="formula-text">
-          =CONSOLIDADO_POR_FUNCIONARIO() &rarr; Horas Acumuladas: <strong>{{ totalHorasFiltradas }}h</strong> | Presupuesto Estimado: <strong>${{ formatCurrency(totalMontoFiltrado) }}</strong> | Funcionarios: <strong>{{ grupos.length }}</strong> | Registros: <strong>{{ registrosFiltrados.length }}</strong>
+          =CONSOLIDADO_POR_FUNCIONARIO() &rarr; Horas Acumuladas: <strong>{{ totalHorasFiltradas }}h</strong> | Funcionarios: <strong>{{ grupos.length }}</strong> | Registros: <strong>{{ registrosFiltrados.length }}</strong>
         </span>
       </div>
     </div>
@@ -75,10 +75,9 @@
             <th class="col-letter">B</th>
             <th class="col-letter text-center">C</th>
             <th class="col-letter text-center">D</th>
-            <th class="col-letter text-end">E</th>
+            <th class="col-letter text-center">E</th>
             <th class="col-letter text-center">F</th>
             <th class="col-letter text-center">G</th>
-            <th class="col-letter text-center">H</th>
           </tr>
 
           <!-- Excel Main Header Row -->
@@ -88,7 +87,6 @@
             <th>CUADRILLAS / ÁREAS</th>
             <th class="text-center">REGISTROS</th>
             <th class="text-center">HORAS DEL MES</th>
-            <th class="text-end">MONTO ESTIMADO</th>
             <th class="text-center">EVIDENCIAS</th>
             <th class="text-center">ESTADOS DEL MES</th>
             <th class="text-center">REPORTE</th>
@@ -96,7 +94,7 @@
         </thead>
         <tbody>
           <tr v-if="grupos.length === 0">
-            <td colspan="9" class="text-center py-5 text-muted font-mono">
+            <td colspan="8" class="text-center py-5 text-muted font-mono">
               [Hoja vacía] No se encontraron horas extras que coincidan con la búsqueda en este periodo.
             </td>
           </tr>
@@ -133,11 +131,6 @@
               <!-- D: Horas totales del mes -->
               <td class="text-center">
                 <span class="hours-badge hours-badge--total">{{ redondear(grupo.totalHoras) }}h</span>
-              </td>
-
-              <!-- E: Monto estimado acumulado -->
-              <td class="text-end font-mono fw-bold text-success">
-                ${{ formatCurrency(grupo.totalMonto) }}
               </td>
 
               <!-- F: Evidencias fotográficas del mes -->
@@ -258,11 +251,6 @@
                 <span class="kpi-mini-sub">Acumulado del periodo</span>
               </div>
               <div class="kpi-mini-card">
-                <span class="kpi-mini-lbl">MONTO ESTIMADO</span>
-                <span class="kpi-mini-val text-success">${{ formatCurrency(funcionarioSeleccionado.totalMonto) }}</span>
-                <span class="kpi-mini-sub">Liquidación preliminar</span>
-              </div>
-              <div class="kpi-mini-card">
                 <span class="kpi-mini-lbl">JORNADAS</span>
                 <span class="kpi-mini-val text-dark">{{ funcionarioSeleccionado.registros.length }}</span>
                 <span class="kpi-mini-sub">Reportes individuales</span>
@@ -363,7 +351,6 @@
                     <th>HORARIO LABORADO</th>
                     <th>TIPO RECARGO</th>
                     <th class="text-center">HORAS</th>
-                    <th class="text-end">MONTO ESTIMADO</th>
                     <th class="text-center">ESTADO</th>
                     <th class="text-center">EVIDENCIAS</th>
                     <th class="text-center">ACCIONES</th>
@@ -372,7 +359,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="registrosModalFiltrados.length === 0">
-                    <td colspan="10" class="text-center py-4 text-muted font-mono">
+                    <td colspan="9" class="text-center py-4 text-muted font-mono">
                       No se encontraron registros que coincidan con la búsqueda o filtro.
                     </td>
                   </tr>
@@ -410,11 +397,6 @@
                       <!-- Cantidad Horas -->
                       <td class="text-center">
                         <span class="hours-badge-ejecutivo">{{ hora.cantidadHoras }}h</span>
-                      </td>
-
-                      <!-- Monto Estimado -->
-                      <td class="text-end font-mono fw-bold text-success">
-                        ${{ formatCurrency(hora.montoEstimado) }}
                       </td>
 
                       <!-- Estado -->
@@ -480,7 +462,7 @@
 
                     <!-- Desglose Técnico Expandido -->
                     <tr v-if="filaAbierta(hora.id)" class="fila-desglose-ejecutivo">
-                      <td colspan="10">
+                      <td colspan="9">
                         <div class="desglose-card-ejecutivo">
                           <div class="desglose-grid">
                             <div v-if="hora.turnoNombre" class="desglose-item">
@@ -509,7 +491,6 @@
               <div class="footer-summary-text">
                 Registros listados: <strong>{{ registrosModalFiltrados.length }}</strong> de <strong>{{ funcionarioSeleccionado.registros.length }}</strong>
                 · Total Horas: <strong class="text-primary">{{ redondear(funcionarioSeleccionado.totalHoras) }}h</strong>
-                · Liquidación Estimada: <strong class="text-success">${{ formatCurrency(funcionarioSeleccionado.totalMonto) }}</strong>
               </div>
             </div>
 
@@ -792,15 +773,26 @@ const ETIQUETAS_DESGLOSE = {
   horasFestivas: 'Horas festivas',
   recargo: 'Recargo',
   factor: 'Factor',
-  monto: 'Monto',
-  valorHora: 'Valor hora',
   turno: 'Turno'
 }
+
+const CLAVES_MONETARIAS = new Set([
+  'monto',
+  'valorHora',
+  'valor_hora',
+  'costo',
+  'valor',
+  'dinero',
+  'tarifa',
+  'salario',
+  'salarioBase',
+  'liquidacion'
+])
 
 const entradasDesglose = (desglose) => {
   if (!desglose || typeof desglose !== 'object' || Array.isArray(desglose)) return []
   return Object.entries(desglose)
-    .filter(([, valor]) => valor !== null && valor !== undefined && valor !== '')
+    .filter(([clave, valor]) => !CLAVES_MONETARIAS.has(clave) && valor !== null && valor !== undefined && valor !== '')
     .map(([clave, valor]) => {
       let texto
       if (typeof valor === 'number') {

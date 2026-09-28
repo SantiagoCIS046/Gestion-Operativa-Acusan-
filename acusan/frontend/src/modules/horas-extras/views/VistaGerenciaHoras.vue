@@ -29,8 +29,8 @@
         <span class="kpi-value">{{ totalHoras }}h</span>
       </div>
       <div class="kpi-card">
-        <span class="kpi-label">Presupuesto Ejecutado</span>
-        <span class="kpi-value text-emerald-600">${{ formatCurrency(totalMonto) }}</span>
+        <span class="kpi-label">📋 Jornadas Reportadas</span>
+        <span class="kpi-value text-primary">{{ horasDelPeriodo.length }}</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">👷 Funcionarios con Horas</span>
