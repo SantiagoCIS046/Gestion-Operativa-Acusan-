@@ -1054,7 +1054,7 @@ const entradasDesglose = (desglose) => {
   background: #f0f9ff !important;
 }
 
-.row-even td { background: #f8fafc; }
+.row-even td { background: #f7f9fb; }
 .row-pending td { background: #fffdf5; }
 
 .cell-user { display: flex; flex-direction: column; }
