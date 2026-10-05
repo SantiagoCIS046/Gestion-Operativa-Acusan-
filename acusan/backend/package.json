@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
+    "ocr": "python -X utf8 acuusan_ocr/server.py",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
   },

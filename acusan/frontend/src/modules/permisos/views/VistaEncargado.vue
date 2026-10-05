@@ -2094,7 +2094,9 @@ const cargarEnFormulario = async (item) => {
 // Cargar historial real desde el Backend / MongoDB Atlas
 const isLoadingHistorial = ref(false)
 
-const cargarHistorialDesdeBackend = async () => {
+// ajustarMesAutomatico: solo en la carga inicial (montaje). El sondeo periódico
+// lo pasa en false para jamás moverle el mes al operario mientras trabaja.
+const cargarHistorialDesdeBackend = async (ajustarMesAutomatico = true) => {
   isLoadingHistorial.value = true
   try {
     const lista = await permisosService.obtenerHistorialPermisos()
@@ -2102,7 +2104,7 @@ const cargarHistorialDesdeBackend = async () => {
 
     // Si el mes actualmente seleccionado no tiene registros pero hay registros en otros periodos,
     // ajustar automáticamente al mes con registros para que la tabla muestre los datos de inmediato
-    if (historialRemisiones.value.length > 0 && mesNumSeleccionado.value !== null) {
+    if (ajustarMesAutomatico && historialRemisiones.value.length > 0 && mesNumSeleccionado.value !== null) {
       const itemsNormalizados = historialRemisiones.value.map(normalizarItem).filter(Boolean)
       const hayEnMesActual = itemsNormalizados.some(
         it => (anioSeleccionado.value === null || it.anio === anioSeleccionado.value) && it.mesNum === mesNumSeleccionado.value
@@ -2123,10 +2125,15 @@ const cargarHistorialDesdeBackend = async () => {
 }
 
 const onStorageChange = (e) => {
+  // Clave REAL del espejo del servicio (STORAGE_KEY "acuasan_permisos_v2", una
+  // sola u): con la clave correcta la recarga cruzada entre pestañas es inmediata.
   if (e.key === 'acuasan_permisos_v2' || !e.key) {
     cargarHistorialDesdeBackend()
   }
 }
+
+// Sondeo periódico del historial (se arma en onMounted, se libera en onUnmounted)
+let intervaloRefrescoHistorial = null
 
 onMounted(async () => {
   // Reintentar publicar permisos guardados sin conexión (pendientes de sincronización)
@@ -2135,10 +2142,15 @@ onMounted(async () => {
   } catch (e) { /* sin conexión */ }
   cargarHistorialDesdeBackend()
   window.addEventListener('storage', onStorageChange)
+  // Sondeo silencioso cada 5s (mismo patrán que Gerencia): lo que se guarde
+  // desde otro equipo —incluidos los dictámenes de Gerencia— se ve al instante
+  // en este historial sin recargar la página.
+  intervaloRefrescoHistorial = setInterval(() => cargarHistorialDesdeBackend(false), 5000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('storage', onStorageChange)
+  if (intervaloRefrescoHistorial) clearInterval(intervaloRefrescoHistorial)
 })
 
 // Confirm and Send to Gerencia (Guardar en Base de Datos MongoDB & Formato 24h)
@@ -2240,6 +2252,19 @@ const confirmarYEnviar = async () => {
         nuevoRegistro,
         ...historialRemisiones.value.filter(r => r.id !== nuevoRegistro.id && r.radicado !== nuevoRegistro.radicado)
       ]
+
+      // Verlo AL INSTANTE: el historial filtra por mes/día y si la vista quedó
+      // en otro periodo el registro quedaba oculto tras guardar. Se lleva el
+      // calendario al mes del permiso recién radicado (y se libera el día
+      // seleccionado si no es el suyo) para que aparezca en la tabla ya.
+      const recienGuardado = normalizarItem(nuevoRegistro)
+      if (recienGuardado && recienGuardado.anio && recienGuardado.mesNum) {
+        anioSeleccionado.value = recienGuardado.anio
+        mesNumSeleccionado.value = recienGuardado.mesNum
+        if (diaSeleccionado.value !== null && diaSeleccionado.value !== recienGuardado.dia) {
+          diaSeleccionado.value = null
+        }
+      }
     }
 
     const nombreEnviado = formData.nombreFuncionario

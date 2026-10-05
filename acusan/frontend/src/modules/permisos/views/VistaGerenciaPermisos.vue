@@ -1079,9 +1079,16 @@ const lanzarAlertaBootstrap = (tipo, titulo, mensaje, duracion = 4000) => {
 // Vista: 'excel' | 'calendario' | 'resumen'
 const vistaModo = ref("excel");
 
-// Mes y Año seleccionado (Por defecto: Agosto 2026)
-const mesSeleccionado = ref(7); // 0-indexed: 7 = Agosto
-const anioSeleccionado = ref(2026);
+// Mes y Año seleccionado (por defecto: el mes CORRIENTE — lo que radique el
+// Encargado hoy cae directo en esta vista, sin navegar meses para verlo)
+const fechaHoyGerencia = new Date();
+const mesSeleccionado = ref(fechaHoyGerencia.getMonth()); // 0-indexed
+const anioSeleccionado = ref(fechaHoyGerencia.getFullYear());
+
+// ¿Gerencia navegó manualmente a otro mes? Mientras sea false, la vista salta
+// sola al mes de un permiso recién radicado; con navegación manual se respeta
+// el periodo elegido (el aviso igual informa lo nuevo).
+const mesNavegadoManualmente = ref(false);
 
 const modalDetalleVisible = ref(false);
 const permisoSeleccionado = ref(null);
@@ -1115,6 +1122,7 @@ const shortName = (nombreCompleto) => {
 const mesNombreActual = computed(() => mesesNombres[mesSeleccionado.value]);
 
 const cambiarMes = (delta) => {
+  mesNavegadoManualmente.value = true;
   let nuevoMes = mesSeleccionado.value + delta;
   if (nuevoMes > 11) {
     mesSeleccionado.value = 0;
@@ -1130,11 +1138,49 @@ const cambiarMes = (delta) => {
 // Cargar permisos oficiales del sistema.
 // silencioso=true (polling/visibilitychange): no toca `cargando` para que el
 // botón Sincronizar no parpadee cada 5 segundos.
+const radicadosConocidos = new Set();
+let primeraCargaGerencia = true;
+
 const cargarPermisos = async (silencioso = false) => {
   if (!silencioso) cargando.value = true;
   try {
     const lista = await permisosService.obtenerHistorialPermisos();
     permisos.value = lista || [];
+
+    // Detectar lo NUEVO que publica el Encargado: avisa con una alerta y (si
+    // Gerencia no navegó manualmente a otro periodo) salta al mes del permiso
+    // recién radicado para verlo AL INSTANTE en la tabla.
+    const claveDe = (p) => String(p.radicado || p.id || "");
+    const nuevos = permisos.value.filter(
+      (p) => claveDe(p) && !radicadosConocidos.has(claveDe(p)),
+    );
+    for (const p of permisos.value) {
+      if (claveDe(p)) radicadosConocidos.add(claveDe(p));
+    }
+
+    // La primera carga solo registra la línea base (todo lo ya radicado);
+    // aviso y salto aplican a lo que llegue NUEVO después de abierta la vista.
+    if (!primeraCargaGerencia && nuevos.length > 0) {
+      const nuevo = nuevos[0]; // el listado viaja más reciente primero
+      const fechaNuevo = parsearFechaDMY(nuevo.fechaInicio);
+      const mesNuevo = fechaNuevo.getMonth();
+      const anioNuevo = fechaNuevo.getFullYear();
+      if (
+        !mesNavegadoManualmente.value &&
+        Number.isFinite(mesNuevo) &&
+        (mesNuevo !== mesSeleccionado.value || anioNuevo !== anioSeleccionado.value)
+      ) {
+        mesSeleccionado.value = mesNuevo;
+        anioSeleccionado.value = anioNuevo;
+      }
+      lanzarAlertaBootstrap(
+        "info",
+        "Nuevo permiso radicado",
+        `#${nuevo.radicado || ""} — ${nuevo.funcionario || nuevo.nombreFuncionario || "Funcionario"} (${nuevo.tipoPermiso || nuevo.tipo || "Permiso"}). Ya visible en el tablero.`,
+        6000,
+      );
+    }
+    primeraCargaGerencia = false;
   } catch (error) {
     console.error("Error al cargar permisos:", error);
   } finally {
