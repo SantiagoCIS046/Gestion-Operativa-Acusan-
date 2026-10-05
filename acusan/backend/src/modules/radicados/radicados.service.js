@@ -531,53 +531,79 @@ export const RadicadosService = {
       contexto, diasParaVencer, archivoNombre, archivoBase64
     } = datos
 
-    const numeroRadicado = await this._generarNumeroRadicado()
     const dias = Math.min(Math.max(parseInt(diasParaVencer, 10) || 10, 1), 365)
     const fechaVencimiento = new Date(Date.now() + dias * 24 * 60 * 60 * 1000)
 
-    return prisma.radicado.create({
-      data: {
-        numeroRadicado,
-        idLocal: datos.idLocal || `rad_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        peticionario: limpiar(peticionario),
-        dependencia: dependencia ? limpiar(dependencia) : 'ACUASAN E.S.P.',
-        destinatario: destinatario ? limpiar(destinatario) : null,
-        asunto: asunto ? limpiar(asunto) : null,
-        referencia: referencia ? limpiar(referencia) : null,
-        fechaDocumento: fechaDocumento ? limpiar(fechaDocumento) : null,
-        lugarFecha: lugarFecha ? limpiar(lugarFecha) : null,
-        numeroRadicadoPdf: numeroRadicadoPdf ? limpiar(numeroRadicadoPdf) : null,
-        registradoPor: registradoPor || null,
-        contexto: contexto ? limpiar(contexto) : null,
-        estado: 'Pendiente',
-        fechaVencimiento,
-        archivoNombre: archivoNombre || null,
-        archivoBase64: validarArchivoBase64(archivoBase64)
-      },
-      select: SELECT_PUBLICO
-    })
+    // Numeración bajo concurrencia: el escaneo inicial encuentra el primer
+    // consecutivo libre del año, pero varias radicaciones simultáneas pueden
+    // quedarse con el mismo candidato. El unique de numeroRadicado es el
+    // árbitro (P2002 al perdedor), que AVANZA AL SIGUIENTE consecutivo y
+    // reintenta: cada colisión prueba exactamente qué número quedó ocupado,
+    // sin releer conteos que pueden venir quedados. Así jamás hay duplicados
+    // y la ráfaga completa de radicaciones concurrentes siempre converge.
+    const campos = {
+      idLocal: datos.idLocal || `rad_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      peticionario: limpiar(peticionario),
+      dependencia: dependencia ? limpiar(dependencia) : 'ACUASAN E.S.P.',
+      destinatario: destinatario ? limpiar(destinatario) : null,
+      asunto: asunto ? limpiar(asunto) : null,
+      referencia: referencia ? limpiar(referencia) : null,
+      fechaDocumento: fechaDocumento ? limpiar(fechaDocumento) : null,
+      lugarFecha: lugarFecha ? limpiar(lugarFecha) : null,
+      numeroRadicadoPdf: numeroRadicadoPdf ? limpiar(numeroRadicadoPdf) : null,
+      registradoPor: registradoPor || null,
+      contexto: contexto ? limpiar(contexto) : null,
+      estado: 'Pendiente',
+      fechaVencimiento,
+      archivoNombre: archivoNombre || null,
+      archivoBase64: validarArchivoBase64(archivoBase64)
+    }
+
+    const anio = new Date().getFullYear()
+    let numeroRadicado = await this._generarNumeroRadicado()
+    for (let intento = 0; intento < 40; intento++) {
+      try {
+        return await prisma.radicado.create({
+          data: { ...campos, numeroRadicado },
+          select: SELECT_PUBLICO
+        })
+      } catch (error) {
+        // Solo la colisión del consecutivo se reintenta (avanzando al
+        // siguiente); cualquier otro error (archivo inválido, BD caída)
+        // sube tal cual. El tope de 40 es imposible de alcanzar con la
+        // operación real y solo evita girar ante una BD dañada.
+        if (error?.code !== 'P2002') throw error
+        const siguiente = parseInt(numeroRadicado.split('-')[2], 10) + 1
+        numeroRadicado = `RAD-${anio}-${String(siguiente).padStart(5, '0')}`
+      }
+    }
+    throw new Error('No fue posible generar un número de radicado único. Intente de nuevo.')
   },
 
   /**
-   * Numeración consecutiva por año: RAD-2026-00001. El unique del modelo es
-   * la red de seguridad ante una carrera entre dos radicaciones simultáneas.
+   * Numeración consecutiva por año: RAD-2026-00001. Escanea los primeros
+   * candidatos del año y devuelve el primero libre (también salta huecos
+   * dejados por eliminaciones). Si los 5 candidatos vienen ocupados — ráfaga
+   * de radicaciones simultáneas tomándolos en pleno vuelo — devuelve el
+   * último probado: crear() avanza consecutivo por consecutivo ante el P2002
+   * del unique, que es el árbitro final de la carrera.
    */
   async _generarNumeroRadicado() {
     const anio = new Date().getFullYear()
     const desde = new Date(`${anio}-01-01T00:00:00.000Z`)
+    const count = await prisma.radicado.count({
+      where: { fechaRadicacion: { gte: desde } }
+    })
+    let candidato = ''
     for (let intento = 0; intento < 5; intento++) {
-      const count = await prisma.radicado.count({
-        where: { fechaRadicacion: { gte: desde } }
-      })
-      const consecutivo = String(count + 1 + intento).padStart(5, '0')
-      const candidato = `RAD-${anio}-${consecutivo}`
+      candidato = `RAD-${anio}-${String(count + 1 + intento).padStart(5, '0')}`
       const existe = await prisma.radicado.findUnique({
         where: { numeroRadicado: candidato },
         select: { id: true }
       })
       if (!existe) return candidato
     }
-    throw new Error('No fue posible generar un número de radicado único. Intente de nuevo.')
+    return candidato
   },
 
   /**
@@ -1344,34 +1370,38 @@ export const RadicadosService = {
     const { numeroOficio, destinatario, asunto, fechaDocumento, lugarFecha, firmante,
       observaciones, registradoPor, archivoNombre, archivoBase64 } = datos
 
-    const respuesta = await prisma.respuestaRadicado.create({
-      data: {
-        radicadoId,
-        numeroRadicado: radicado.numeroRadicado,
-        numeroOficio: numeroOficio ? limpiar(numeroOficio) : null,
-        destinatario: destinatario ? limpiar(destinatario) : null,
-        asunto: asunto ? limpiar(asunto) : null,
-        fechaDocumento: fechaDocumento ? limpiar(fechaDocumento) : null,
-        lugarFecha: lugarFecha ? limpiar(lugarFecha) : null,
-        firmante: firmante ? limpiar(firmante) : null,
-        observaciones: observaciones ? limpiar(observaciones) : null,
-        registradoPor: registradoPor || null,
-        archivoNombre: archivoNombre || null,
-        archivoBase64: validarArchivoBase64(archivoBase64)
-      },
-      select: this._SELECT_RESPUESTA
-    })
-
-    // La respuesta archivada resuelve el radicado (salvo que ya lo esté).
-    if (radicado.estado !== 'Resuelto') {
-      await prisma.radicado.update({
-        where: { id: radicadoId },
-        data: { estado: 'Resuelto' },
-        select: { id: true }
+    // Escritura atómica: la respuesta y el estado Resuelto del padre van en
+    // la misma transacción — si algo falla no queda una respuesta archivada
+    // con el radicado Pendiente (ni viceversa).
+    return prisma.$transaction(async (tx) => {
+      const respuesta = await tx.respuestaRadicado.create({
+        data: {
+          radicadoId,
+          numeroRadicado: radicado.numeroRadicado,
+          numeroOficio: numeroOficio ? limpiar(numeroOficio) : null,
+          destinatario: destinatario ? limpiar(destinatario) : null,
+          asunto: asunto ? limpiar(asunto) : null,
+          fechaDocumento: fechaDocumento ? limpiar(fechaDocumento) : null,
+          lugarFecha: lugarFecha ? limpiar(lugarFecha) : null,
+          firmante: firmante ? limpiar(firmante) : null,
+          observaciones: observaciones ? limpiar(observaciones) : null,
+          registradoPor: registradoPor || null,
+          archivoNombre: archivoNombre || null,
+          archivoBase64: validarArchivoBase64(archivoBase64)
+        },
+        select: this._SELECT_RESPUESTA
       })
-    }
 
-    return respuesta
+      // La respuesta archivada resuelve el radicado (salvo que ya lo esté).
+      if (radicado.estado !== 'Resuelto') {
+        await tx.radicado.update({
+          where: { id: radicadoId },
+          data: { estado: 'Resuelto' },
+          select: { id: true }
+        })
+      }
+      return respuesta
+    })
   },
 
   /**
