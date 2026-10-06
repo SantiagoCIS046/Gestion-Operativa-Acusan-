@@ -265,9 +265,6 @@
 
       <!-- Main Content Area -->
       <div class="main-wrapper">
-        <!-- Acuasan Brand Top Stripe -->
-        <div class="brand-color-stripe"></div>
-
         <!-- Dynamic Page View -->
         <main class="page-content">
           <div class="content-container">
@@ -807,12 +804,6 @@ const confirmarCerrarSesion = () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-
-.brand-color-stripe {
-  height: 3px;
-  width: 100%;
-  background: linear-gradient(90deg, #73be28 0%, #00a3e0 50%, #f59e0b 100%);
 }
 
 /* === TOP HEADER === */

@@ -13,6 +13,14 @@ router.post(
   OcrController.escanear
 )
 
+// Parseo de permisos con texto ya extraído por el navegador (producción sin
+// motor Python): síncrono y barato, no requiere flujo de trabajos.
+router.post(
+  '/extraer-campos-permisos',
+  verificarRol('ENCARGADO', 'ADMIN'),
+  OcrController.extraerCamposPermisos
+)
+
 // Flujo asíncrono para permisos (el escaneo tarda más que la vida útil de
 // una conexión del lambda): enrolar trabajo + consultar estado por jobId.
 // Sin RADICADOS en los roles: radicados conserva el flujo síncrono.

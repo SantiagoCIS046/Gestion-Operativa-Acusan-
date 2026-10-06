@@ -4,11 +4,30 @@
 // comprimido para BD), lo reenvía al servicio Python y devuelve los campos
 // interpretados. Contrato de respuesta:
 //   { success, data: { metodo, paginas, texto, tipo?, campos, confianza?, faltantes? } }
+//
+// POST /api/ocr/extraer-campos-permisos — parseo Node puro para cuando el OCR
+// lo hizo el NAVEGADOR (producción sin motor Python): el frontend ya tiene el
+// texto y solo necesita los campos del formulario de permisos.
 
 import { OcrService } from './ocr.service.js'
+import { parsearTextoPermiso, evaluarCamposExtraidos } from './parserPermisos.js'
 import logger from '../../config/logger.js'
 
 const DOMINIOS_VALIDOS = ['permisos', 'radicados']
+
+/**
+ * Delimita el texto de la página 1 dentro del texto combinado que produce el
+ * OCR del navegador: las páginas OCR viajan como "--- PÁGINA n ---" y puede
+ * haber texto digital previo al primer separador. Sin separadores (lectura
+ * digital directa o imagen) vale el texto completo.
+ */
+const extraerTextoPagina1 = (texto) => {
+  const partes = String(texto || '').split('--- PÁGINA 1 ---')
+  if (partes.length === 1) return texto
+  const digitalPrevio = (partes[0] || '').trim()
+  const pagina1 = String(partes[1] || '').split(/\n--- PÁGINA 2 ---/)[0].trim()
+  return (digitalPrevio ? `${digitalPrevio}\n\n` : '') + pagina1
+}
 
 export const OcrController = {
   async escanear (req, res) {
@@ -57,6 +76,46 @@ export const OcrController = {
       return res.status(500).json({
         success: false,
         message: `Error en el puente del motor OCR: ${error.message}`
+      })
+    }
+  },
+
+  /**
+   * POST /api/ocr/extraer-campos-permisos — parseo de permisos SIN motor
+   * Python: el navegador ya extrajo el texto (OCR local o lectura digital)
+   * y este endpoint corre el parser JS puro (restaurado de a74ec93, corpus
+   * 49/49) que llena los campos del formulario del Encargado. Es síncrono
+   * y barato (<5 ms): no necesita flujo de trabajos.
+   */
+  async extraerCamposPermisos (req, res) {
+    try {
+      const { texto, nombreArchivo, metodo } = req.body || {}
+
+      if (typeof texto !== 'string' || !texto.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Se requiere 'texto' (salida del OCR del navegador)"
+        })
+      }
+
+      const campos = parsearTextoPermiso(texto, nombreArchivo || '', extraerTextoPagina1(texto))
+      const { faltantes, confianza } = evaluarCamposExtraidos(campos)
+
+      logger.info('OCR-JS', 'PARSEO PERMISOS OK', `${metodo || 'navegador'} · confianza ${confianza}% · ${nombreArchivo || '(sin nombre)'}`)
+      return res.status(200).json({
+        success: true,
+        data: {
+          metodo: `Navegador · ${metodo || 'OCR local'} + parser Node`,
+          campos,
+          confianza,
+          faltantes
+        }
+      })
+    } catch (error) {
+      logger.error('OCR-JS', 'ERROR 500', error.message)
+      return res.status(500).json({
+        success: false,
+        message: `Error parseando el permiso: ${error.message}`
       })
     }
   },

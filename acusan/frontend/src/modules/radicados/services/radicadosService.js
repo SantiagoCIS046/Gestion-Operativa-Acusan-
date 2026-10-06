@@ -298,16 +298,35 @@ export const radicadosService = {
   /**
    * Escaneo con el motor OCR Python: envía el documento ORIGINAL en base64
    * (no el comprimido para BD) y recibe texto + tipo + campos ya interpretados
-   * — no se vuelve a llamar a extraer-campos. Motor principal; si falla
-   * (503 caído / 504 timeout / sin texto) el llamador cae al OCR del
-   * navegador, por eso los errores salen tipados en error.codigo.
+   * — no se vuelve a llamar a extraer-campos. Motor de desarrollo/local; si
+   * falla (503 caído / 504 timeout / sin texto / techo de 12 s) el llamador
+   * cae al OCR del navegador, por eso los errores salen tipados en
+   * error.codigo. El techo evita pagar un motor remoto dormido o colgado:
+   * en producción (OCR_PY_URL=DISABLED) el 503 llega en milisegundos.
    */
   async escanearDocumento(dataUrl, nombreArchivo, mimeType, { tipo = '' } = {}) {
-    const res = await fetch('/api/ocr/escanear', {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ archivoBase64: dataUrl, nombreArchivo, mimeType, dominio: 'radicados', tipo })
-    })
+    const controlador = new AbortController()
+    const reloj = setTimeout(() => controlador.abort(), 12_000)
+    let res
+    try {
+      res = await fetch('/api/ocr/escanear', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ archivoBase64: dataUrl, nombreArchivo, mimeType, dominio: 'radicados', tipo }),
+        signal: controlador.signal
+      })
+    } catch (e) {
+      const error = new Error(
+        e?.name === 'AbortError'
+          ? 'Motor OCR Python no respondió a tiempo (12 s)'
+          : 'Motor OCR Python no disponible'
+      )
+      error.codigo = 'no-disponible'
+      error.status = 504
+      throw error
+    } finally {
+      clearTimeout(reloj)
+    }
     if (res.status === 503 || res.status === 504) {
       const error = new Error('Motor OCR Python no disponible')
       error.codigo = 'no-disponible'

@@ -52,7 +52,7 @@
           type="button"
           class="btn btn-outline-primary btn-sm py-0 px-2 flex-shrink-0"
           style="font-size: 0.64rem;"
-          @click="precalentarMotorOCR(), inputArchivo && inputArchivo.click()"
+          @click="precalentarOCR(), inputArchivo && inputArchivo.click()"
         >
           {{ archivoNombre ? '🔄 Cambiar' : '📎 Seleccionar' }}
         </button>
@@ -267,7 +267,7 @@ import respuestasService from '../services/respuestasService.js'
 import { radicadosService } from '../services/radicadosService.js'
 import ocrRadicados from '../services/ocrRadicados.js'
 import compressorRadicados from '../services/compressorRadicados.js'
-import precalentarMotorOCR from '../../../services/ocrWarmup.service.js'
+import precalentarOCR from '../../../services/ocrWarmup.service.js'
 import authService from '../../auth/services/authService.js'
 
 /**
@@ -348,7 +348,7 @@ const CAMPOS_LEIBLES = [
 const iniciarArchivar = () => {
   formAbierto.value = true
   if (!archivoDataUrl.value) {
-    precalentarMotorOCR()
+    precalentarOCR()
     inputArchivo.value?.click()
   }
 }
@@ -357,7 +357,7 @@ const onArchivo = (event) => {
   const file = event.target.files[0]
   event.target.value = '' // permite re-seleccionar el mismo archivo
   if (!file) return
-  precalentarMotorOCR()
+  precalentarOCR()
   formAbierto.value = true
 
   // Previsualización inmediata con el original

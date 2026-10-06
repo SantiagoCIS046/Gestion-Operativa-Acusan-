@@ -77,7 +77,13 @@ const escanearEnPython = async (payload) => {
     }
 
     if (!respuesta.ok) {
-      // 4xx/5xx del Python: se propaga como 502 con el mensaje original
+      // 4xx/5xx del Python: se propaga como 502 con el mensaje original.
+      // NOTA: un Render free DORMIDO responde 503 rápido mientras arranca y
+      // llega aquí como 'error-python'. NO se remapea a 503 a propósito: el
+      // contrato de este mapeo lo fija ocrBridge.test.mjs y el frontend
+      // tolera CUALQUIER error del intento Python como señal de caer al OCR
+      // del navegador (en producción OCR_PY_URL=DISABLED cortocircuita antes
+      // de abrir conexión, así que este caso solo se ve en desarrollo).
       return {
         status: 502,
         codigo: 'error-python',

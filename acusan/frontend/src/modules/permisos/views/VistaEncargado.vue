@@ -42,24 +42,24 @@
       <!-- Top Action & KPI Header Compacto -->
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <!-- KPI Card Compacto -->
-        <div class="card border shadow-sm rounded-2 px-2.5 py-1.5 bg-white d-flex flex-row align-items-center gap-2.5" style="border-color: #e2e8f0 !important;">
-          <div class="badge bg-success-subtle text-success p-1.5 rounded-2 d-flex align-items-center justify-content-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2">
+        <div class="card border shadow-sm rounded-3 px-3 py-2 bg-white d-flex flex-row align-items-center" style="border-color: #e2e8f0 !important; column-gap: 12px;">
+          <div class="rounded-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 36px; height: 36px; background-color: #ecfdf5; border: 1px solid #bbf7d0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
               <polyline points="9 15 12 18 17 13"></polyline>
             </svg>
           </div>
-          <div class="d-flex flex-column">
-            <div class="d-flex align-items-baseline gap-1.5">
-              <span class="fw-bold text-primary lh-1" style="color: #004884 !important; font-size: 1.25rem;">
+          <div class="d-flex flex-column justify-content-center">
+            <div class="d-flex align-items-center" style="column-gap: 8px;">
+              <span class="fw-bold" style="color: #004884 !important; font-size: 1.25rem; line-height: 1;">
                 {{ totalProcesadosEstaSemana }}
               </span>
-              <span class="text-uppercase fw-bold text-muted" style="font-size: 0.62rem; letter-spacing: 0.4px;">
+              <span class="text-uppercase fw-bold text-secondary" style="font-size: 0.68rem; letter-spacing: 0.5px; line-height: 1;">
                 PROCESADOS ESTA SEMANA (LUN - VIE)
               </span>
             </div>
-            <span class="text-muted fw-semibold" style="font-size: 0.63rem;">
+            <span class="text-muted fw-semibold" style="font-size: 0.68rem; line-height: 1.2; margin-top: 3px;">
               {{ rangoSemanaActualTexto }}
             </span>
           </div>
@@ -70,7 +70,7 @@
           <!-- Button: Historial de Permisos (Plantilla Excel) -->
           <button
             type="button"
-            class="btn btn-sm btn-outline-success fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5"
+            class="btn btn-sm btn-outline-success fw-bold d-inline-flex align-items-center gap-2 shadow-sm rounded-2 py-1 px-3"
             style="font-size: 0.77rem;"
             @click="vistaActiva = 'historial'"
             title="Ver plantilla de Excel y listado de entregas procesadas"
@@ -119,7 +119,7 @@
               <!-- BOTÓN ÚNICO SELECTOR DE ARCHIVO (Cargar o Reemplazar) -->
               <div>
                 <label
-                  @click="precalentarMotorOCR"
+                  @click="precalentarOCR"
                   class="btn btn-sm btn-primary fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm rounded-2 py-1 px-2.5 mb-0"
                   style="font-size: 0.77rem; background: linear-gradient(135deg, #004884 0%, #002f59 100%); border: 1px solid #002342; cursor: pointer;"
                   :title="documentLoaded ? 'Cambiar por otro documento PDF' : 'Seleccionar archivo PDF, Word, TXT o imagen del computador'"
@@ -365,8 +365,8 @@
                       v-model="horaInicioPermiso"
                       @change="construirHorario"
                       type="time"
-                      class="form-control form-control-sm text-center fw-bold px-1 py-0"
-                      style="font-size: 0.74rem; height: 28px;"
+                      class="form-control form-control-sm text-center fw-bold px-1"
+                      style="font-size: 0.75rem; height: 28px;"
                       :disabled="!documentLoaded"
                     />
                   </div>
@@ -380,8 +380,8 @@
                       v-model="horaFinPermiso"
                       @change="construirHorario"
                       type="time"
-                      class="form-control form-control-sm text-center fw-bold px-1 py-0"
-                      style="font-size: 0.74rem; height: 28px;"
+                      class="form-control form-control-sm text-center fw-bold px-1"
+                      style="font-size: 0.75rem; height: 28px;"
                       :disabled="!documentLoaded"
                     />
                   </div>
@@ -933,7 +933,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { permisosService } from '../services/permisosService.js'
 import adjuntosOffline from '../../../services/adjuntosOffline.js'
-import precalentarMotorOCR from '../../../services/ocrWarmup.service.js'
+import precalentarOCR from '../../../services/ocrWarmup.service.js'
+import { CONFIG_PERMISOS, ocrNavegador } from '../../../services/ocrNavegador.service.js'
 import PageHeader from '../../../components/PageHeader.vue'
 
 // Controls view mode: 'formulario' | 'historial'
@@ -1680,68 +1681,11 @@ const base64ToUint8 = (dataUrl) => {
 
 // (initPdfWorker se define en el módulo de extracción OCR)
 
-// Mejora de imagen para OCR: escala de grises + stretch de histograma y,
-// solo cuando el escaneo tiene muchos tonos medios (letra borrosa, fondo
-// sucio), una binarización Otsu que afila el borde de la tinta. En imágenes
-// limpias (render digital nítido) no se binariza: el antialiasing ayuda.
-const mejorarImagenParaOCR = (srcCanvas) => {
-  const w = srcCanvas.width, h = srcCanvas.height
-  const out = document.createElement('canvas')
-  out.width = w; out.height = h
-  const ctx = out.getContext('2d')
-  ctx.drawImage(srcCanvas, 0, 0)
-  const d = ctx.getImageData(0, 0, w, h), px = d.data
-  for (let i = 0; i < px.length; i += 4) {
-    const g = Math.round(0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2])
-    px[i] = px[i+1] = px[i+2] = g
-  }
-  let min = 255, max = 0
-  for (let i = 0; i < px.length; i += 4) { if (px[i] < min) min = px[i]; if (px[i] > max) max = px[i] }
-  const rng = (max - min) || 1
-  for (let i = 0; i < px.length; i += 4) {
-    const v = Math.min(255, Math.round(((px[i] - min) / rng) * 255))
-    px[i] = px[i+1] = px[i+2] = v; px[i+3] = 255
-  }
-
-  // ─── Binarización Otsu condicional ───
-  // Umbral óptimo por varianza entre clases; se aplica únicamente si más del
-  // 25% de los píxeles quedaron en la zona media del histograma (escaneo
-  // borroso). Un documento nítido es casi blanco/negro puro y se respeta.
-  const total = Math.floor(px.length / 4)
-  const hist = new Array(256).fill(0)
-  for (let i = 0; i < px.length; i += 4) hist[px[i]]++
-  let sumaTotal = 0
-  for (let t = 0; t < 256; t++) sumaTotal += t * hist[t]
-  let sumaB = 0, pesoB = 0, maxVar = -1, umbral = 128
-  for (let t = 0; t < 256; t++) {
-    pesoB += hist[t]
-    if (pesoB === 0) continue
-    const pesoF = total - pesoB
-    if (pesoF === 0) break
-    sumaB += t * hist[t]
-    const mB = sumaB / pesoB
-    const mF = (sumaTotal - sumaB) / pesoF
-    const varianza = pesoB * pesoF * (mB - mF) * (mB - mF)
-    if (varianza > maxVar) { maxVar = varianza; umbral = t }
-  }
-  let zonaMedia = 0
-  for (let t = 51; t < 204; t++) zonaMedia += hist[t]
-  if (total > 0 && zonaMedia / total > 0.25) {
-    for (let i = 0; i < px.length; i += 4) {
-      const v = px[i] <= umbral ? 0 : 255
-      px[i] = px[i+1] = px[i+2] = v
-    }
-  }
-
-  ctx.putImageData(d, 0, 0)
-  return out
-}
-
-// Normalizar texto OCR y parsear los campos del permiso: el motor completo
-// vive en el paquete Python del backend (acuusan_ocr), invocado desde
-// handleScannedFileUpload vía /api/ocr/escanear. La regla de oro se
-// mantiene: «el dato sale del documento o el campo queda vacío» — nunca se
-// inventa un valor.
+// Normalizar texto OCR y parsear los campos del permiso: con motor Python el
+// parseo ocurre allá (acuusan_ocr, vía /api/ocr/trabajos); con OCR de
+// navegador lo hace el parser Node de /api/ocr/extraer-campos-permisos. La
+// regla de oro se mantiene en ambos: «el dato sale del documento o el campo
+// queda vacío» — nunca se inventa un valor.
 
 // Aplicar campos al formulario Vue
 const aplicarCampos = (campos) => {
@@ -1772,88 +1716,20 @@ const aplicarCampos = (campos) => {
   formData.observaciones = campos.observaciones || ''
 }
 
-// Singleton de pdfjs para lectura de permisos
-let pdfjsCacheEncargado = null
-const getPdfjsEncargado = async () => {
-  if (pdfjsCacheEncargado) return pdfjsCacheEncargado
-  const pdfjs = await import('pdfjs-dist')
-  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-    try {
-      const m = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-      pdfjs.GlobalWorkerOptions.workerSrc = m.default
-    } catch {
-      pdfjs.GlobalWorkerOptions.workerSrc =
-        `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-    }
-  }
-  pdfjsCacheEncargado = pdfjs
-  return pdfjs
-}
-
-// Extracción espacial estructurada de texto respetando líneas y columnas
-const extraerTextoPaginaEncargado = async (page) => {
-  const content = await page.getTextContent({ includeMarkedContent: false })
-  const viewport = page.getViewport({ scale: 1 })
-  const altoPagina = viewport.height
-
-  const items = content.items
-    .filter((it) => it.str && it.str.trim())
-    .map((it) => ({
-      str: it.str,
-      x: it.transform[4],
-      y: altoPagina - it.transform[5],
-      ancho: it.width || 0,
-    }))
-    .sort((a, b) => a.y - b.y || a.x - b.x)
-
-  if (!items.length) return ''
-
-  const lineas = []
-  let lineaActual = [items[0]]
-  let yRef = items[0].y
-
-  for (let i = 1; i < items.length; i++) {
-    const it = items[i]
-    if (Math.abs(it.y - yRef) <= 4) {
-      lineaActual.push(it)
-    } else {
-      lineas.push(lineaActual.sort((a, b) => a.x - b.x))
-      lineaActual = [it]
-      yRef = it.y
-    }
-  }
-  if (lineaActual.length) lineas.push(lineaActual.sort((a, b) => a.x - b.x))
-
-  return lineas
-    .map((linea) => {
-      let resultado = ''
-      for (let i = 0; i < linea.length; i++) {
-        if (i === 0) {
-          resultado = linea[i].str
-        } else {
-          const prev = linea[i - 1]
-          const gap = linea[i].x - (prev.x + prev.ancho)
-          resultado += (gap > 8 ? '  ' : ' ') + linea[i].str
-        }
-      }
-      return resultado.trimEnd()
-    })
-    .filter((l) => l.trim())
-    .join('\n')
-}
-
-// 🎯 CARGA DE ARCHIVO ESCANEADO — motor OCR Python: al seleccionar el
-// documento se envía el ORIGINAL al backend (que lo reenvía al servicio
-// Python con preprocesado de borrosos + multi-pase Tesseract + parser de
-// permisos). Si el motor no está disponible, el formulario queda manual
-// como siempre: aviso informativo, nunca un error.
+// 🎯 CARGA DE ARCHIVO ESCANEADO — motor OCR Python con respaldo de navegador:
+// al seleccionar el documento se envía el ORIGINAL al backend (que lo reenvía
+// al servicio Python con preprocesado de borrosos + multi-pase Tesseract +
+// parser de permisos). Si el motor no está disponible (producción), el OCR lo
+// hace el NAVEGADOR y el parser Node (/api/ocr/extraer-campos-permisos) llena
+// los campos. Solo si ambos fallan el formulario queda manual: aviso
+// informativo, nunca un error.
 let tokenEscaneoOcr = 0
 
 const handleScannedFileUpload = async (e) => {
   const file = e.target.files[0]
   if (e && e.target) e.target.value = ''
   if (!file) return
-  precalentarMotorOCR()
+  precalentarOCR()
   const token = ++tokenEscaneoOcr
 
   resetFormData()
@@ -1947,22 +1823,55 @@ const handleScannedFileUpload = async (e) => {
       ocrStepMessage.value = `Lectura completa (${escaneo.metodo})`
     } catch (err) {
       if (token !== tokenEscaneoOcr) return
-      falloOcr = true
-      // El escaneo fracasó: se libera el slot del motor ya mismo (si el
-      // trabajo seguía vivo) para que el reintento no herede un 429.
+      // El escaneo remoto fracasó: se libera el slot del motor ya mismo (si
+      // el trabajo seguía vivo) para que el reintento no herede un 429.
       if (jobId) permisosService.cancelarEscaneoAsincrono(jobId).catch(() => {})
       console.info('[OCR] Falló el escaneo con el motor Python:', err?.status || '', err?.codigo || '', err?.message)
-      // El motivo real, no un mensaje genérico: peso, espera agotada u otro.
-      if (err?.status === 413) {
-        ocrStepMessage.value = 'Documento demasiado pesado para el servidor (máx ~3 MB) — comprima el PDF y reintente'
-      } else if (err?.status === 429) {
-        ocrStepMessage.value = 'El motor está ocupado con otro escaneo (puede tardar unos minutos) — espere e intente de nuevo'
-      } else if (err?.status === 404) {
-        ocrStepMessage.value = 'El motor se reinició a mitad del escaneo — intente de nuevo'
-      } else if (err?.status === 504 || err?.codigo === 'no-disponible') {
-        ocrStepMessage.value = 'El motor tardó más de la espera máxima — reintente o diligencie manualmente'
-      } else {
-        ocrStepMessage.value = err?.message || 'Motor Python no disponible — diligencie manualmente'
+
+      // ── Respaldo: OCR en el NAVEGADOR (ruta normal de producción) ──────
+      // Cualquier fallo del motor remoto (503/504/502/429/techo de espera)
+      // desemboca aquí: el documento se lee localmente con progreso REAL y
+      // el parser Node llena los campos.
+      clearInterval(avanceLento)
+      try {
+        ocrStepMessage.value = 'Motor remoto no disponible — leyendo el documento en el navegador…'
+        ocrProgress.value = 15
+        const { texto, metodo } = await ocrNavegador.extraerTexto(file, CONFIG_PERMISOS, (etapa, progreso) => {
+          if (token !== tokenEscaneoOcr) return
+          ocrStepMessage.value = String(etapa || '')
+          ocrProgress.value = 15 + (progreso || 0) * 70 // 15-85
+        })
+        if (token !== tokenEscaneoOcr) return
+        ocrProgress.value = 88
+        ocrStepMessage.value = 'Interpretando los datos del permiso…'
+        const escaneo = await permisosService.extraerCamposPermisos(texto, file.name, metodo)
+        if (token !== tokenEscaneoOcr) return
+        aplicarCampos(escaneo.campos || {})
+        confianzaOcrReal.value = Number(escaneo.confianza) || 0
+        camposFaltantesOcr.value = Array.isArray(escaneo.faltantes) ? escaneo.faltantes : []
+        textoDocumentoExtraido.value = texto
+        ocrProgress.value = 100
+        ocrStepMessage.value = `Lectura completa (${escaneo.metodo})`
+      } catch (errFallback) {
+        if (token !== tokenEscaneoOcr) return
+        falloOcr = true
+        console.info('[OCR] También falló el OCR del navegador:', errFallback?.message)
+        // El motivo real del fallo remoto, no un mensaje genérico: peso,
+        // espera agotada u otro. Si además el navegador dio su propio error
+        // (p. ej. tipo no soportado), se muestra ese.
+        if (errFallback?.message && /no soportado/i.test(errFallback.message)) {
+          ocrStepMessage.value = errFallback.message
+        } else if (err?.status === 413) {
+          ocrStepMessage.value = 'Documento demasiado pesado para el servidor (máx ~3 MB) — comprima el PDF y reintente'
+        } else if (err?.status === 429) {
+          ocrStepMessage.value = 'El motor está ocupado con otro escaneo (puede tardar unos minutos) — espere e intente de nuevo'
+        } else if (err?.status === 404) {
+          ocrStepMessage.value = 'El motor se reinició a mitad del escaneo — intente de nuevo'
+        } else if (err?.status === 504 || err?.codigo === 'no-disponible') {
+          ocrStepMessage.value = 'El motor tardó más de la espera máxima — reintente o diligencie manualmente'
+        } else {
+          ocrStepMessage.value = errFallback?.message || 'No fue posible leer el documento — diligencie manualmente'
+        }
       }
     } finally {
       clearInterval(avanceLento)
@@ -2563,15 +2472,55 @@ const confirmarYEnviar = async () => {
   font-weight: 400;
 }
 
-/* Relojes del permiso: dígitos tabulares, compactos y perfectamente nivelados a 28px */
+/* Relojes del permiso: dígitos tabulares, compactos y perfectamente nivelados y rectos */
 .permiso-form input[type='time'] {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.2px;
   cursor: pointer;
   height: 28px !important;
   min-height: 28px !important;
-  font-size: 0.74rem !important;
-  padding: 2px 6px !important;
+  max-height: 28px !important;
+  font-size: 0.75rem !important;
+  padding: 0 4px 0 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: normal !important;
+  vertical-align: middle !important;
+}
+
+.permiso-form input[type='time']::-webkit-datetime-edit {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.permiso-form input[type='time']::-webkit-datetime-edit-fields-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  padding: 0 !important;
+}
+
+.permiso-form input[type='time']::-webkit-datetime-edit-text,
+.permiso-form input[type='time']::-webkit-datetime-edit-hour-field,
+.permiso-form input[type='time']::-webkit-datetime-edit-minute-field,
+.permiso-form input[type='time']::-webkit-datetime-edit-ampm-field {
+  padding: 0 1px !important;
+  line-height: 1 !important;
+}
+
+.permiso-form input[type='time']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 0 !important;
+  margin: 0 2px 0 auto !important;
+  height: 14px !important;
+  width: 14px !important;
+  align-self: center !important;
 }
 
 /* Avisos compactos del horario: píldoras, no alertas gigantes */

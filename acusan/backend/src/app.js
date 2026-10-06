@@ -88,14 +88,14 @@ app.use('/api/auth', authRoutes)
 app.use('/api/pqr/whatsapp', whatsappRoutes)
 
 // ─── Rutas privadas & modulares ───────────────────────────────────────────────
-app.use('/api/permisos',     verificarToken, permisosRoutes)
+app.use('/api/permisos', verificarToken, permisosRoutes)
 app.use('/api/horas-extras', verificarToken, horasExtrasRoutes)
-app.use('/api/pqr',          verificarToken, pqrRoutes)
-app.use('/api/radicados',    verificarToken, radicadosRoutes)
+app.use('/api/pqr', verificarToken, pqrRoutes)
+app.use('/api/radicados', verificarToken, radicadosRoutes)
 
 // Puente al motor OCR Python (degrada a 503 si el servicio no corre —
 // el frontend cae al OCR del navegador sin error visible)
-app.use('/api/ocr',          verificarToken, ocrRoutes)
+app.use('/api/ocr', verificarToken, ocrRoutes)
 
 // ─── Rutas exclusivas ADMIN (doble protección: token + rol) ───────────────────
 app.use('/api/admin', verificarToken, verificarRol('ADMIN'), adminRoutes)
@@ -175,7 +175,7 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
   process.once('SIGUSR2', () => {
     apagarLimpio(() => process.kill(process.pid, 'SIGUSR2'))
   })
-  process.on('SIGINT',  () => apagarLimpio())
+  process.on('SIGINT', () => apagarLimpio())
   process.on('SIGTERM', () => apagarLimpio())
 }
 

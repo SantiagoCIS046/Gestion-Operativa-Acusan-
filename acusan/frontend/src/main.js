@@ -3,7 +3,6 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import './style.css'
 import App from './App.vue'
 import router from './router'
-import { mantenerDespiertoMotorOCR } from './services/ocrWarmup.service.js'
 
 import SpecularButton from './components/SpecularButton.vue'
 
@@ -20,10 +19,6 @@ app.component('SpecularButton', SpecularButton)
 
 app.use(router)
 app.mount('#app')
-
-// Motor OCR (Render free) despierto mientras la app esté en uso: primer ping
-// al abrir y latido cada 10 min — ningún escaneo paga el arranque en frío
-mantenerDespiertoMotorOCR()
 
 // Seguimiento dinámico de luz especular al mover el cursor sobre cualquier botón
 if (typeof window !== 'undefined') {

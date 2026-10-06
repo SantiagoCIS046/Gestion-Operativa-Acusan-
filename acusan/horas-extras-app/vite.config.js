@@ -46,7 +46,13 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:3000',
-        changeOrigin: true
+        changeOrigin: true,
+        // Si 5174 está ocupado Vite usa otro puerto (5175…) que el CORS del
+        // backend no reconoce. El proxy es servidor→servidor, así que se quita
+        // el Origin del navegador y la petición se trata como mismo origen.
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'))
+        }
       }
     }
   },

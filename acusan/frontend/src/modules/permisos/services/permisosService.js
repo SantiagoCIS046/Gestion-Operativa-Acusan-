@@ -115,8 +115,11 @@ export const permisosService = {
     // Techo propio del navegador: sin él, un POST colgado (agujero negro de
     // red) dejaría el banner "Enviando al motor…" para siempre — el techo de
     // minutos de la vista solo se evalúa entre consultas, no durante un fetch.
+    // 12 s: en producción el 503 llega en milisegundos (OCR_PY_URL=DISABLED);
+    // si el motor remoto tarda más en aceptar el trabajo, el navegador toma
+    // el relevo con el fallback en vez de hacer esperar al usuario.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     let res;
     try {
       res = await fetch("/api/ocr/trabajos", {
@@ -213,6 +216,48 @@ export const permisosService = {
       return data.data;
     }
     throw new Error("Respuesta inesperada del estado del escaneo.");
+  },
+
+  /**
+   * Parseo de permisos SIN motor Python (ruta de producción): el navegador
+   * ya extrajo el texto (OCR local o lectura digital) y este endpoint corre
+   * el parser Node puro. Devuelve { metodo, campos, confianza, faltantes } —
+   * mismo contrato que escanearDocumento.
+   */
+  async extraerCamposPermisos(texto, nombreArchivo = "", metodo = "") {
+    let res;
+    try {
+      res = await fetch("/api/ocr/extraer-campos-permisos", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ texto, nombreArchivo, metodo }),
+      });
+    } catch (e) {
+      const error = new Error("No se pudo interpretar el documento — verifique su conexión");
+      error.codigo = "no-disponible";
+      throw error;
+    }
+    if (res.status === 503 || res.status === 504) {
+      const error = new Error("Servicio de interpretación no disponible");
+      error.codigo = "no-disponible";
+      error.status = res.status;
+      throw error;
+    }
+    if (!res.ok) {
+      let msg = "No se pudo interpretar el documento.";
+      try {
+        const data = await res.json();
+        if (data && data.message) msg = data.message;
+      } catch (e) {}
+      const error = new Error(msg);
+      error.status = res.status;
+      throw error;
+    }
+    const data = await res.json();
+    if (data && data.success && data.data && data.data.campos) {
+      return data.data;
+    }
+    throw new Error("La interpretación del documento no produjo campos.");
   },
 
   /**
