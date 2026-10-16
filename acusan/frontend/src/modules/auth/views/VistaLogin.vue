@@ -350,12 +350,10 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import authService from '../services/authService.js'
 import DepthText from '@/components/DepthText.vue'
 import GradientWaves from '@/components/GradientWaves.vue'
 
-const router = useRouter()
 const currentYear = new Date().getFullYear()
 
 // Modos: 'login' | 'registro' | 'recuperar' (informativo: el reset lo media el ADMIN)
@@ -420,8 +418,9 @@ const handleLogin = async () => {
   cargando.value = true
   try {
     const resultado = await authService.login(formLogin.email, formLogin.password)
-    const rutaInicio = authService.getRutaInicioPorRol(resultado.usuario.rol)
-    await router.replace(rutaInicio)
+    // Sistema reducido al módulo de login (2026-10-16): no hay vistas por rol.
+    successMsg.value = `Bienvenido(a), ${resultado.usuario.nombre}. Sesión iniciada correctamente.`
+    formLogin.password = ''
   } catch (error) {
     errorMsg.value = error.message || 'Credenciales inválidas. Verifique su correo o contraseña.'
   } finally {
@@ -442,8 +441,7 @@ const handleRegistro = async () => {
     await authService.registro(formRegistro)
     // Tras registrar con éxito, iniciar sesión automáticamente con su nuevo usuario
     const loginRes = await authService.login(formRegistro.email, formRegistro.password)
-    const rutaInicio = authService.getRutaInicioPorRol(loginRes.usuario.rol)
-    await router.replace(rutaInicio)
+    successMsg.value = `Bienvenido(a), ${loginRes.usuario.nombre}. Sesión iniciada correctamente.`
   } catch (error) {
     errorMsg.value = error.message || 'Error al registrar el usuario en el sistema.'
   } finally {

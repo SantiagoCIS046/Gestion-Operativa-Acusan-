@@ -6,12 +6,6 @@ import router from './router'
 
 import SpecularButton from './components/SpecularButton.vue'
 
-// Limpieza automática de claves obsoletas con datos de prueba antiguos en cualquier máquina
-try {
-  const legacyKeys = ['acuasan_permisos_db', 'acuasan_radicados_db', 'acuasan_horas_db', 'acuasan_pqr_db']
-  legacyKeys.forEach(k => localStorage.removeItem(k))
-} catch (e) {}
-
 const app = createApp(App)
 
 // Registro global de componente SpecularButton

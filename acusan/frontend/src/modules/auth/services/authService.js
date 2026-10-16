@@ -197,32 +197,6 @@ export const authService = {
     return state.usuario?.rol || null
   },
 
-  /**
-   * Control del Destinatario (Auto-Redirección Inteligente por Área)
-   * Redirige al usuario automáticamente a la sección oficial de su área sin requerir intervención.
-   */
-  getRutaInicioPorRol(rol) {
-    if (!this.estaAutenticado()) return '/login'
-
-    const rolNorm = (rol || this.getRol() || '').toUpperCase().trim()
-
-    // Mapeo dinámico de áreas institucionales de Acuasan (actuales y futuras).
-    // Roles cuyo módulo fue retirado (PQR) se quedan en el login: no tienen
-    // vista asignada y redirigirlos a una ruta con roles causaría un bucle.
-    const mapaDestinatarios = {
-      GERENCIA: '/permisos/gerencia',         // Consulta Gerencial & Visión Global 360°
-      ENCARGADO: '/permisos/encargado',       // Permisos OCR & Horas Extras Operativas (Román)
-      OPERATIVO: '/login',                    // Módulo PQR retirado del sistema (2026-09-25)
-      RADICADOS: '/radicados/gestion',        // Módulo exclusivo para Eliana
-      ADMIN: '/admin/usuarios',               // Panel de Administración del Sistema
-      TALENTO_HUMANO: '/permisos/encargado',
-      CUADRILLAS_OBRA: '/horas-extras/gerencia',
-      ATENCION_CIUDADANA: '/login'            // Módulo PQR retirado del sistema (2026-09-25)
-    }
-
-    return mapaDestinatarios[rolNorm] || '/radicados/gestion'
-
-  },
 
   /**
    * Retorna el header de autorización con el JWT

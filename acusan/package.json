@@ -1,5 +1,5 @@
 {
-  "name": "gestion-operativa-acuasan",
+  "name": "gestion-operativa-acuusan",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,23 +7,14 @@
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite frontend",
     "dev:api": "npm --prefix backend run dev",
-    "dev:horas": "npm --prefix horas-extras-app run dev",
     "build": "prisma generate --schema=backend/prisma/schema.prisma && vite build",
-    "build:horas": "npm --prefix horas-extras-app run build",
-    "postinstall": "npm --prefix backend install && npm --prefix frontend install && npm --prefix horas-extras-app install",
+    "postinstall": "npm --prefix backend install && npm --prefix frontend install",
     "preview": "vite preview"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
     "bootstrap": "^5.3.8",
-    "lucide-vue-next": "^1.0.0",
-    "mammoth": "^1.12.1",
-    "moment": "^2.30.1",
     "ogl": "^1.0.11",
-    "pdfjs-dist": "^6.2.108",
-    "pinia": "^4.0.3",
-    "socket.io-client": "^4.8.3",
-    "tesseract.js": "^7.0.0",
     "vue": "^3.5.40",
     "vue-router": "^4.6.4"
   },
@@ -38,7 +29,6 @@
   "allowScripts": {
     "@prisma/client": true,
     "@prisma/engines": true,
-    "prisma": true,
-    "tesseract.js": true
+    "prisma": true
   }
 }
