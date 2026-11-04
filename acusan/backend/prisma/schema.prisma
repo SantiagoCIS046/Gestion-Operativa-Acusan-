@@ -1,6 +1,18 @@
-// Prisma schema file for Acuusan Gestión Operativa (MongoDB Atlas)
-// Sistema reducido al módulo de AUTENTICACIÓN (2026-10-16): el resto de
-// módulos fue eliminado. Las colecciones legacy permanecen intactas en Atlas.
+// Prisma schema — Acuusan · Radicados (MongoDB Atlas)
+// Nueva era del sistema (2026-10-16, fusión 2026-10-19): el login se conserva
+// y el sistema gira en torno a los RADICADOS — documentos que llegan, tienen
+// plazo y el área responde. Los antiguos "archivos" se fusionaron aquí.
+//
+// MongoDB no usa migraciones: los cambios se aplican con `prisma db push`
+// (npm run db:push desde la raíz). Las colecciones legacy permanecen intactas.
+//
+// NOTA DE DISEÑO: las referencias débiles (Area.parentId,
+// Alerta.enviadaPor/atendidaPor, EjecucionAlerta.ejecutadaPor,
+// Radicado.encargadoId/creadoPorId, Adjunto.subidoPorId,
+// RadicadoEvento.usuarioId) se guardan como ObjectId planos SIN relación de
+// Prisma. Así el grafo de relaciones queda acíclico (Prisma rechaza ciclos de
+// referential actions) y se evitan joins emulados costosos; quien necesite el
+// detalle lo resuelve con el id directo.
 
 generator client {
   provider      = "prisma-client-js"
@@ -15,50 +27,498 @@ datasource db {
 }
 
 // -------------------------------------------------------------
-// MÓDULO: AUTENTICACIÓN DE USUARIOS
+// ENUMS DEL MÓDULO
 // -------------------------------------------------------------
-enum RolUsuario {
-  ADMIN
-  ADMINISTRADOR
-  ENCARGADO
-  GERENCIA
-  OPERATIVO
-  RADICADOS
-  CLIENTE
+enum Rol {
+  LIDER_GENERAL
+  LIDER_AREA
+  USUARIO
 }
 
-model Usuario {
-  id            String     @id @default(auto()) @map("_id") @db.ObjectId
-  nombre        String
-  email         String     @unique
-  password      String
-  rol           RolUsuario
-  cedula        String?
-  cargo         String?
-  activo        Boolean    @default(true)
-  ultimoAcceso  DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+// Nivel de la alerta según días restantes. En BD se guarda tal cual
+// el valor del dominio (vencido | 7d | 15d | 30d | 3d | 1d | nuevo) vía @map.
+// Motor unificado (radicados): acumulativos D30/D15/D7/D3/D1 con guard de
+// plazo total; NUEVO nace al crear/reasignar; VENCIDO escala a gerencia.
+enum NivelAlerta {
+  VENCIDO
+  D30     @map("30d")
+  D15     @map("15d")
+  D7      @map("7d")
+  D3      @map("3d")
+  D1      @map("1d")
+  NUEVO   @map("nuevo")
+}
 
-  accesos       RegistroAcceso[]
+// Prioridad del radicado fijada por gerencia (baja | media | alta).
+enum PrioridadRadicado {
+  BAJA  @map("baja")
+  MEDIA @map("media")
+  ALTA  @map("alta")
+}
+
+// Estado almacenado del radicado. El estado "visual" (sano | por_vencer |
+// vencido) es derivado de fechaLimite y lo calcula utils/fechas.js, no se
+// guarda. (pendiente | respondido)
+enum EstadoRadicado {
+  PENDIENTE  @map("pendiente")
+  RESPONDIDO @map("respondido")
+}
+
+// Resultado de la respuesta vs la fecha límite (a_tiempo | con_retraso).
+enum ResultadoRespuesta {
+  A_TIEMPO    @map("a_tiempo")
+  CON_RETRASO @map("con_retraso")
+}
+
+// Qué representa cada adjunto: el PDF del radicado original o el de la
+// respuesta del área. (radicado | respuesta)
+enum TipoAdjunto {
+  RADICADO   @map("radicado")
+  RESPUESTA  @map("respuesta")
+}
+
+// Auditoría del ciclo de vida del radicado.
+// (creado | asignado | plazo_cambiado | respondido | reabierto)
+enum TipoEventoRadicado {
+  CREADO         @map("creado")
+  ASIGNADO       @map("asignado")
+  PLAZO_CAMBIADO @map("plazo_cambiado")
+  RESPONDIDO     @map("respondido")
+  REABIERTO      @map("reabierto")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: ÁREAS (jerarquía líder → áreas operativas → subáreas)
+// El mapa de estructura (/estructura) dibuja el árbol con parentId y pinta
+// cada línea verde (área activa y funcionando) o roja (inactiva).
+// -------------------------------------------------------------
+model Area {
+  id       String  @id @default(auto()) @map("_id") @db.ObjectId
+  nombre   String  @unique
+  codigo   String  @unique
+  // null = área líder (raíz de la jerarquía). Referencia débil: el padre
+  // se resuelve por id, sin relación de Prisma. Cualquier área puede tener
+  // subáreas: el árbol crece sin límite de profundidad.
+  parentId String? @db.ObjectId
+  // Estado del área para el mapa: true = activa/funcionando (línea verde),
+  // false = inactiva (línea roja). Las áreas previas a esta columna no la
+  // traen (Prisma la omite): se lee como true (activa !== false).
+  activa   Boolean @default(true)
+
+  usuarios Usuario[]
+  radicados Radicado[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("areas")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: MOVIMIENTOS DE ÁREAS (registro del mapa de estructura)
+// Auditoría de la vida de cada área: creada, activada, desactivada,
+// actualizada, eliminada. Los movimientos SOBREVIVEN al área (areaId es
+// referencia débil y los datos del área van congelados en snapshots) para
+// que el registro histórico nunca pierda contexto.
+// -------------------------------------------------------------
+
+// (creada | activada | desactivada | actualizada | eliminada)
+enum TipoMovimientoArea {
+  CREADA      @map("creada")
+  ACTIVADA    @map("activada")
+  DESACTIVADA @map("desactivada")
+  ACTUALIZADA @map("actualizada")
+  ELIMINADA   @map("eliminada")
+}
+
+model MovimientoArea {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  // Referencia débil: queda apuntando al área aunque esta se elimine.
+  areaId      String   @db.ObjectId
+  // Snapshots congelados al momento del movimiento (el área puede cambiar
+  // de nombre/código o desaparecer: el registro siempre se entiende).
+  areaCodigo  String
+  areaNombre  String
+  tipo        TipoMovimientoArea
+  detalle     String?
+  // Nombre del área padre al momento del movimiento (contexto del árbol)
+  padreNombre String?
+  // Quién hizo el movimiento (referencia débil + snapshot del nombre)
+  usuarioId    String? @db.ObjectId
+  usuarioNombre String
+
+  fecha DateTime @default(now())
+
+  @@index([areaId, fecha])
+  @@index([fecha])
+  @@map("movimientos_area")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: AUTENTICACIÓN DE USUARIOS
+// (modelo reutilizado del login: ahora con rol del módulo y área)
+// -------------------------------------------------------------
+model Usuario {
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
+  nombre       String
+  email        String  @unique
+  passwordHash String
+  rol          Rol
+  areaId       String  @db.ObjectId
+  area         Area    @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  activo       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accesos RegistroAcceso[]
 
   @@map("usuarios")
 }
 
 // -------------------------------------------------------------
 // MÓDULO: REGISTRO DE ACCESOS (AUDIT LOG DEL LOGIN)
+// rolUsuario es String a propósito: snapshot histórico del rol al momento
+// del acceso; no debe romperse si el enum cambia en el futuro.
 // -------------------------------------------------------------
 model RegistroAcceso {
-  id            String     @id @default(auto()) @map("_id") @db.ObjectId
-  usuarioId     String     @db.ObjectId
-  usuario       Usuario    @relation(fields: [usuarioId], references: [id])
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  usuarioId     String   @db.ObjectId
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   nombreUsuario String
   emailUsuario  String
-  rolUsuario    RolUsuario
-  cargoUsuario  String?
+  rolUsuario    String
   ipAddress     String?
   userAgent     String?
-  fechaAcceso   DateTime   @default(now())
+  fechaAcceso   DateTime @default(now())
 
   @@map("registros_acceso")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: EJECUCIONES DEL MOTOR DE ALERTAS
+// Cada corrida del generador de alertas queda registrada aquí.
+// alcance: 'todas' | 'radicados' | _id del área objetivo.
+// ejecutadaPor: referencia débil al usuario que lanzó la corrida.
+// -------------------------------------------------------------
+model EjecucionAlerta {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  fecha        DateTime @default(now())
+  ejecutadaPor String?  @db.ObjectId
+  alcance      String
+  nuevas       Int      @default(0)
+  reenviadas   Int      @default(0)
+
+  // Al borrar una ejecución se borran sus alertas (son datos derivados)
+  alertas Alerta[]
+
+  @@map("ejecuciones_alerta")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: ALERTAS DE RADICADOS
+// Las alertas son datos derivadas: se regeneran en cada ejecución del
+// motor. areaId/enviadaPor/atendidaPor son referencias débiles.
+//
+// La alerta referencia su radicado de origen vía radicadoId. Las 'nuevo'
+// nacen del alta/reasignación (fuera de una corrida de revisión); las de
+// revisión referencian su ejecución.
+// -------------------------------------------------------------
+model Alerta {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  // Opcional: las alertas 'nuevo' de radicados nacen del alta/reasignación
+  // (fuera de una corrida de revisión); las de revisión la referencian.
+  ejecucionId String?         @db.ObjectId
+  ejecucion   EjecucionAlerta? @relation(fields: [ejecucionId], references: [id], onDelete: Cascade)
+  radicadoId  String?         @db.ObjectId
+  radicado    Radicado?       @relation(fields: [radicadoId], references: [id], onDelete: Cascade)
+  areaId      String          @db.ObjectId
+
+  nivel       NivelAlerta
+  // Fecha límite de referencia que disparó esta alerta
+  venceRef    DateTime
+  mensaje     String
+  creadaEn    DateTime    @default(now())
+  enviadaPor  String?     @db.ObjectId
+  reenvios    Int         @default(0)
+  atendida    Boolean     @default(false)
+  atendidaPor String?     @db.ObjectId
+  atendidaEn  DateTime?
+
+  @@index([areaId, atendida])
+  @@index([radicadoId, nivel, venceRef])
+  @@map("alertas")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: RADICADOS (gerencia dirige → el área responde)
+// Gerencia registra el radicado que llega de otro sistema, lo dirige a un
+// área con un encargado y fija la fecha límite de respuesta; el área
+// responde adjuntando su propio PDF y con eso se cierra el plazo.
+//
+// OJO colección: "radicados" existe de la era anterior del sistema y
+// permanece INTACTA (cáscara vacía); por eso este módulo usa "radicados_v2".
+//
+// numeroRadicado: lo escribe gerencia (viene del otro sistema) o se
+// genera RAD-<YYYY>-#### consecutivo si llega vacío. Se recorta (trim).
+//
+// CIFRADO (2026-11-03, lib/extensionCifrado.js): numeroRadicado, asunto,
+// descripcion, remitente, instrucciones, observacionesRespuesta y
+// numeroOficioRespuesta se guardan cifrados con AES-256-GCM ("enc:v1:…").
+// La unicidad y la búsqueda exacta del número van por numeroRadicadoIndice
+// (HMAC del número normalizado): la extensión lo escribe sola y traduce
+// `where: { numeroRadicado }` a este índice. El consecutivo automático vive
+// en la colección "contadores" (el número cifrado no se puede ordenar).
+// encargadoId/creadoPorId/respondidoPorId: referencias débiles a Usuario.
+// Los PDFs viven en "adjuntos" detrás del servicio almacenPdf: aquí no
+// quedan ni bytes ni metadatos de archivo (se resuelven por radicadoId).
+// estado es el valor ALMACENADO; el estado visual por plazo (sano |
+// por_vencer | vencido) lo deriva utils/fechas.js sobre fechaLimite.
+// -------------------------------------------------------------
+model Radicado {
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  numeroRadicado String
+  // Índice ciego del número (HMAC-SHA256 hex). Opcional solo para poder leer
+  // radicados previos a la migración; todo radicado nuevo lo trae.
+  numeroRadicadoIndice String? @unique
+
+  asunto       String
+  descripcion  String
+  remitente    String
+  tipo         String
+  // Categoría temática (heredada de los antiguos archivos) para filtro,
+  // Excel y rankings. Default "General".
+  categoria    String @default("General")
+  prioridad    PrioridadRadicado
+
+  fechaRadicacion DateTime
+  fechaLimite    DateTime
+  instrucciones  String?
+
+  // Día civil de Bogotá como texto AAAA-MM-DD (regla de informes): clave de
+  // conteo por periodo. Los escribe el backend al crear/editar/responder,
+  // nunca el frontend. EnBD null = radicado previo al backfill.
+  diaRadicacion String?
+  diaVencimiento String?
+  diaRespuesta   String?
+
+  areaId String @db.ObjectId
+  area   Area   @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  // Usuario del área encargado de responder (referencia débil)
+  encargadoId String @db.ObjectId
+  // Usuario de gerencia que registró el radicado (referencia débil)
+  creadoPorId String @db.ObjectId
+
+  estado               EstadoRadicado   @default(PENDIENTE)
+  respondidoEn         DateTime?
+  respondidoPorId      String?          @db.ObjectId
+  resultadoRespuesta   ResultadoRespuesta?
+  observacionesRespuesta String?
+  numeroOficioRespuesta  String?
+
+  adjuntos Adjunto[]
+  eventos  RadicadoEvento[]
+  // Al borrar un radicado se borran sus alertas (onDelete: Cascade)
+  alertas  Alerta[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([areaId, estado])
+  @@index([areaId, diaRadicacion])
+  @@index([areaId, diaRespuesta])
+  @@index([fechaLimite])
+  @@map("radicados_v2")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: ADJUNTOS (PDFs de radicados, detrás de almacenPdf)
+// Los bytes viven en MongoDB porque el disco del hosting es efímero; el día
+// que se muden a un bucket solo cambia almacenPdf: nada más en el código
+// toca `contenido`. Los listados y detalles NUNCA lo traen (omit/select);
+// solo lo lee GET al servir el PDF.
+// vigente=false marca el histórico cuando se reemplaza un adjunto: el
+// anterior NO se borra, queda como historial de versiones.
+// subidoPorId: referencia débil a Usuario.
+// CIFRADO: contenido (bytes "ENC1"+…) y nombreOriginal van cifrados; tamano
+// es el del PDF original.
+// -------------------------------------------------------------
+model Adjunto {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  radicadoId String  @db.ObjectId
+  radicado   Radicado @relation(fields: [radicadoId], references: [id], onDelete: Cascade)
+  tipo       TipoAdjunto
+  vigente    Boolean @default(true)
+  nombreOriginal String
+  tamano     Int
+  contenido  Bytes
+  subidoPorId String @db.ObjectId
+  subidoEn   DateTime @default(now())
+
+  @@index([radicadoId, tipo, vigente])
+  @@map("adjuntos")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: EVENTOS DE RADICADOS (auditoría del ciclo de vida)
+// Un registro por acción: creado, asignado, plazo_cambiado, respondido,
+// reabierto. usuarioId es referencia débil a Usuario; detalle es texto
+// legible de lo que pasó (a quién se asignó, fecha anterior, etc.).
+// -------------------------------------------------------------
+model RadicadoEvento {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  radicadoId String @db.ObjectId
+  radicado   Radicado @relation(fields: [radicadoId], references: [id], onDelete: Cascade)
+  tipo       TipoEventoRadicado
+  usuarioId  String @db.ObjectId
+  detalle    String?
+  fecha      DateTime @default(now())
+
+  @@index([radicadoId])
+  @@index([fecha, tipo])
+  @@map("radicado_eventos")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: INFORMES PERIÓDICOS (semanal/mensual) — solo gerencia
+// Foto del movimiento del periodo: los números se calculan al generarse
+// y NO cambian después (renovar/reabrir/editar un radicado no lo tocan).
+// Generar de nuevo el mismo periodo actualiza el registro existente
+// (nunca hay duplicados: índice único tipo+periodoInicio). parcial=true
+// si se generó con el periodo aún en curso; el cierre automático lo
+// reemplaza por el definitivo.
+// periodoInicio/periodoFin: medianoche de Bogotá (05:00Z) del primer y
+// último día del periodo — la convención de fechas del resto del modelo
+// (ver utils/fechas.js). generadoPorId/regeneradoPorId/revisadoPorId:
+// referencias débiles; vacíos cuando el origen es automático.
+// -------------------------------------------------------------
+
+// (semanal | mensual)
+enum TipoInforme {
+  SEMANAL  @map("semanal")
+  MENSUAL  @map("mensual")
+}
+
+// (automatico | manual)
+enum OrigenInforme {
+  AUTOMATICO @map("automatico")
+  MANUAL     @map("manual")
+}
+
+// Avisos internos de fin de periodo, dirigidos al ROL de gerencia.
+// (fin_semana | fin_mes)
+enum TipoAvisoInterno {
+  FIN_SEMANA @map("fin_semana")
+  FIN_MES    @map("fin_mes")
+}
+
+model Informe {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  tipo          TipoInforme
+  periodoInicio DateTime
+  periodoFin    DateTime
+  // "Semana 12–18 oct 2026" | "Octubre 2026" (la arma etiquetaPeriodo)
+  etiqueta      String
+  // Alcance de la foto: "global" o el _id del área (informes por área de
+  // los líderes). Los registros previos a esta columna se migran a
+  // "global" con el script de backfill.
+  alcance       String       @default("global")
+  parcial       Boolean      @default(false)
+  origen        OrigenInforme @default(AUTOMATICO)
+
+  generadoEn       DateTime
+  generadoPorId    String?  @db.ObjectId
+  regeneradoEn     DateTime?
+  regeneradoPorId  String?  @db.ObjectId
+  revisadoEn       DateTime?
+  revisadoPorId    String?  @db.ObjectId
+
+  // Indicadores — foto calculada al momento de generar (definiciones
+  // exactas en el servicio de informes). cumplimiento y promedio son
+  // null cuando no hubo respondidos en el periodo.
+  ingresados            Int @default(0)
+  respondidos           Int @default(0)
+  aTiempo               Int @default(0)
+  conRetraso            Int @default(0)
+  cumplimiento          Float?
+  diasPromedioRespuesta Float?
+  pendientesAlCierre    Int @default(0)
+  porVencerAlCierre     Int @default(0)
+  vencidosAlCierre      Int @default(0)
+  vencidosEnElPeriodo   Int @default(0)
+  alertasGeneradas      Int @default(0)
+  alertasAtendidas      Int @default(0)
+
+  // Una entrada por área con sus números (ingresados, respondidos,
+  // aTiempo, conRetraso, cumplimiento, vencidosAlCierre).
+  porArea Json
+  // Hasta 20 radicados vencidos al cierre: {numeroRadicado, asunto,
+  // area, encargado, diasAtraso}.
+  criticos Json
+
+  // Corte por días hábiles (calendarioCO): el periodo termina al cierre
+  // de su último día hábil. corteDesde/corteHasta son el rango real de
+  // conteo [desde, hasta); festivos guarda los festivos/no laborales
+  // dentro del periodo y porDia un registro por día calendario con su
+  // tipo e ingresados/respondidos de ese día.
+  diasHabiles         Int     @default(0)
+  festivos            Json
+  corteDesde          DateTime
+  corteHasta          DateTime
+  respondidosNoHabil  Int     @default(0)
+  porDia              Json
+
+  // El índice único compuesto sirve también para listar por tipo
+  // ordenado por periodo: crear un segundo índice con las mismas claves
+  // sería redundante en MongoDB.
+  @@unique([tipo, periodoInicio, alcance])
+  @@map("informes")
+}
+
+model AvisoInterno {
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  tipo          TipoAvisoInterno
+  // Referencia débil al Informe que lo motivó.
+  informeId     String           @db.ObjectId
+  periodoInicio DateTime
+  titulo        String
+  // Resumen corto con los números clave del informe.
+  mensaje       String
+  atendido      Boolean          @default(false)
+  atendidoEn    DateTime?
+  atendidoPorId String?          @db.ObjectId
+  creadoEn      DateTime         @default(now())
+
+  @@unique([tipo, periodoInicio])
+  @@map("avisos_internos")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: DÍAS NO LABORALES EXTRA (calendario hábil)
+// Festivos fuera del calendario oficial (un decreto, un cierre de la
+// entidad) que gerencia registra; esHabil y los periodos de calendarioCO
+// los consideran. fecha = medianoche de Bogotá (05:00Z) del día.
+// creadoPorId: referencia débil a Usuario.
+// -------------------------------------------------------------
+model DiaNoLaboral {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  fecha       DateTime @unique
+  nombre      String
+  motivo      String?
+  creadoPorId String?  @db.ObjectId
+
+  @@map("dias_no_laborales")
+}
+
+// -------------------------------------------------------------
+// MÓDULO: CONTADORES (consecutivos atómicos)
+// id = "radicado-<YYYY>" → valor = último consecutivo usado en RAD-<YYYY>-####.
+// Existe porque el número de radicado se guarda cifrado y ya no se puede
+// buscar el mayor con startsWith. Se incrementa con $inc (atómico).
+// -------------------------------------------------------------
+model Contador {
+  id    String @id @map("_id")
+  valor Int    @default(0)
+
+  @@map("contadores")
 }

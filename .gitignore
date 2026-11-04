@@ -44,3 +44,10 @@ __pycache__/
 .kilocode/
 
 .vercel
+
+# Respaldos locales en texto plano del script de cifrado (nunca al repo)
+acusan/backend/respaldos/
+
+# Artefactos locales de escritorio (bitacora y scripts de trabajo)
+Bitacora_*.xlsx
+Claude outputs/

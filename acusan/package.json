@@ -7,6 +7,9 @@
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite frontend",
     "dev:api": "npm --prefix backend run dev",
+    "db:push": "node scripts/db-push.mjs",
+    "db:seed": "node scripts/db-seed.mjs",
+    "alertas:diarias": "node scripts/alertas-diarias.mjs",
     "build": "prisma generate --schema=backend/prisma/schema.prisma && vite build",
     "postinstall": "npm --prefix backend install && npm --prefix frontend install",
     "preview": "vite preview"

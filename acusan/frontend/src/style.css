@@ -18,6 +18,14 @@
   --text-muted: #64748b;
   --border-color: #e2e8f0;
   --card-bg: #ffffff;
+
+  /* Semáforo de vencimientos (misma familia de la paleta: rojo institucional
+     para lo vencido, ámbar para advertir; verde ya existe arriba) */
+  --acuasan-red: #dc2626;
+  --acuasan-red-dark: #b91c1c;
+  --acuasan-red-light: #fef2f2;
+  --acuasan-green-text: #166534;
+  --acuasan-amber-text: #b45309;
 }
 
 * {
@@ -29,6 +37,7 @@
 html,
 body {
   height: 100%;
+  overflow-x: hidden;
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
   background-color: var(--bg-main);

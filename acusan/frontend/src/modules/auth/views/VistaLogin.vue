@@ -20,6 +20,18 @@
             <p class="form-subtitle">Ingrese sus credenciales para acceder al sistema</p>
           </div>
 
+          <!-- Aviso de sesión expirada (llega por query al volver de un 401) -->
+          <transition name="shake-fade">
+            <div v-if="sesionExpirada" class="info-alert" role="alert">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>Su sesión ha expirado. Ingrese nuevamente para continuar.</span>
+            </div>
+          </transition>
+
           <!-- Alerts -->
           <transition name="shake-fade">
             <div v-if="successMsg" class="success-alert" role="alert">
@@ -349,12 +361,24 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { computed, ref, reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import authService from '../services/authService.js'
 import DepthText from '@/components/DepthText.vue'
 import GradientWaves from '@/components/GradientWaves.vue'
 
+const route = useRoute()
+const router = useRouter()
 const currentYear = new Date().getFullYear()
+
+// Vuelve del 401 con ?sesion=expirada para avisar qué pasó
+const sesionExpirada = computed(() => route.query.sesion === 'expirada')
+
+// Tras entrar, vuelve a donde lo expulsó la guardia (?redirect=...) o al panel
+const destinoPostLogin = () =>
+  typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+    ? route.query.redirect
+    : '/resumen'
 
 // Modos: 'login' | 'registro' | 'recuperar' (informativo: el reset lo media el ADMIN)
 const modo = ref('login')
@@ -418,9 +442,9 @@ const handleLogin = async () => {
   cargando.value = true
   try {
     const resultado = await authService.login(formLogin.email, formLogin.password)
-    // Sistema reducido al módulo de login (2026-10-16): no hay vistas por rol.
     successMsg.value = `Bienvenido(a), ${resultado.usuario.nombre}. Sesión iniciada correctamente.`
     formLogin.password = ''
+    router.push(destinoPostLogin())
   } catch (error) {
     errorMsg.value = error.message || 'Credenciales inválidas. Verifique su correo o contraseña.'
   } finally {
@@ -442,6 +466,7 @@ const handleRegistro = async () => {
     // Tras registrar con éxito, iniciar sesión automáticamente con su nuevo usuario
     const loginRes = await authService.login(formRegistro.email, formRegistro.password)
     successMsg.value = `Bienvenido(a), ${loginRes.usuario.nombre}. Sesión iniciada correctamente.`
+    router.push(destinoPostLogin())
   } catch (error) {
     errorMsg.value = error.message || 'Error al registrar el usuario en el sistema.'
   } finally {
@@ -590,6 +615,21 @@ const handleRegistro = async () => {
   gap: 8px;
   font-size: 0.78rem;
   color: #166534;
+  font-weight: 600;
+}
+
+.info-alert {
+  background: #e0f2fe;
+  border: 1px solid #93c5fd;
+  border-left: 4px solid #004884;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #004884;
   font-weight: 600;
 }
 

@@ -1,87 +1,26 @@
+// Adaptado al esquema del módulo de vencimientos (2026-10-16):
+// - passwordHash reemplaza a password; rol/areaId pertenecen al nuevo enum Rol
+// - el seed de usuarios vive en prisma/seed.mjs (npm run db:seed)
+// - cedula/cargo/ultimoAcceso dejaron de existir en el modelo Usuario
+
 import prisma from '../../config/prisma.js'
 import logger from '../../config/logger.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 
-const USUARIOS_SEMILLA = [
-  {
-    nombre: 'Eliana',
-    email: 'eliana@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'RADICADOS',
-    cedula: '11009004',
-    cargo: 'Encargada de Radicaciones'
-  },
-  {
-    nombre: 'Ramon',
-    email: 'ramon@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'ENCARGADO',
-    cedula: '11009002',
-    cargo: 'Encargado de Permisos, Horas Extras y Radicados'
-  },
-  {
-    nombre: 'Gerencia General Acuasan',
-    email: 'gerencia@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'GERENCIA',
-    cedula: '11009001',
-    cargo: 'Gerente General'
-  },
-  {
-    nombre: 'Atención al Ciudadano PQR',
-    email: 'operativo@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'OPERATIVO',
-    cedula: '11009003',
-    cargo: 'Agente de Atención al Usuario'
-  },
-  {
-    nombre: 'Administrador de TI & Sistemas',
-    email: 'admin@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'ADMIN',
-    cedula: '11009000',
-    cargo: 'Administrador del Sistema'
-  }
-]
+// Costo de bcrypt (2^12 rondas). Subirlo hace más lento cada intento de
+// fuerza bruta sobre un hash robado; los hashes viejos (costo 10) se
+// actualizan solos en el siguiente login correcto del usuario.
+export const COSTO_BCRYPT = 12
 
 export const AuthService = {
   /**
-   * Crear usuarios semilla oficiales si no existen
+   * El seed de usuarios se movió a prisma/seed.mjs (npm run db:seed desde la
+   * raíz). Se conserva el método para no romper el arranque en app.js, pero
+   * ya no crea usuarios en cada boot.
    */
   async asegurarUsuariosIniciales() {
-    try {
-      for (const u of USUARIOS_SEMILLA) {
-        const existe = await prisma.usuario.findUnique({
-          where: { email: u.email }
-        })
-
-        if (!existe) {
-          const hash = await bcrypt.hash(u.password, 10)
-          await prisma.usuario.create({
-            data: {
-              nombre: u.nombre,
-              email: u.email,
-              password: hash,
-              rol: u.rol,
-              cedula: u.cedula,
-              cargo: u.cargo,
-              activo: true
-            }
-          })
-          logger.success('AUTH', 'SEED CREAR', `${u.email} (${u.rol}) — creado en BD`)
-        } else {
-          // Actualizar nombre y cargo si ya existen
-          await prisma.usuario.update({
-            where: { id: existe.id },
-            data: { nombre: u.nombre, cargo: u.cargo }
-          })
-        }
-      }
-    } catch (err) {
-      logger.warn('AUTH', 'SEED ERROR', err.message)
-    }
+    logger.success('AUTH', 'SEED MOVIDO', 'Seed de usuarios → prisma/seed.mjs (npm run db:seed)')
   },
 
   /**
@@ -106,21 +45,28 @@ export const AuthService = {
       throw { status: 403, message: 'Su cuenta está desactivada. Contacte al administrador.' }
     }
 
-    const passwordValido = await bcrypt.compare(password, usuario.password)
+    const passwordValido = await bcrypt.compare(password, usuario.passwordHash)
     if (!passwordValido) {
       logger.warn('AUTH', 'LOGIN FAIL', `Contraseña incorrecta: ${email} | IP: ${meta.ip || '?'}`)
       throw { status: 401, message: 'Credenciales inválidas. Verifique su correo o contraseña.' }
     }
 
+    // Rehash transparente: si el hash guardado usa un costo menor al actual,
+    // se reemplaza ahora que se conoce la contraseña correcta.
+    try {
+      if (bcrypt.getRounds(usuario.passwordHash) < COSTO_BCRYPT) {
+        await prisma.usuario.update({
+          where: { id: usuario.id },
+          data: { passwordHash: await bcrypt.hash(password, COSTO_BCRYPT) },
+        })
+      }
+    } catch (rehashError) {
+      logger.warn('AUTH', 'REHASH WARN', `No se pudo actualizar el hash: ${rehashError.message}`)
+    }
+
     const ahora = new Date()
 
-    // Actualizar último acceso del usuario
-    await prisma.usuario.update({
-      where: { id: usuario.id },
-      data: { ultimoAcceso: ahora }
-    })
-
-    // Registrar el acceso en el audit log
+    // Registrar el acceso en el audit log (snapshot del rol como String)
     try {
       await prisma.registroAcceso.create({
         data: {
@@ -128,7 +74,6 @@ export const AuthService = {
           nombreUsuario: usuario.nombre,
           emailUsuario: usuario.email,
           rolUsuario: usuario.rol,
-          cargoUsuario: usuario.cargo,
           ipAddress: meta.ip || null,
           userAgent: meta.userAgent || null,
           fechaAcceso: ahora
@@ -141,7 +86,7 @@ export const AuthService = {
     logger.success(
       'AUTH',
       'LOGIN OK',
-      `${usuario.email} (${usuario.rol}) — "${usuario.cargo}" | IP: ${meta.ip || '?'}`
+      `${usuario.email} (${usuario.rol}) | IP: ${meta.ip || '?'}`
     )
 
     const payload = {
@@ -149,7 +94,7 @@ export const AuthService = {
       nombre: usuario.nombre,
       email: usuario.email,
       rol: usuario.rol,
-      cargo: usuario.cargo
+      areaId: usuario.areaId
     }
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -163,9 +108,7 @@ export const AuthService = {
         nombre: usuario.nombre,
         email: usuario.email,
         rol: usuario.rol,
-        cargo: usuario.cargo,
-        cedula: usuario.cedula,
-        ultimoAcceso: ahora
+        areaId: usuario.areaId
       }
     }
   },
@@ -173,23 +116,22 @@ export const AuthService = {
   /**
    * Registrar nuevo usuario en el sistema (autoregistro público)
    *
-   * Regla de seguridad institucional: el autoregistro SIEMPRE crea un
-   * Funcionario Operativo. Cualquier rol enviado en el body se ignora —
-   * la asignación de roles (ENCARGADO, GERENCIA, RADICADOS, ADMIN) la
-   * hace exclusivamente el Administrador desde /api/admin/usuarios.
-   * Tampoco devuelve JWT: el cliente inicia sesión aparte con /login.
+   * El autoregistro SIEMPRE crea un usuario de rol USUARIO dentro del área
+   * líder (Gerencia General): la asignación de roles y áreas la hace después
+   * un líder desde la gestión de usuarios. Tampoco devuelve JWT: el cliente
+   * inicia sesión aparte con /login.
    */
   async registrarUsuario(datos) {
-    const { nombre, email, password, cedula } = datos
+    const { nombre, email, password } = datos
 
     if (!nombre || !email || !password) {
       throw { status: 400, message: 'Nombre, correo y contraseña son obligatorios.' }
     }
 
-    if (datos.rol && String(datos.rol).toUpperCase().trim() !== 'OPERATIVO') {
-      logger.warn('AUTH', 'REGISTRO', `Ignorado rol solicitado "${datos.rol}": el autoregistro siempre es OPERATIVO`)
+    if (datos.rol && String(datos.rol).toUpperCase().trim() !== 'USUARIO') {
+      logger.warn('AUTH', 'REGISTRO', `Ignorado rol solicitado "${datos.rol}": el autoregistro siempre es USUARIO`)
     }
-    const rol = 'OPERATIVO'
+    const rol = 'USUARIO'
 
     const emailFormateado = email.toLowerCase().trim()
 
@@ -202,16 +144,25 @@ export const AuthService = {
       throw { status: 400, message: 'El correo electrónico ya se encuentra registrado en el sistema.' }
     }
 
-    const hashPassword = await bcrypt.hash(password, 10)
+    // El área es obligatoria en el nuevo modelo: el autoregistro cae en el
+    // área líder hasta que un líder lo reasigne.
+    const areaLider = await prisma.area.findFirst({ where: { parentId: null } })
+    if (!areaLider) {
+      throw {
+        status: 409,
+        message: 'No existe un área líder en la base de datos. Ejecute el seed (npm run db:seed).'
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(password, COSTO_BCRYPT)
 
     const nuevoUsuario = await prisma.usuario.create({
       data: {
         nombre: nombre.trim(),
         email: emailFormateado,
-        password: hashPassword,
+        passwordHash,
         rol,
-        cedula: cedula ? cedula.trim() : null,
-        cargo: datos.cargo ? datos.cargo.trim() : 'Funcionario Operativo',
+        areaId: areaLider.id,
         activo: true
       }
     })
@@ -219,7 +170,7 @@ export const AuthService = {
     logger.success(
       'AUTH',
       'REGISTRO',
-      `Nuevo usuario: ${nuevoUsuario.email} | Rol: ${rol} (autoregistro) | Cargo: ${nuevoUsuario.cargo}`
+      `Nuevo usuario: ${nuevoUsuario.email} | Rol: ${rol} | Área: ${areaLider.codigo}`
     )
 
     return {
@@ -228,8 +179,7 @@ export const AuthService = {
         nombre: nuevoUsuario.nombre,
         email: nuevoUsuario.email,
         rol: nuevoUsuario.rol,
-        cargo: nuevoUsuario.cargo,
-        cedula: nuevoUsuario.cedula
+        areaId: nuevoUsuario.areaId
       }
     }
   },
@@ -237,10 +187,9 @@ export const AuthService = {
   /**
    * Solicitar recuperación de contraseña.
    *
-   * El restablecimiento es mediado por el Administrador: no existe canal de
+   * El restablecimiento es mediado por un líder: no existe canal de
    * correo institucional, y un código devuelto en la propia respuesta HTTP
-   * sería visible también para un atacante. El ADMIN restablece la clave
-   * desde Gestión de Usuarios (/api/admin/usuarios).
+   * sería visible también para un atacante.
    */
   async solicitarRecuperacion(email) {
     if (!email) {
@@ -252,47 +201,30 @@ export const AuthService = {
       where: { email: emailFormateado }
     })
 
-    if (!usuario) {
-      throw { status: 404, message: 'No existe ningún usuario registrado con ese correo electrónico.' }
+    // Misma respuesta exista o no el correo: así nadie puede usar este
+    // formulario para averiguar qué correos están registrados.
+    if (usuario) {
+      logger.warn('AUTH', 'RESET SOLICITADO', `Solicitud de restablecimiento para: ${emailFormateado}`)
+    } else {
+      logger.warn('AUTH', 'RESET SIN CUENTA', `Solicitud para correo no registrado: ${emailFormateado}`)
     }
 
-    logger.warn('AUTH', 'RESET SOLICITADO', `Solicitud de restablecimiento para: ${emailFormateado}`)
-
     return {
-      email: usuario.email,
-      message: 'Solicitud registrada. Contacte al Administrador del Sistema (admin@acuasan.com): él restablece su contraseña desde la Gestión de Usuarios.'
+      email: emailFormateado,
+      message: 'Si el correo está registrado, la solicitud quedó anotada. Contacte a su líder de área: él restablece la contraseña desde la gestión de usuarios.'
     }
   },
 
   /**
-   * Genera un token JWT para empleados de campo que acceden por cédula
-   * desde la app externa (sin contraseña completa).
-   *
-   * Si la cédula existe en la BD de usuarios, carga el nombre oficial.
-   * Si no existe, usa el nombre enviado por el propio empleado (confianza
-   * básica: solo pueden reportar sus propias horas ya que la cédula del
-   * token sella su identidad).
-   *
-   * El token tiene rol EMPLEADO_CAMPO y expira en 12h (turno de trabajo).
-   */
-  /**
-   * Busca si una cédula existe en la base de datos de usuarios
+   * LEGADO del sistema anterior (app externa Horas Extras): la cédula dejó
+   * de existir en el modelo Usuario, así que estos métodos ya no encuentran
+   * nada. Se conservan para no romper rutas; el prompt del backend decidá
+   * si se eliminan.
    */
   async buscarPorCedula(cedula) {
     if (!cedula) return { registrada: false }
-    const cedulaLimpia = String(cedula).trim()
     try {
-      const usuarioBD = await prisma.usuario.findFirst({
-        where: { cedula: cedulaLimpia },
-        select: { nombre: true, cargo: true, activo: true }
-      })
-      if (usuarioBD) {
-        return {
-          registrada: true,
-          nombre: usuarioBD.nombre,
-          cargo: usuarioBD.cargo || 'Funcionario Acuasan'
-        }
-      }
+      void cedula
     } catch (e) {
       logger.warn('AUTH', 'BUSCAR CEDULA ERR', e.message)
     }
@@ -304,19 +236,7 @@ export const AuthService = {
       throw { status: 400, message: 'La cédula es obligatoria.' }
     }
 
-    // Intentar buscar usuario en la BD para obtener nombre oficial
-    let nombreFinal = nombre?.trim() || null
-    try {
-      const usuarioBD = await prisma.usuario.findFirst({
-        where: { cedula: cedula.trim() }
-      })
-      if (usuarioBD) {
-        nombreFinal = usuarioBD.nombre
-      }
-    } catch (e) {
-      // Si falla la búsqueda, usar el nombre enviado por el cliente
-    }
-
+    const nombreFinal = nombre?.trim() || null
     if (!nombreFinal) {
       throw { status: 400, message: 'No se encontró el nombre del empleado. Por favor ingrese su nombre completo.' }
     }

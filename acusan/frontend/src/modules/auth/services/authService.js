@@ -86,6 +86,7 @@ export const authService = {
   async login(email, password) {
     const cleanEmail = (email || '').trim().toLowerCase()
     let data = null
+    let backendInalcanzable = false
 
     try {
       const res = await fetch(`${API_BASE}/login`, {
@@ -99,13 +100,33 @@ export const authService = {
         if (json && json.success) {
           data = json.data
         }
+      } else {
+        // El backend respondió y rechazó el acceso (401 y similares): sus
+        // credenciales no valen y ningún fallback las puede "arreglar".
+        let mensaje = 'Credenciales inválidas. Verifique su correo institucional o contraseña.'
+        try {
+          const json = await res.json()
+          if (json?.message) mensaje = json.message
+        } catch { /* respuesta sin cuerpo legible */ }
+        throw new Error(mensaje)
       }
     } catch (err) {
-      console.warn('API backend no disponible en este host, cambiando a autenticación segura de respaldos.', err)
+      if (err instanceof TypeError) {
+        // fetch solo lanza TypeError cuando no pudo conectar (backend caído):
+        // recién ahí tiene sentido el fallback de despliegue estático.
+        backendInalcanzable = true
+        console.warn('API backend no disponible en este host, cambiando a autenticación de respaldo.', err)
+      } else {
+        throw err
+      }
     }
 
-    // Fallback inteligente para cuentas oficiales si la API no responde o devuelve 405
+    // Fallback para cuentas oficiales SOLO si la API está inalcanzable
     if (!data) {
+      if (!backendInalcanzable) {
+        throw new Error('No se pudo iniciar sesión. Intente de nuevo en unos momentos.')
+      }
+
       const usuarioEncontrado = USUARIOS_FALLBACK.find(
         u => u.email === cleanEmail && u.password === password
       )
@@ -181,6 +202,16 @@ export const authService = {
    */
   getUsuarioActual() {
     return state.usuario
+  },
+
+  /**
+   * Actualiza los datos del usuario en sesión (p. ej. tras GET /api/me,
+   * que trae el área poblada y el rol al día) sin tocar el token.
+   */
+  actualizarUsuario(usuario) {
+    if (!usuario) return
+    localStorage.setItem(USER_KEY, JSON.stringify(usuario))
+    state.usuario = usuario
   },
 
   /**

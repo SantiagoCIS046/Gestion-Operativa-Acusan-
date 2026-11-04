@@ -10,12 +10,33 @@ import logger from './config/logger.js'
 
 // Rutas modulares
 import authRoutes from './modules/auth/auth.routes.js'
+import perfilRoutes from './modules/perfil/perfil.routes.js'
+import areaRoutes from './modules/areas/area.routes.js'
+import radicadoRoutes from './modules/radicados/radicado.routes.js'
+import resumenRoutes from './modules/resumen/resumen.routes.js'
+import alertaRoutes from './modules/alertas/alerta.routes.js'
+import cronAlertasRoutes from './modules/alertas/cron.routes.js'
+import informeRoutes from './modules/informes/informes.routes.js'
+import avisoRoutes from './modules/informes/avisos.routes.js'
+import calendarioRoutes from './modules/calendario/calendario.routes.js'
 
 // Middlewares
 import { auditMiddleware } from './middlewares/audit.middleware.js'
 
 // Seed de usuarios iniciales
 import { AuthService } from './modules/auth/auth.service.js'
+
+// Cifrado de datos sensibles: sin CLAVE_MAESTRA_DATOS el backend NO arranca
+// (mejor un error claro al inicio que guardar radicados sin cifrar o no
+// poder leer los existentes).
+import { verificarClaves } from './lib/cifrado.js'
+import { cifrarPendientes, totalCambiados } from './services/barridoCifrado.js'
+try {
+  verificarClaves()
+} catch (error) {
+  logger.error('CIFRADO', 'SIN LLAVE', error.message)
+  throw error
+}
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -29,6 +50,8 @@ const ORIGENES_FIJOS = [
   'https://acuusan.vercel.app',          // Alias secundario Acuusan
   'http://localhost:5173',               // Dev frontend principal
   'http://127.0.0.1:5173',
+  'http://localhost:5174',               // Dev frontend cuando 5173 está ocupado
+  'http://127.0.0.1:5174',               // (Vite pasa al siguiente puerto)
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ]
@@ -67,6 +90,17 @@ app.get('/api/health', (req, res) => {
 // ─── Rutas públicas ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
 
+// ─── Rutas privadas (sesión requerida) ────────────────────────────────────────
+app.use('/api', perfilRoutes) // GET /api/me
+app.use('/api/areas', areaRoutes) // GET /api/areas
+app.use('/api/radicados', radicadoRoutes) // gerencia dirige → el área responde
+app.use('/api/resumen', resumenRoutes) // GET /api/resumen
+app.use('/api/alertas', alertaRoutes) // motor de alertas
+app.use('/api/cron/alertas', cronAlertasRoutes) // revisión diaria (secreto CRON_SECRET)
+app.use('/api/informes', informeRoutes) // informes periódicos (solo gerencia)
+app.use('/api/avisos', avisoRoutes) // avisos internos de fin de periodo
+app.use('/api/calendario', calendarioRoutes) // calendario hábil Colombia
+
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   logger.warn('SISTEMA', 'RUTA 404', `${req.method} ${req.originalUrl}`)
@@ -101,6 +135,16 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
     } catch (e) {
       logger.warn('SISTEMA', 'SEED WARN', e.message)
     }
+
+    // Barrido de cifrado al arrancar: cifra lo que haya entrado a la base
+    // por fuera de la aplicación (en segundo plano, no retrasa el arranque)
+    cifrarPendientes()
+      .then((resumen) => {
+        const n = totalCambiados(resumen)
+        if (n) logger.warn('CIFRADO', 'BARRIDO', `${n} documento(s) estaban sin cifrar y se cifraron.`)
+        else logger.success('CIFRADO', 'BARRIDO OK', 'Todos los datos sensibles están cifrados')
+      })
+      .catch((e) => logger.warn('CIFRADO', 'BARRIDO WARN', e.message))
 
     logger.divider('Servidor listo — esperando peticiones')
   })

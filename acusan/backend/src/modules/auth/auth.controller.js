@@ -72,21 +72,6 @@ export const AuthController = {
   },
 
   /**
-   * GET /api/auth/me
-   * Retorna los datos del usuario autenticado (requiere token)
-   */
-  async me(req, res) {
-    try {
-      res.json({
-        success: true,
-        data: req.usuario
-      })
-    } catch (error) {
-      res.status(500).json({ success: false, message: 'Error al obtener perfil del usuario' })
-    }
-  },
-
-  /**
    * GET /api/auth/verificar-cedula/:cedula
    * Consulta si una cédula está registrada en la base de datos de usuarios
    */

@@ -8,7 +8,14 @@
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
     "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "db:seed": "node prisma/seed.mjs",
+    "informes:recalcular": "node scripts/recalcular-informes.mjs",
+    "claves:generar": "node scripts/generar-clave.mjs",
+    "datos:cifrar": "node scripts/cifrar-datos-existentes.mjs",
+    "datos:respaldar": "node scripts/respaldar-datos.mjs",
+    "cifrado:integrar": "node scripts/integrar-cifrado.mjs",
+    "test": "node --test --test-concurrency=1"
   },
   "keywords": [
     "acuasan",
@@ -24,8 +31,10 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9",
