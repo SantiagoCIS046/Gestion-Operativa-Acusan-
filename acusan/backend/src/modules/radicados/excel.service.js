@@ -58,6 +58,9 @@ const COLUMNAS = [
   { header: 'Descripción', width: 46 },
   { header: 'Categoría', width: 16 },
   { header: 'Área', width: 10 },
+  // Correo (o nombre) del encargado de responder, siempre del área de la fila.
+  // Vacío al importar = el líder del área.
+  { header: 'Encargado', width: 30 },
   { header: 'Tipo', width: 20 },
   { header: 'Remitente', width: 24 },
   { header: 'Prioridad', width: 11 },
@@ -113,6 +116,7 @@ export const ExcelService = {
           case 'Descripción': valor = f.descripcion; break
           case 'Categoría': valor = f.categoria; break
           case 'Área': valor = f.area?.codigo ?? ''; break
+          case 'Encargado': valor = f.encargado?.nombre ?? ''; break
           case 'Tipo': valor = f.tipo; break
           case 'Remitente': valor = f.remitente; break
           case 'Prioridad': valor = f.prioridad; break
@@ -126,7 +130,6 @@ export const ExcelService = {
       const extra = [
         textoEstado(f),
         f.estado === 'respondido' ? `-${f.diasRestantes}` : String(f.diasRestantes),
-        f.encargado?.nombre ?? '',
         f.respondidoEn ? fechaCalendario(f.respondidoEn) : '',
         f.numeroOficioRespuesta ?? '',
         f.observacionesRespuesta ?? '',
@@ -137,7 +140,7 @@ export const ExcelService = {
         celda.font = { color: { argb: 'FF6B7280' }, italic: true }
       })
     })
-    const extraHeaders = ['Estado', 'Días', 'Encargado', 'Respondido el', 'N.° oficio', 'Observaciones respuesta']
+    const extraHeaders = ['Estado', 'Días', 'Respondido el', 'N.° oficio', 'Observaciones respuesta']
     extraHeaders.forEach((h, j) => {
       const celda = hoja.getRow(1).getCell(COLUMNAS.length + 1 + j)
       celda.value = h
@@ -201,7 +204,8 @@ export const ExcelService = {
       '',
       '1. Diligencia la hoja "Radicados" (una fila por radicado).',
       '2. "Área" acepta el CÓDIGO del área (recomendado) o su nombre exacto.',
-      '3. "Encargado" acepta el email o el nombre del usuario, siempre del área de la fila.',
+      '3. "Encargado" acepta el correo o el nombre del usuario, siempre del área de la fila.',
+      '   Vacío = se asigna al líder del área.',
       '4. "Número" vacío = se genera automático (RAD-AÑO-CONSECUTIVO).',
       '5. Un número que ya existe ACTUALIZA ese radicado (no crea otro).',
       '6. "Prioridad" vacía se guarda como media (baja | media | alta).',
@@ -287,6 +291,20 @@ export const ExcelService = {
       )
     }
 
+    const lideres = new Map()
+    const liderDe = async (areaId) => {
+      if (!lideres.has(areaId)) {
+        lideres.set(
+          areaId,
+          await prisma.usuario.findFirst({
+            where: { areaId, rol: 'LIDER_AREA', activo: true },
+            select: { id: true, nombre: true, email: true },
+          }),
+        )
+      }
+      return lideres.get(areaId)
+    }
+
     const texto = (fila, c) => (c == null ? '' : String(valorCelda(fila.getCell(c).value) ?? '').trim())
 
     const resultado = { total: 0, creados: 0, actualizados: 0, errores: [] }
@@ -306,7 +324,10 @@ export const ExcelService = {
         if (!area) throw new Error(`Área "${areaTexto}" no reconocida (usa el código).`)
 
         const encargadoTexto = texto(fila, COL.encargado)
-        const encargado = encargadoTexto ? await encargadoEn(area.id, encargadoTexto) : null
+        let encargado = encargadoTexto ? await encargadoEn(area.id, encargadoTexto) : null
+        if (encargadoTexto && !encargado) {
+          throw new Error(`Encargado "${encargadoTexto}" no encontrado en ${area.codigo}.`)
+        }
 
         const fechaRadicacion = COL.radicacion == null ? '' : parseFechaExcel(valorCelda(fila.getCell(COL.radicacion).value))
         const fechaLimite = COL.limite == null ? null : parseFechaExcel(valorCelda(fila.getCell(COL.limite).value))
@@ -341,7 +362,11 @@ export const ExcelService = {
           await RadicadoService.actualizar(usuario, existente.id, body)
           resultado.actualizados++
         } else {
-          if (!encargado) throw new Error(`Encargado "${encargadoTexto}" no encontrado en ${area.codigo}.`)
+          // Sin encargado en la fila: responde el líder del área
+          if (!encargado) encargado = await liderDe(area.id)
+          if (!encargado) {
+            throw new Error(`Indica el encargado: ${area.codigo} no tiene un líder de área activo.`)
+          }
           // PDF de relleno: el oficial se sube luego desde el detalle
           const placeholder = {
             buffer: pdfUnaPagina(`Radicado ${numero || '(número automático)'}`, [
@@ -352,7 +377,8 @@ export const ExcelService = {
             ]),
             originalname: 'radicado-importado.pdf',
           }
-          await RadicadoService.crear(usuario, numero ? { ...body, numeroRadicado: numero } : body, placeholder)
+          const datos = { ...body, encargadoId: encargado.id, ...(numero ? { numeroRadicado: numero } : {}) }
+          await RadicadoService.crear(usuario, datos, placeholder)
           resultado.creados++
         }
       } catch (error) {

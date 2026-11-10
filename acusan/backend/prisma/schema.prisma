@@ -168,11 +168,30 @@ model Usuario {
   area         Area    @relation(fields: [areaId], references: [id], onDelete: Restrict)
   activo       Boolean @default(true)
 
+  // ── Administración de cuentas (2026-11-10) ──
+  // Autorregistro: la cuenta nace inactiva y pendiente hasta que gerencia la
+  // apruebe (antes entraba de inmediato al área de gerencia).
+  pendienteAprobacion Boolean   @default(false)
+  // Contraseña temporal asignada por un administrador: al entrar se exige
+  // cambiarla antes de usar el sistema.
+  debeCambiarPassword Boolean   @default(false)
+  // Los tokens emitidos ANTES de esta fecha dejan de valer (cambio o
+  // restablecimiento de contraseña, desactivación): cierra sesiones viejas.
+  sesionesDesde       DateTime?
+  // Bloqueo por intentos fallidos de inicio de sesión
+  intentosFallidos    Int       @default(0)
+  bloqueadoHasta      DateTime?
+  // Recuperación por correo: solo se guarda el hash SHA-256 del token
+  resetTokenHash      String?
+  resetTokenExpira    DateTime?
+  ultimoAcceso        DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   accesos RegistroAcceso[]
 
+  @@index([areaId, rol])
   @@map("usuarios")
 }
 
@@ -351,7 +370,12 @@ model Adjunto {
   vigente    Boolean @default(true)
   nombreOriginal String
   tamano     Int
-  contenido  Bytes
+  // Bytes cifrados cuando el PDF vive en MongoDB (almacen = "mongo"). Con un
+  // almacén externo (almacen = "blob" | "disco") queda vacío y `ubicacion`
+  // apunta al objeto, que se guarda TAMBIÉN cifrado (ver almacenPdf).
+  contenido  Bytes?
+  almacen    String  @default("mongo")
+  ubicacion  String?
   subidoPorId String @db.ObjectId
   subidoEn   DateTime @default(now())
 

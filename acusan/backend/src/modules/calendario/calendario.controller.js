@@ -11,6 +11,8 @@ import {
   nombreFestivo,
   resumenHoy,
   cargarDiasNoLaborales,
+  sumarDiasHabiles,
+  esHabil,
 } from '../../lib/calendarioCO.js'
 import { medianocheBogotaDe, sumarDiasISO, aCalendarioBogota } from '../../utils/fechas.js'
 
@@ -101,12 +103,35 @@ export const CalendarioController = {
       const prefix = `${anio}-${String(mes).padStart(2, '0')}`
       const desde = `${prefix}-01`
       const hastaExclusivo = mes === 12 ? `${anio + 1}-01-01` : `${anio}-${String(mes + 1).padStart(2, '0')}-01`
-      const [dias, enviados, diasHabiles] = await Promise.all([
+      const area = areaDeConsulta(req.usuario, req.query?.area)
+      const [dias, enviados, vencen, diasHabiles] = await Promise.all([
         calendarioDelMes(anio, mes),
-        enviadosPorDia(desde, hastaExclusivo, req.usuario, areaDeConsulta(req.usuario, req.query?.area)),
+        enviadosPorDia(desde, hastaExclusivo, req.usuario, area),
+        // Pendientes por fecha límite: la vista "Vencimientos" (días futuros)
+        vencimientosPorDia(desde, hastaExclusivo, req.usuario, area),
         diasHabilesDelMes(anio, mes),
       ])
-      res.json({ success: true, data: { anio, mes, diasHabiles, dias, enviados } })
+      res.json({ success: true, data: { anio, mes, diasHabiles, dias, enviados, vencen } })
+    } catch (error) {
+      responder(res, error)
+    }
+  },
+
+  /**
+   * GET /api/calendario/sumar-habiles?desde=2026-11-10&dias=15
+   * Fecha que resulta de sumar N días hábiles (festivos de Colombia y días no
+   * laborales incluidos): la usa el formulario para fijar plazos legales.
+   */
+  async sumarHabiles(req, res) {
+    try {
+      const desde = req.query?.desde
+      const dias = Number(req.query?.dias)
+      if (!fechaValida(desde)) throw { status: 400, message: 'desde debe ser una fecha válida (YYYY-MM-DD).' }
+      if (!Number.isInteger(dias) || dias < 1 || dias > 400) {
+        throw { status: 400, message: 'dias debe ser un entero entre 1 y 400.' }
+      }
+      const fecha = aCalendarioBogota(await sumarDiasHabiles(desde, dias))
+      res.json({ success: true, data: { desde, dias, fecha, habil: await esHabil(fecha) } })
     } catch (error) {
       responder(res, error)
     }
@@ -146,7 +171,21 @@ export const CalendarioController = {
         },
       })
       radicados.sort((a, b) => (a.numeroRadicado < b.numeroRadicado ? -1 : a.numeroRadicado > b.numeroRadicado ? 1 : 0))
-      const ids = [...new Set(radicados.map((r) => r.encargadoId).filter(Boolean))]
+      // Pendientes que VENCEN ese día (vista de vencimientos)
+      const vencen = await prisma.radicado.findMany({
+        where: {
+          estado: 'PENDIENTE',
+          fechaLimite: { gte: medianocheBogotaDe(fecha), lt: medianocheBogotaDe(sumarDiasISO(fecha, 1)) },
+          ...(areaId ? { areaId } : {}),
+        },
+        take: 100,
+        select: {
+          id: true, numeroRadicado: true, asunto: true, prioridad: true,
+          fechaRadicacion: true, fechaLimite: true, encargadoId: true,
+          area: { select: { codigo: true, nombre: true } },
+        },
+      })
+      const ids = [...new Set([...radicados, ...vencen].map((r) => r.encargadoId).filter(Boolean))]
       const encargados = ids.length ? await prisma.usuario.findMany({ where: { id: { in: ids } }, select: { id: true, nombre: true } }) : []
       const nombres = Object.fromEntries(encargados.map((u) => [u.id, u.nombre]))
       res.json({
@@ -156,6 +195,7 @@ export const CalendarioController = {
           tipo: await tipoDia(fecha),
           nombreFestivo: await nombreFestivo(fecha),
           enviados: radicados.map((r) => ({ ...r, encargado: nombres[r.encargadoId] ?? r.encargadoId })),
+          vencen: vencen.map((r) => ({ ...r, encargado: nombres[r.encargadoId] ?? r.encargadoId })),
         },
       })
     } catch (error) {

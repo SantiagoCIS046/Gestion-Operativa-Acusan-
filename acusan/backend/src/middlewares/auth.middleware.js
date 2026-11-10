@@ -2,6 +2,8 @@
 // Reemplazan a verificarToken/verificarRol del sistema anterior.
 
 import jwt from 'jsonwebtoken'
+import prisma from '../config/prisma.js'
+import logger from '../config/logger.js'
 
 // Payload mínimo que exige el nuevo token (los de la era anterior no traen
 // areaId y romperían los permisos: se rechazan para forzar re-login).
@@ -43,7 +45,9 @@ export const requireAuth = (req, res, next) => {
       })
     }
 
-    req.usuario = extraerUsuario(payload)
+    // cuentaVigente (montado antes en app.js) ya leyó la cuenta de la base:
+    // el rol y el área vigentes mandan sobre los que traía el token.
+    req.usuario = req.cuentaActual ?? extraerUsuario(payload)
     next()
   } catch (error) {
     return res.status(401).json({
@@ -77,3 +81,88 @@ export const requireRole =
 
     next()
   }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cuentaVigente: la cuenta del token se valida contra la base en CADA petición
+// (con una caché corta). Sin esto, desactivar una cuenta, cambiarle el rol o
+// restablecerle la contraseña no surtía efecto hasta que el token vencía (8 h).
+//   - cuenta borrada o desactivada → 401
+//   - token emitido antes de sesionesDesde (cambio/restablecimiento) → 401
+//   - contraseña temporal pendiente de cambio → 403 salvo /api/me*
+// Se monta en app.js sobre /api; sin cabecera Bearer no hace nada (las rutas
+// públicas siguen igual) y un token inválido lo rechaza luego requireAuth.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ES_OBJECTID = /^[a-f\d]{24}$/i
+const TTL_CACHE_MS = 5_000
+const cache = new Map()
+
+/** Olvida la cuenta en caché (tras editarla, para que el cambio aplique ya). */
+export function invalidarCuenta(id) {
+  if (id) cache.delete(String(id))
+  else cache.clear()
+}
+
+async function leerCuenta(id) {
+  const enCache = cache.get(id)
+  if (enCache && Date.now() - enCache.t < TTL_CACHE_MS) return enCache.cuenta
+  const cuenta = await prisma.usuario.findUnique({
+    where: { id },
+    select: {
+      id: true, nombre: true, email: true, rol: true, areaId: true,
+      activo: true, sesionesDesde: true, debeCambiarPassword: true,
+    },
+  })
+  cache.set(id, { cuenta, t: Date.now() })
+  return cuenta
+}
+
+export async function cuentaVigente(req, res, next) {
+  const authHeader = req.headers['authorization']
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next()
+
+  let payload
+  try {
+    payload = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET)
+  } catch {
+    return next() // requireAuth responderá 401
+  }
+  if (!ES_OBJECTID.test(String(payload?.id ?? ''))) return next()
+
+  try {
+    const cuenta = await leerCuenta(String(payload.id))
+    if (!cuenta || !cuenta.activo) {
+      return res.status(401).json({
+        success: false,
+        codigo: 'CUENTA_INACTIVA',
+        message: 'Tu cuenta fue desactivada. Contacta a gerencia o a tu líder de área.',
+      })
+    }
+    if (cuenta.sesionesDesde && payload.iat < Math.floor(cuenta.sesionesDesde.getTime() / 1000)) {
+      return res.status(401).json({
+        success: false,
+        codigo: 'SESION_CERRADA',
+        message: 'Tu contraseña cambió: inicia sesión nuevamente.',
+      })
+    }
+    const ruta = req.originalUrl.split('?')[0]
+    if (cuenta.debeCambiarPassword && !ruta.startsWith('/api/me')) {
+      return res.status(403).json({
+        success: false,
+        codigo: 'DEBE_CAMBIAR_PASSWORD',
+        message: 'Debes cambiar tu contraseña temporal antes de continuar.',
+      })
+    }
+    req.cuentaActual = {
+      id: cuenta.id,
+      nombre: cuenta.nombre,
+      email: cuenta.email,
+      rol: cuenta.rol,
+      areaId: cuenta.areaId,
+    }
+    next()
+  } catch (error) {
+    logger.error('AUTH', 'CUENTA', `No se pudo verificar la cuenta: ${error.message}`)
+    res.status(503).json({ success: false, message: 'No se pudo verificar la sesión. Intenta de nuevo.' })
+  }
+}

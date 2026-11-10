@@ -28,6 +28,8 @@ const LIDER_COM = 'lider.comercial@acuasan.com' // LIDER_AREA (COM)
 // Números de radicado de la suite (limpieza también en after)
 const SUFIJO = `RAD-T-${Date.now().toString(36)}`
 const numero = (n) => `${SUFIJO}-${n}`
+// Marca de los radicados de la suite (sirve para limpiarlos todos al final)
+const DESCRIPCION_PRUEBA = 'Contexto de prueba para el encargado del área.'
 const ID_FALSO = 'a'.repeat(24)
 
 // PDF mínimo: solo la firma mágica (el backend no parsea el contenido)
@@ -79,8 +81,14 @@ after(async () => {
     // primero sus alertas/adjuntos/eventos (referencias explícitas), luego el raíz
     // El número está cifrado en la base: se filtra en memoria, ya descifrado
     const propios = (
-      await prisma.radicado.findMany({ select: { id: true, numeroRadicado: true } })
-    ).filter((r) => String(r.numeroRadicado).startsWith('RAD-T-'))
+      await prisma.radicado.findMany({ select: { id: true, numeroRadicado: true, descripcion: true } })
+    ).filter(
+      (r) =>
+        String(r.numeroRadicado).startsWith('RAD-T-') ||
+        // Los de número automático (RAD-<año>-####) se reconocen por la
+        // descripción de prueba: antes quedaban huérfanos en la base.
+        r.descripcion === DESCRIPCION_PRUEBA,
+    )
     const ids = propios.map((r) => r.id)
     if (ids.length) {
       await prisma.alerta.deleteMany({ where: { radicadoId: { in: ids } } })
@@ -144,7 +152,7 @@ function formRadicado({ n = 1, autoNumero = false, categoria = 'Pruebas', areaId
   const form = new FormData()
   if (!autoNumero) form.append('numeroRadicado', numero(n))
   form.append('asunto', 'Solicitud de información técnica')
-  form.append('descripcion', 'Contexto de prueba para el encargado del área.')
+  form.append('descripcion', DESCRIPCION_PRUEBA)
   form.append('remitente', 'Secretaría General')
   form.append('tipo', 'Derecho de petición')
   form.append('categoria', categoria)
@@ -210,7 +218,7 @@ test('setup: gerencia registra tres radicados de OPE (sano, por vencer, vencido)
     data: {
       numeroRadicado: numero(3),
       asunto: 'Solicitud de información técnica',
-      descripcion: 'Contexto de prueba para el encargado del área.',
+      descripcion: DESCRIPCION_PRUEBA,
       remitente: 'Secretaría General',
       tipo: 'Derecho de petición',
       prioridad: 'MEDIA',

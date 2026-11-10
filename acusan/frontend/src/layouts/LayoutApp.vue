@@ -46,6 +46,13 @@
           >
             {{ conteo.pendientes.value }}
           </span>
+          <span
+            v-if="item.ruta === '/usuarios' && solicitudes > 0"
+            class="nav-badge nav-badge--rojo"
+            :title="`${solicitudes} solicitud(es) de cuenta por aprobar`"
+          >
+            {{ solicitudes }}
+          </span>
         </RouterLink>
       </nav>
 
@@ -68,18 +75,20 @@
         <div class="topbar-usuario">
           <!-- Tira "Hoy": día de calendario con su clase (hábil/fin de
                semana/festivo) y el próximo festivo. Visible para TODOS los
-               roles; un clic lleva al calendario -->
-          <button
+               roles; en gerencia un clic lleva al calendario -->
+          <div
             v-if="tira.hoy"
-            type="button"
             class="tira-hoy"
+            :class="{ 'tira-hoy--enlace': sesion.esLiderGeneral.value }"
             :title="tira.detalle"
+            :role="sesion.esLiderGeneral.value ? 'button' : undefined"
+            :tabindex="sesion.esLiderGeneral.value ? 0 : undefined"
             @click="irAlCalendario"
           >
             <span class="tira-hoy-fecha">{{ tira.fechaCorta }}</span>
             <span class="tira-hoy-tipo" :class="`tira-hoy-tipo--${tira.hoy.tipo}`">{{ tira.etiquetaTipo }}</span>
             <span v-if="tira.proximo" class="tira-hoy-proximo">Próx. festivo: {{ tira.proximo }}</span>
-          </button>
+          </div>
 
           <!-- Campana de alertas pendientes: lleva a /alertas y se actualiza al atender -->
           <RouterLink to="/alertas" class="campana-topbar" :title="tituloCampana" :aria-label="tituloCampana">
@@ -102,6 +111,17 @@
           <div class="usuario-avatar" :aria-hidden="true">
             {{ iniciales }}
           </div>
+          <button
+            type="button"
+            class="btn-clave"
+            title="Cambiar mi contraseña"
+            aria-label="Cambiar mi contraseña"
+            @click="modalClave = true"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+            </svg>
+          </button>
           <button type="button" class="btn-salir" title="Cerrar sesión" @click="alSalir">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -114,19 +134,35 @@
       </header>
 
       <main class="contenido">
-        <router-view />
+        <!-- vistaKey vuelve a montar la vista (p. ej. tras crear la contraseña
+             personal, cuando antes el backend rechazaba sus consultas) -->
+        <router-view v-slot="{ Component }">
+          <component :is="Component" :key="`${route.fullPath}#${vistaKey}`" />
+        </router-view>
       </main>
     </div>
+
+    <!-- Cambio de contraseña: voluntario (botón de la llave) u obligatorio
+         cuando la cuenta entró con una contraseña temporal -->
+    <CambiarPassword
+      :model-value="modalClave || cambioObligatorio"
+      :obligatorio="cambioObligatorio"
+      @update:model-value="modalClave = $event"
+      @cambiada="alCambiarClave"
+      @salir="alSalir"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useSesion } from '@/composables/useSesion.js'
 import { useConteoAlertas } from '@/composables/useConteoAlertas.js'
 import { CalendarioAPI } from '@/api/calendario.js'
+import { UsuariosAPI } from '@/api/usuarios.js'
+import CambiarPassword from '@/components/CambiarPassword.vue'
 
 // Íconos inline (trazo, estilo del login) para no cargar una librería nueva
 const ICONOS = {
@@ -140,6 +176,8 @@ const ICONOS = {
     '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   calendario:
     '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  usuarios:
+    '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/><path d="M19 3l2 2-4 4"/></svg>',
   informes:
     '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
 }
@@ -156,20 +194,22 @@ function alternarSidebar() {
   sidebarColapsada.value = !sidebarColapsada.value
 }
 
-// Fusión: Radicados es el módulo único (absorbió a Archivos); las áreas
-// trabajan con Radicados, Informes y Alertas; Resumen, Calendario y
-// Estructura quedan para gerencia.
+// Fusión: Radicados es el módulo único (absorbió a Archivos). El menú sigue
+// al rol: gerencia lo ve todo; el líder de área arranca en su panel de
+// rendimiento (Resumen) y trabaja con Radicados, Informes y Alertas; un
+// usuario del área solo ve Radicados y Alertas. `roles` null = todos.
 const NAV = [
-  { ruta: '/resumen', etiqueta: 'Resumen', icono: ICONOS.resumen, soloLiderGeneral: true },
-  { ruta: '/radicados', etiqueta: 'Radicados', icono: ICONOS.radicados, soloLiderGeneral: false },
-  { ruta: '/informes', etiqueta: 'Informes', icono: ICONOS.informes, soloLiderGeneral: false },
-  { ruta: '/alertas', etiqueta: 'Alertas', icono: ICONOS.alertas, soloLiderGeneral: false },
-  { ruta: '/calendario', etiqueta: 'Calendario', icono: ICONOS.calendario, soloLiderGeneral: true },
-  { ruta: '/estructura', etiqueta: 'Estructura', icono: ICONOS.estructura, soloLiderGeneral: true },
+  { ruta: '/resumen', etiqueta: 'Resumen', icono: ICONOS.resumen, roles: ['LIDER_GENERAL', 'LIDER_AREA'] },
+  { ruta: '/radicados', etiqueta: 'Radicados', icono: ICONOS.radicados },
+  { ruta: '/informes', etiqueta: 'Informes', icono: ICONOS.informes, roles: ['LIDER_GENERAL', 'LIDER_AREA'] },
+  { ruta: '/alertas', etiqueta: 'Alertas', icono: ICONOS.alertas },
+  { ruta: '/calendario', etiqueta: 'Calendario', icono: ICONOS.calendario, roles: ['LIDER_GENERAL'] },
+  { ruta: '/estructura', etiqueta: 'Estructura', icono: ICONOS.estructura, roles: ['LIDER_GENERAL'] },
+  { ruta: '/usuarios', etiqueta: 'Usuarios', icono: ICONOS.usuarios, roles: ['LIDER_GENERAL', 'LIDER_AREA'] },
 ]
 
 const itemsVisibles = computed(() =>
-  NAV.filter((i) => !i.soloLiderGeneral || sesion.esLiderGeneral.value),
+  NAV.filter((i) => !i.roles || i.roles.includes(sesion.rol.value)),
 )
 
 const esActivo = (item) => route.path === item.ruta || route.path.startsWith(item.ruta + '/')
@@ -225,6 +265,35 @@ function alSalir() {
   sesion.salir()
   router.push('/login')
 }
+
+// ── Contraseña y solicitudes de cuenta ──────────────────────
+const modalClave = ref(false)
+const cambioObligatorio = computed(() => Boolean(sesion.usuario.value?.debeCambiarPassword))
+
+const vistaKey = ref(0)
+
+function alCambiarClave() {
+  modalClave.value = false
+  vistaKey.value++
+  // Con la contraseña nueva, los datos del sistema ya se pueden cargar
+  sesion.refrescar().catch(() => {})
+  conteo.cargar()
+  cargarSolicitudes()
+}
+
+// Solicitudes de autorregistro por aprobar (solo gerencia: badge del menú)
+const solicitudes = ref(0)
+function cargarSolicitudes() {
+  if (!sesion.esLiderGeneral.value) return
+  UsuariosAPI.listar({ estado: 'pendiente' })
+    .then((d) => {
+      solicitudes.value = d.solicitudesPendientes ?? 0
+    })
+    .catch(() => {})
+}
+// La vista Usuarios avisa cuando aprueba o rechaza una solicitud
+onMounted(() => window.addEventListener('acuasan:solicitudes', cargarSolicitudes))
+onUnmounted(() => window.removeEventListener('acuasan:solicitudes', cargarSolicitudes))
 
 onMounted(() => {
   // Datos frescos del rol/área (best effort: si falla, seguimos con lo del login)
@@ -581,7 +650,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* Tira "Hoy" del topbar */
+/* Tira "Hoy" del topbar (en gerencia es enlace al calendario) */
 .tira-hoy {
   display: flex;
   align-items: center;
@@ -593,12 +662,15 @@ onMounted(() => {
   color: var(--text-muted);
   font-size: 0.7rem;
   font-weight: 700;
-  cursor: pointer;
   white-space: nowrap;
   transition: all 0.16s ease;
 }
 
-.tira-hoy:hover {
+.tira-hoy--enlace {
+  cursor: pointer;
+}
+
+.tira-hoy--enlace:hover {
   color: var(--acuasan-blue);
   border-color: var(--acuasan-blue);
   background: var(--acuasan-blue-light);
@@ -726,6 +798,27 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   box-shadow: 0 3px 10px rgba(0, 72, 132, 0.25);
+}
+
+.btn-clave {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 7px 11px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-clave:hover {
+  color: var(--acuasan-blue);
+  border-color: var(--acuasan-blue);
+  background: var(--acuasan-blue-light);
 }
 
 .btn-salir {

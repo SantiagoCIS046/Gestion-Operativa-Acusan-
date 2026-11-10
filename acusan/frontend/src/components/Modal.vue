@@ -12,7 +12,7 @@
         <div class="modal-caja" :class="`modal-caja--${ancho}`">
           <div class="modal-encabezado">
             <h3 class="modal-titulo">{{ titulo }}</h3>
-            <button type="button" class="modal-cerrar" aria-label="Cerrar" @click="cerrar">
+            <button v-if="cerrable" type="button" class="modal-cerrar" aria-label="Cerrar" @click="cerrar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -39,11 +39,15 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   titulo: { type: String, default: '' },
   ancho: { type: String, default: 'md' }, // 'sm' | 'md' | 'lg'
+  // false: sin X, sin cerrar al hacer clic afuera ni con Escape (p. ej. el
+  // cambio obligatorio de la contraseña temporal)
+  cerrable: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['update:modelValue'])
 
 function cerrar() {
+  if (!props.cerrable) return
   emit('update:modelValue', false)
 }
 
@@ -57,6 +61,9 @@ watch(
     if (abierto) window.addEventListener('keydown', alTeclado)
     else window.removeEventListener('keydown', alTeclado)
   },
+  // immediate: un modal que ya nace abierto (modelValue=true al montar)
+  // también debe escuchar Escape, no solo el que se abre después
+  { immediate: true },
 )
 
 onUnmounted(() => window.removeEventListener('keydown', alTeclado))

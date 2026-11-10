@@ -2,8 +2,12 @@
   <section class="vista-resumen">
     <header class="cabecera-vista">
       <div>
-        <h2>Panel de control</h2>
-        <p class="vista-sub">Estado de los radicados en tu alcance ({{ alcance }}).</p>
+        <h2>{{ esLiderGeneral ? 'Panel de control' : 'Panel de tu área' }}</h2>
+        <p class="vista-sub">
+          {{ esLiderGeneral
+            ? 'Estado de los radicados en todas las áreas.'
+            : `Rendimiento de ${areaPropia}: lo que recibes de gerencia y lo que entregas.` }}
+        </p>
       </div>
       <div class="cabecera-acciones">
         <button type="button" class="btn-secundario" :disabled="cargando" @click="cargar">
@@ -27,12 +31,26 @@
       <p>{{ error }}</p>
     </div>
 
+    <!-- Avisos de cierre de periodo (informe semanal/mensual listo): gerencia -->
+    <section v-if="esLiderGeneral && avisos.length" class="avisos-periodo" aria-label="Informes de periodo por revisar">
+      <div v-for="a in avisos" :key="a.id" class="aviso-periodo">
+        <div class="aviso-texto">
+          <strong>{{ a.titulo }}</strong>
+          <span>{{ a.mensaje }}</span>
+        </div>
+        <div class="aviso-acciones">
+          <RouterLink to="/informes" class="aviso-ver">Ver informe</RouterLink>
+          <button type="button" class="aviso-ok" :disabled="atendiendo === a.id" @click="atenderAviso(a)">Marcar revisado</button>
+        </div>
+      </div>
+    </section>
+
     <template v-else>
       <!-- 6 indicadores: cada uno lleva al listado ya filtrado -->
       <nav class="kpis" aria-label="Indicadores del panel">
         <RouterLink class="kpi" :to="{ path: '/radicados', query: {} }">
           <span class="kpi-cifra">{{ kpis.total }}</span>
-          <span class="kpi-etiqueta">Radicados en total</span>
+          <span class="kpi-etiqueta">{{ esLiderGeneral ? 'Radicados en total' : 'Radicados recibidos' }}</span>
           <span class="kpi-ver">Ver todos</span>
         </RouterLink>
         <RouterLink class="kpi kpi--rojo" :to="{ path: '/radicados', query: { estado: 'vencido' } }">
@@ -200,6 +218,79 @@
           </div>
         </div>
       </article>
+
+      <!-- Rendimiento del equipo (solo lider_area): qué lleva cada encargado
+           del área — los radicados que recibió y los que entregó -->
+      <article v-else-if="esLiderArea && equipoOrdenado.length" class="panel panel--ranking">
+        <header class="ranking-cabecera">
+          <h3 class="panel-titulo">Mi equipo — radicados por encargado</h3>
+          <label class="orden-selector">
+            Ordenar por:
+            <select v-model="ordenEquipo">
+              <option value="total">Total</option>
+              <option value="vencidos">Vencidos</option>
+              <option value="porVencer">Por vencer</option>
+              <option value="entregadosConRetraso">Con retraso</option>
+            </select>
+          </label>
+        </header>
+
+        <div class="leyenda">
+          <span class="leyenda-item"><span class="punto punto--rojo"></span> Vencidos</span>
+          <span class="leyenda-item"><span class="punto punto--ambar"></span> Por vencer</span>
+          <span class="leyenda-item"><span class="punto punto--verde"></span> Pendientes en tiempo</span>
+          <span class="leyenda-item"><span class="punto punto--cyan"></span> Entregados</span>
+          <span class="leyenda-nota">El largo de la barra es proporcional al total</span>
+        </div>
+
+        <div class="ranking-scroll">
+          <div class="ranking-encabezados">
+            <span>Encargado</span>
+            <span>Composición</span>
+            <span class="num">Total</span>
+            <span class="num">Vencidos</span>
+            <span class="num">Por vencer</span>
+            <span class="num">A tiempo</span>
+            <span class="num">Con retraso</span>
+            <span class="acciones"></span>
+          </div>
+
+          <div v-for="fila in equipoOrdenado" :key="fila.id" class="ranking-fila">
+            <div class="ranking-nombre">
+              <span class="ranking-codigo" :class="{ 'ranking-codigo--inactivo': !fila.activo }">{{ fila.iniciales }}</span>
+              <span class="ranking-titulo" :title="fila.nombre">
+                {{ fila.nombre }}
+                <small v-if="fila.rol === 'LIDER_AREA'" class="ranking-rol">líder</small>
+                <small v-else-if="!fila.activo" class="ranking-rol ranking-rol--muted">inactivo</small>
+              </span>
+            </div>
+
+            <div
+              class="ranking-barra"
+              :title="`${fila.total} en total: ${fila.vencidos} vencidos · ${fila.porVencer} por vencer · ${fila.enTiempo} pendientes en tiempo · ${fila.entregados} entregados`"
+            >
+              <div class="ranking-barra-interior" :style="{ width: pctBarraEquipo(fila.total) + '%' }">
+                <span class="seg seg--rojo" :style="{ flexGrow: fila.vencidos || 0 }"></span>
+                <span class="seg seg--ambar" :style="{ flexGrow: fila.porVencer || 0 }"></span>
+                <span class="seg seg--verde" :style="{ flexGrow: fila.enTiempo || 0 }"></span>
+                <span class="seg seg--cyan" :style="{ flexGrow: fila.entregados || 0 }"></span>
+              </div>
+            </div>
+
+            <span class="num num--fuerte">{{ fila.total }}</span>
+            <span class="num num--rojo">{{ fila.vencidos }}</span>
+            <span class="num num--ambar">{{ fila.porVencer }}</span>
+            <span class="num">{{ fila.entregadosATiempo }}</span>
+            <span class="num">{{ fila.entregadosConRetraso }}</span>
+
+            <div class="ranking-acciones">
+              <RouterLink class="btn-mini btn-mini--suave" :to="{ path: '/radicados', query: { q: fila.nombre } }">
+                Ver radicados
+              </RouterLink>
+            </div>
+          </div>
+        </div>
+      </article>
     </template>
 
     <!-- Revisión global de alertas (solo lider_general; motor único) -->
@@ -256,6 +347,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import { ResumenAPI } from '@/api/resumen.js'
 import { AlertasAPI } from '@/api/alertas.js'
+import { InformesAPI } from '@/api/informes.js'
 import { useSesion } from '@/composables/useSesion.js'
 import { useConteoAlertas } from '@/composables/useConteoAlertas.js'
 import { useToast } from '@/composables/useToast.js'
@@ -269,7 +361,12 @@ const toast = useToast()
 const conteo = useConteoAlertas()
 
 const esLiderGeneral = computed(() => sesion.esLiderGeneral.value)
-const alcance = computed(() => (esLiderGeneral.value ? 'todas las áreas' : 'tu área'))
+const esLiderArea = computed(() => sesion.esLiderArea.value)
+// Nombre corto del área para los textos del líder ("Rendimiento de OPE…")
+const areaPropia = computed(() => {
+  const a = sesion.area.value
+  return a ? `${a.nombre} (${a.codigo})` : 'tu área'
+})
 
 // Contrato de GET /api/resumen: { areas[], kpis{}, ventanas{},
 // proximosAVencer[8], categorias[] } — el scope ya viene recortado por rol
@@ -334,6 +431,36 @@ const rankingOrdenado = computed(() =>
 const maxTotal = computed(() => Math.max(1, ...filasRanking.value.map((f) => f.total)))
 const pctBarra = (n) => Math.round((n / maxTotal.value) * 100)
 
+// ===== Mi equipo (solo lider_area): rendimiento por encargado =====
+// El backend manda porEncargado con los conteos de cada encargado del área;
+// enTiempo/entregados se derivan igual que en el ranking por áreas.
+const INICIALES_DE = (nombre) =>
+  (nombre || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join('') || '·'
+
+const filasEquipo = computed(() =>
+  (datos.value?.porEncargado || []).map((e) => ({
+    ...e,
+    iniciales: INICIALES_DE(e.nombre),
+    enTiempo: Math.max(0, (e.pendientes || 0) - (e.vencidos || 0) - (e.porVencer || 0)),
+    entregados: (e.entregadosATiempo || 0) + (e.entregadosConRetraso || 0),
+  })),
+)
+
+const ordenEquipo = ref('total')
+const equipoOrdenado = computed(() =>
+  [...filasEquipo.value].sort(
+    (a, b) => b[ordenEquipo.value] - a[ordenEquipo.value] || b.total - a.total,
+  ),
+)
+
+const maxTotalEquipo = computed(() => Math.max(1, ...filasEquipo.value.map((f) => f.total)))
+const pctBarraEquipo = (n) => Math.round((n / maxTotalEquipo.value) * 100)
+
 // «Alertar» por área: reenvía con forzar (solo lider_general)
 const alertandoId = ref('')
 async function alertarArea(fila) {
@@ -376,12 +503,95 @@ function cerrarRevision() {
   modalRevision.value = false
 }
 
+// ── Avisos de cierre de periodo (solo gerencia) ──
+const avisos = ref([])
+const atendiendo = ref(null)
+async function cargarAvisos() {
+  if (!esLiderGeneral.value) return
+  try {
+    const d = await InformesAPI.avisos()
+    avisos.value = (d.avisos || []).filter((a) => !a.atendido).slice(0, 4)
+  } catch {
+    avisos.value = []
+  }
+}
+async function atenderAviso(a) {
+  atendiendo.value = a.id
+  try {
+    await InformesAPI.atenderAviso(a.id)
+    avisos.value = avisos.value.filter((x) => x.id !== a.id)
+    toast.exito('Aviso marcado como revisado.')
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    atendiendo.value = null
+  }
+}
+
 onMounted(() => {
   cargar()
+  cargarAvisos()
 })
 </script>
 
 <style scoped>
+.avisos-periodo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.aviso-periodo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--acuasan-blue-light);
+  border: 1px solid #bae6fd;
+  border-left: 4px solid var(--acuasan-blue);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.aviso-texto {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.76rem;
+  color: var(--acuasan-blue-dark);
+}
+
+.aviso-acciones {
+  display: flex;
+  gap: 6px;
+}
+
+.aviso-ver,
+.aviso-ok {
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid var(--acuasan-blue);
+}
+
+.aviso-ver {
+  color: var(--acuasan-blue);
+  background: #fff;
+}
+
+.aviso-ok {
+  color: #fff;
+  background: var(--acuasan-blue);
+}
+
+.aviso-ok:disabled {
+  opacity: 0.6;
+}
+
 .cabecera-vista {
   display: flex;
   align-items: flex-start;
@@ -804,6 +1014,24 @@ onMounted(() => {
   border-radius: 5px;
   padding: 2px 6px;
   white-space: nowrap;
+}
+
+/* Iniciales del encargado en "Mi equipo": gris cuando está inactivo */
+.ranking-codigo--inactivo {
+  background: #94a3b8;
+}
+
+/* Marca de rol junto al nombre del encargado */
+.ranking-rol {
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--acuasan-blue);
+  text-transform: lowercase;
+  margin-left: 4px;
+}
+
+.ranking-rol--muted {
+  color: var(--text-muted);
 }
 
 .ranking-titulo {

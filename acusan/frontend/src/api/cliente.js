@@ -1,9 +1,10 @@
 // Cliente HTTP único del frontend.
 //
 // - Adjunta el JWT del authService a toda petición.
-// - Un 401 invalida la sesión y devuelve al login (?sesion=expirada), sea un
-//   JWT expirado/revocado o el token falso del fallback offline (que queda
-//   inservible en cuanto el backend responde). El login mismo no pasa por aquí.
+// - Un 401 invalida la sesión y devuelve al login (?sesion=expirada|inactiva|
+//   cerrada según el motivo). El login mismo no pasa por aquí.
+// - Un 403 DEBE_CAMBIAR_PASSWORD marca la sesión para que el layout pida el
+//   cambio de la contraseña temporal.
 // - Todo error sale como Error con mensaje en español (el del backend si trae).
 
 import authService from '@/modules/auth/services/authService.js'
@@ -49,29 +50,48 @@ async function enviar(ruta, { metodo = 'GET', cuerpo, params, formData, senal } 
     throw new Error('No se pudo conectar con el servidor. Verifique su conexión e intente de nuevo.')
   }
 
-  // Sesión inválida (JWT expirado/revocado o token del fallback offline):
+  // Sesión inválida (JWT expirado, cuenta desactivada o contraseña cambiada):
   // se cierra sesión y se vuelve al login con el aviso correspondiente.
   if (respuesta.status === 401 && !ruta.includes('/login')) {
+    let codigo = ''
+    try {
+      codigo = (await respuesta.clone().json())?.codigo || ''
+    } catch { /* sin cuerpo */ }
+    const motivo = { CUENTA_INACTIVA: 'inactiva', SESION_CERRADA: 'cerrada' }[codigo] || 'expirada'
     authService.logout()
     const { default: router } = await import('@/router')
     if (router.currentRoute.value.path !== '/login') {
-      router.push({ path: '/login', query: { sesion: 'expirada' } })
+      router.push({ path: '/login', query: { sesion: motivo } })
     }
     throw new Error('Su sesión no es válida o ha expirado. Ingrese nuevamente.')
+  }
+
+  // Contraseña temporal sin cambiar: el layout abre el cambio obligatorio
+  if (respuesta.status === 403) {
+    try {
+      if ((await respuesta.clone().json())?.codigo === 'DEBE_CAMBIAR_PASSWORD') {
+        authService.marcarCambioObligatorio()
+      }
+    } catch { /* sin cuerpo */ }
   }
 
   return respuesta
 }
 
+// El Error conserva status, código y cuerpo del backend (p. ej. 409 con
+// codigo TIENE_PENDIENTES y pendientes: N) para que la vista decida qué hacer.
 async function leerError(respuesta) {
-  let mensaje = ''
+  let json = null
   try {
-    const json = await respuesta.json()
-    mensaje = json?.message || ''
+    json = await respuesta.json()
   } catch {
     /* respuesta sin cuerpo legible */
   }
-  throw new Error(mensaje || MENSAJES_ESTADO[respuesta.status] || `Error inesperado (${respuesta.status}).`)
+  const error = new Error(json?.message || MENSAJES_ESTADO[respuesta.status] || `Error inesperado (${respuesta.status}).`)
+  error.status = respuesta.status
+  error.codigo = json?.codigo || null
+  error.respuesta = json
+  throw error
 }
 
 // Lee una respuesta JSON exitosa y devuelve su `data` (o el JSON completo)

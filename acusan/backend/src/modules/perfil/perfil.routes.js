@@ -7,5 +7,6 @@ const router = Router()
 
 // Montado en /api → GET /api/me
 router.get('/me', requireAuth, PerfilController.me)
+router.post('/me/password', requireAuth, PerfilController.cambiarPassword)
 
 export default router

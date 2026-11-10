@@ -3,7 +3,11 @@
     <header class="cabecera-vista">
       <div>
         <h2>Radicados</h2>
-        <p class="vista-sub">Radicados dirigidos a tu alcance ({{ alcance }}): responde adjuntando el PDF antes de la fecha límite.</p>
+        <p class="vista-sub">
+          {{ esLiderGeneral
+            ? 'Registra los radicados que llegan de afuera, dirígelos a cada área y sigue sus respuestas (todas las áreas).'
+            : 'Radicados que gerencia dirige a tu área: evalúa cada uno y entrega la respuesta en PDF antes de la fecha límite.' }}
+        </p>
       </div>
       <div class="cabecera-acciones">
         <button v-if="esLiderGeneral" type="button" class="btn-secundario" :disabled="revisando" @click="revisarAlertas">
@@ -52,7 +56,8 @@
         <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.codigo }} — {{ a.nombre }}</option>
       </select>
 
-      <!-- Áreas: pestañas Pendientes / Respondidos (R5); gerencia: filtro por estado -->
+      <!-- Áreas: pestañas Por responder / Entregados (lo que llega vs. lo que
+           se devuelve a gerencia); gerencia: filtro por estado -->
       <div v-if="!esLiderGeneral" class="pestanas-radicados" role="tablist" aria-label="Estado de los radicados">
         <button
           type="button"
@@ -62,7 +67,7 @@
           :aria-selected="pestannaActiva === 'pendientes'"
           @click="irAPestanna('')"
         >
-          Pendientes
+          Por responder
           <span class="pestana-num">{{ conteoPestannas.pendientes }}</span>
         </button>
         <button
@@ -73,7 +78,7 @@
           :aria-selected="pestannaActiva === 'respondidas'"
           @click="irAPestanna('respondido')"
         >
-          Respondidos
+          Entregados
           <span class="pestana-num">{{ conteoPestannas.respondidas }}</span>
         </button>
       </div>
@@ -113,7 +118,12 @@
               <th v-if="esLiderGeneral" scope="col" :class="[...claseOrden('area'), 'th-centro']" @click="alternarOrden('area')">Área</th>
               <th scope="col" :class="claseOrden('encargado')" @click="alternarOrden('encargado')">Encargado</th>
               <th scope="col" :class="[...claseOrden('limite'), 'th-centro']" @click="alternarOrden('limite')">Fecha límite</th>
-              <th scope="col" :class="[...claseOrden('dias'), 'th-centro']" @click="alternarOrden('dias')">Días</th>
+              <th
+                scope="col"
+                :class="[...claseOrden('dias'), 'th-centro']"
+                title="Días calendario hasta la fecha límite (debajo, los días hábiles)"
+                @click="alternarOrden('dias')"
+              >Días</th>
               <th scope="col" :class="[...claseOrden('estado'), 'th-centro']" @click="alternarOrden('estado')">Estado</th>
               <th v-if="esLiderGeneral" scope="col" :class="claseOrden('respuesta')" @click="alternarOrden('respuesta')">Respuesta</th>
               <th scope="col" class="c-acciones">Acciones</th>
@@ -149,6 +159,11 @@
               <td class="c-limite">{{ fechaLarga(f.fechaLimite) }}</td>
               <td class="c-dias" :class="{ 'c-dias--vencido': f.estado !== 'respondido' && f.diasRestantes < 0 }">
                 {{ f.estado === 'respondido' ? '—' : textoDias(f.diasRestantes) }}
+                <span
+                  v-if="f.estado !== 'respondido' && f.diasRestantes > 0 && f.diasHabilesRestantes != null"
+                  class="c-dias-habiles"
+                  :title="`${f.diasHabilesRestantes} día(s) hábil(es) hasta la fecha límite`"
+                >{{ f.diasHabilesRestantes }} háb.</span>
               </td>
               <td class="c-estado-celda">
                 <div class="estado-celda">
@@ -183,6 +198,7 @@
                   type="button"
                   class="btn-accion btn-accion--responder"
                   :title="`Responder ${f.numeroRadicado} — se abre el detalle`"
+                  :aria-label="`Responder ${f.numeroRadicado}`"
                   @click="abrirVer(f)"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -195,6 +211,7 @@
                   type="button"
                   class="btn-accion"
                   :title="`Editar ${f.numeroRadicado}`"
+                  :aria-label="`Editar ${f.numeroRadicado}`"
                   @click="abrirEditar(f)"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -206,6 +223,7 @@
                   type="button"
                   class="btn-accion btn-accion--renovar"
                   :title="`Renovar plazo de ${f.numeroRadicado}`"
+                  :aria-label="`Renovar plazo de ${f.numeroRadicado}`"
                   @click="abrirRenovar(f)"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -323,7 +341,20 @@
           <input id="r-fecha" v-model="form.fechaLimite" type="date" />
           <p v-if="erroresCampos.fechaLimite" class="campo-error" role="alert">{{ erroresCampos.fechaLimite }}</p>
           <p v-else-if="limiteFinDeSemana" class="nota-habil">Esa fecha cae {{ limiteFinDeSemana }}: es un día no hábil (las alertas D1/D3/D7 y los informes cortan por días hábiles). Considere llevar el plazo al siguiente día hábil.</p>
-          <p v-else class="ayuda-campo">Los plazos se cuentan en días hábiles (lunes a viernes, sin festivos colombianos).</p>
+          <div class="plazo-habil" role="group" aria-label="Fijar el plazo en días hábiles">
+            <span>Plazo en días hábiles desde la radicación:</span>
+            <button
+              v-for="n in PLAZOS_HABILES"
+              :key="n"
+              type="button"
+              class="btn-plazo"
+              :disabled="calculandoPlazo"
+              @click="fijarPlazoHabil(n)"
+            >{{ n }}</button>
+          </div>
+          <p v-if="!erroresCampos.fechaLimite && !limiteFinDeSemana" class="ayuda-campo">
+            Los atajos saltan fines de semana, festivos de Colombia y días no laborales. La columna “Días” de la tabla cuenta días calendario.
+          </p>
         </div>
 
         <div v-if="esLiderGeneral" class="campo">
@@ -439,7 +470,12 @@
             <dt>Días restantes</dt>
             <dd v-if="radicadoVer.respondidoEn">—</dd>
             <dd v-else-if="radicadoVer.diasRestantes < 0">Vencido hace {{ -radicadoVer.diasRestantes }} día(s)</dd>
-            <dd v-else>{{ textoDias(radicadoVer.diasRestantes) }}</dd>
+            <dd v-else>
+              {{ textoDias(radicadoVer.diasRestantes) }}
+              <template v-if="radicadoVer.diasRestantes > 0 && radicadoVer.diasHabilesRestantes != null">
+                ({{ radicadoVer.diasHabilesRestantes }} hábiles)
+              </template>
+            </dd>
           </div>
           <div class="ver-campo">
             <dt>Estado</dt>
@@ -729,6 +765,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { AlertasAPI } from '@/api/alertas.js'
 import { AreasAPI } from '@/api/areas.js'
+import { CalendarioAPI } from '@/api/calendario.js'
 import { RadicadosAPI } from '@/api/radicados.js'
 import { useSesion } from '@/composables/useSesion.js'
 import { useConteoAlertas } from '@/composables/useConteoAlertas.js'
@@ -745,7 +782,6 @@ const toast = useToast()
 const conteo = useConteoAlertas()
 
 const esLiderGeneral = computed(() => sesion.esLiderGeneral.value)
-const alcance = computed(() => (esLiderGeneral.value ? 'todas las áreas' : 'tu área'))
 // Gerencia ve Remitente, Categoría, Área y Respuesta; las áreas no las necesitan todas
 const columnas = computed(() => (esLiderGeneral.value ? 11 : 9))
 
@@ -950,6 +986,23 @@ onMounted(() => {
 
 function textoDias(dias) {
   return dias === 0 ? 'Hoy' : String(dias)
+}
+
+// Atajos de plazo legal en días hábiles (p. ej. 15 para un derecho de
+// petición): el backend suma saltando fines de semana, festivos y no laborales
+const PLAZOS_HABILES = [5, 10, 15, 30]
+const calculandoPlazo = ref(false)
+async function fijarPlazoHabil(n) {
+  calculandoPlazo.value = true
+  try {
+    const r = await CalendarioAPI.sumarHabiles(form.fechaRadicacion || hoyISO(), n)
+    form.fechaLimite = r.fecha
+    erroresCampos.fechaLimite = ''
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    calculandoPlazo.value = false
+  }
 }
 
 // Prioridades del radicado (dominio del backend: baja | media | alta)
@@ -2226,6 +2279,40 @@ thead .c-num {
   background: rgba(217, 119, 6, 0.1);
   border-radius: 6px;
   padding: 5px 8px;
+}
+
+.c-dias-habiles {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.1;
+}
+
+.plazo-habil {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.64rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.btn-plazo {
+  border: 1px solid var(--border-color);
+  background: #fff;
+  border-radius: 6px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--acuasan-blue);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.btn-plazo:hover:not(:disabled) {
+  background: var(--acuasan-blue-light);
+  border-color: var(--acuasan-blue);
 }
 
 .ayuda-campo {

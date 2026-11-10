@@ -13,6 +13,13 @@ export const InformesAPI = {
 
   // Por contestar al corte del mes, más atrasados primero (cursor para paginar)
   pendientes: (anio, mes, params) => cliente.get(`/informes/mes/${anio}/${mes}/pendientes`, params),
+
+  // Excel del mes (resumen, semanas, por área/encargado y por contestar)
+  excelMes: (anio, mes, params) => cliente.descargar(`/informes/mes/${anio}/${mes}/excel`, params),
+
+  // Avisos de fin de periodo para gerencia (cierre semanal/mensual)
+  avisos: () => cliente.get('/avisos'),
+  atenderAviso: (id) => cliente.post(`/avisos/${id}/atender`, {}),
 }
 
 export default InformesAPI

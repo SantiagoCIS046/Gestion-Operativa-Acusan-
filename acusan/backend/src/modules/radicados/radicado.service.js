@@ -27,6 +27,8 @@ import {
 } from '../../utils/fechas.js'
 import { enviarNotificacion } from '../alertas/notificaciones.js'
 import almacenPdf from '../../services/almacenPdf.js'
+import { cargarDiasNoLaborales, contarHabiles } from '../../lib/calendarioCO.js'
+import { hoyBogota, sumarDiasISO } from '../../utils/fechas.js'
 
 export { RADICADO_DIAS_POR_VENCER }
 
@@ -165,7 +167,15 @@ const metaAdjunto = (a) =>
 // Fila del listado: nombres en batch, alerta pendiente y permisos.
 // Campos del contrato R2: estado calculado, diasRestantes, resultadoRespuesta,
 // tieneRespuesta y puedeResponder (nunca `contenido`).
-function mapear(r, { nombrePorId, conAlerta, usuario }) {
+// Días hábiles que quedan hasta la fecha límite (desde mañana, incluido el
+// día límite). null si ya venció o ya se respondió.
+function habilesRestantes(r, estado, noLaborales) {
+  if (r.estado !== 'PENDIENTE' || !Number.isFinite(estado.dias) || estado.dias < 0) return null
+  if (estado.dias === 0) return 0
+  return contarHabiles(sumarDiasISO(hoyBogota(), 1), aCalendarioBogota(r.fechaLimite), noLaborales)
+}
+
+function mapear(r, { nombrePorId, conAlerta, usuario, noLaborales }) {
   const estado = estadoDeRadicado(r)
   return {
     id: r.id,
@@ -183,6 +193,7 @@ function mapear(r, { nombrePorId, conAlerta, usuario }) {
     encargado: { id: r.encargadoId, nombre: nombrePorId.get(r.encargadoId) ?? null },
     estado: estado.estado,
     diasRestantes: estado.dias,
+    diasHabilesRestantes: habilesRestantes(r, estado, noLaborales),
     resultadoRespuesta: estado.resultado,
     tieneRespuesta: r.estado === 'RESPONDIDO',
     adjuntoRadicado: metaAdjunto(adjuntoDe(r, 'RADICADO')),
@@ -224,7 +235,8 @@ async function filaDe(id, usuario) {
     select: { id: true },
   })
 
-  return mapear(r, { nombrePorId, conAlerta: new Set(pendientes.length ? [r.id] : []), usuario })
+  const noLaborales = await cargarDiasNoLaborales()
+  return mapear(r, { nombrePorId, conAlerta: new Set(pendientes.length ? [r.id] : []), usuario, noLaborales })
 }
 
 // Evento de auditoría (dentro de la transacción de la acción que lo origina)
@@ -308,7 +320,8 @@ export const RadicadoService = {
       : []
     const conAlerta = new Set(alertasPendientes.map((a) => a.radicadoId))
 
-    const filas = radicados.map((r) => mapear(r, { nombrePorId, conAlerta, usuario }))
+    const noLaborales = await cargarDiasNoLaborales()
+    const filas = radicados.map((r) => mapear(r, { nombrePorId, conAlerta, usuario, noLaborales }))
 
     // Orden: campo permitido + dir asc|desc. Por defecto, pendientes primero
     // (límite más urgente arriba) y respuestas recientes después.
@@ -382,6 +395,7 @@ export const RadicadoService = {
       nombrePorId,
       conAlerta: new Set(pendientes.length ? [r.id] : []),
       usuario,
+      noLaborales: await cargarDiasNoLaborales(),
     })
 
     const TIPO_EVENTO_UI = {
@@ -551,13 +565,13 @@ export const RadicadoService = {
       }
     }
 
-    // Notificación de la alerta 'nuevo': la reciben el encargado y el líder
-    // del área (hoy enviarNotificacion solo registra en log)
+    // Notificación de la alerta 'nuevo' (correo): la reciben el encargado y el
+    // líder del área
     const liderArea = await prisma.usuario.findFirst({
       where: { areaId: area.id, rol: 'LIDER_AREA', activo: true },
       select: { id: true, nombre: true, email: true, rol: true },
     })
-    enviarNotificacion(
+    await enviarNotificacion(
       {
         nivel: 'NUEVO',
         mensaje: `Nuevo radicado ${radicado.numeroRadicado} (${area.codigo}): vence el ${fechaCorta(fechaLimite)}.`,
@@ -715,6 +729,22 @@ export const RadicadoService = {
         }
       }
       throw error
+    }
+
+    // Reasignado: el nuevo encargado y el líder del área se enteran por correo
+    if (cambiaAsignacion) {
+      const liderArea = await prisma.usuario.findFirst({
+        where: { areaId: areaFinal, rol: 'LIDER_AREA', activo: true },
+        select: { id: true, nombre: true, email: true },
+      })
+      const numero = datos.numeroRadicado ?? radicado.numeroRadicado
+      await enviarNotificacion(
+        {
+          nivel: 'NUEVO',
+          mensaje: `Radicado ${numero} asignado a ${encargado.nombre} (${areaEvento?.codigo ?? ''}): vence el ${fechaCorta(datos.fechaLimite ?? radicado.fechaLimite)}.`,
+        },
+        [liderArea, { nombre: encargado.nombre, email: encargado.email }].filter(Boolean),
+      )
     }
 
     return filaDe(id, usuario)
@@ -909,6 +939,10 @@ export const RadicadoService = {
       select: { id: true, numeroRadicado: true },
     })
     if (!radicado) throw { status: 404, message: 'El radicado no existe.' }
+
+    // PDFs en un almacén externo (Blob/disco): se borran sus objetos antes
+    // que los documentos que los referencian
+    await almacenPdf.eliminarDeRadicado(id)
 
     await prisma.$transaction(async (tx) => {
       await tx.adjunto.deleteMany({ where: { radicadoId: id } })

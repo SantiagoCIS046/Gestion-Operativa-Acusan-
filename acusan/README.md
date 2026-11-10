@@ -9,6 +9,26 @@ límite. El módulo unifica lo que antes eran dos módulos separados
 (*Archivos* y *Radicados*): el control de vencimientos con categorías y
 Excel, y el flujo de respuesta con PDFs y timeline.
 
+## ⚡ Inicio rápido (para revisar el proyecto)
+
+Solo necesitas **Node 22.12 o superior** ([nodejs.org](https://nodejs.org), versión LTS)
+y una base **MongoDB Atlas gratuita** propia. El script te explica cómo crearla.
+
+```bash
+git clone https://github.com/SantiagoCIS046/Gestion-Operativa-Acusan-.git
+cd Gestion-Operativa-Acusan-/acusan
+npm run preparar   # instala, crea backend/.env (pide la cadena de Atlas) y carga datos de prueba
+npm run dev        # abre http://localhost:5173
+```
+
+Entra con **`gerencia@acuasan.com`** (líder general, ve todo) o
+**`lider.operativo@acuasan.com`** (líder de área). La contraseña de todos los
+usuarios de prueba es la que imprime `npm run preparar` al terminar.
+
+> `npm run preparar` nunca modifica un `backend/.env` que ya exista, y antes
+> de cargar los datos de prueba pide confirmación, porque **borra lo que haya
+> en esa base**. Usa una base vacía, nunca la de producción.
+
 ## Puesta en marcha (desde `acusan/`)
 
 Requisitos: Node ≥ 22.12 (lo exige Vite 8) y una base MongoDB Atlas.
@@ -46,6 +66,20 @@ Requisitos: Node ≥ 22.12 (lo exige Vite 8) y una base MongoDB Atlas.
 | `npm run datos:cifrar` (en `backend/`) | Cifra los datos que ya existían (`-- --simular` primero) |
 
 ## 📨 Radicados (módulo unificado)
+
+### Roles y sus vistas
+
+Cada rol entra a un inicio distinto y ve un menú distinto; el backend
+recorta todos los listados al área del token (un líder de área no puede ver
+los radicados de otra área ni pidiéndolos por URL).
+
+| Vista | Gerencia (`LIDER_GENERAL`) | Líder de área (`LIDER_AREA`) | Usuario (`USUARIO`) |
+|---|---|---|---|
+| **Resumen** (inicio) | Global: KPIs, ventanas, ranking por área con «Alertar» | **Panel de su área**: KPIs de lo que recibe/entrega y **Mi equipo** (rendimiento por encargado) | — (entra a Radicados) |
+| **Radicados** | Todas las áreas: registra, dirige, edita, reabre, renueva, Excel | **Solo su área**, pestañas *Por responder* / *Entregados*; responde con PDF | Solo su área; responde únicamente los radicados que tiene asignados |
+| **Informes** | Global o por área (`?areaId=`); genera y sincroniza cierres | **Siempre su área** (el servidor la fuerza): cumplimiento por encargado | — |
+| **Alertas** | De todas las áreas + últimas ejecuciones del motor | **Solo las de su área**; puede atenderlas | Solo las de su área (no atiende) |
+| **Calendario / Estructura** | Sí | — | — |
 
 ### Quién hace qué
 
@@ -291,19 +325,71 @@ respondan radicados — se regeneran solo a pedido o al cerrar.
   `npm run informes:recalcular` (desde `backend/`, con `--dry-run` para ver
   qué haría sin escribir).
 
+## 👥 Usuarios (administración de cuentas)
+
+Vista **Usuarios** (`/usuarios`): gerencia administra todas las áreas; el
+líder de área administra los usuarios de la suya (el backend vuelve a
+validar cada permiso).
+
+- **Crear cuenta**: nombre, correo, rol y área (el líder crea solo
+  usuarios de su área). Contraseña inicial opcional: vacío = **contraseña
+  temporal** generada por el sistema que la persona **debe cambiar al
+  entrar** (modal obligatorio, no cerrable). Con correo configurado se envía
+  además una invitación con enlace.
+- **Editar / cambiar de área**: si el cambio deja radicados pendientes
+  atrás, el backend responde `TIENE_PENDIENTES` y se abre la **reasignación**
+  (quién del área los recibe; queda registrado en cada radicado).
+- **Desactivar**: cierra sus sesiones abiertas de inmediato (middleware
+  `cuentaVigente`) y no puede entrar; si tiene pendientes, se reasignan al
+  desactivar. El historial se conserva.
+- **Restablecer contraseña**: genera una temporal (cierra las demás
+  sesiones); con SMTP la persona recibe un enlace para crear una nueva.
+- **Autorregistro**: desde el login («Crear Nuevo Usuario») la solicitud
+  queda **pendiente de aprobación**; gerencia la aprueba asignando área y
+  rol, o la rechaza.
+- **Bloqueo por intentos**: 5 contraseñas erradas bloquean la cuenta 15
+  minutos. Desactivar, cambiar el rol o restablecer contraseña afecta las
+  sesiones abiertas al instante.
+
+## 📧 Correo (SMTP)
+
+`backend/src/services/correo.js` centraliza el envío: resumen de alertas por
+persona, aviso de radicado asignado, invitación y recuperación de
+contraseña. **Sin SMTP configurado no falla nada**: los envíos solo quedan
+registrados en el log del servidor y las temporales se entregan en persona.
+
+Variables (en `backend/.env` y Vercel):
+
+| Variable | Qué es |
+|---|---|
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | Servidor de correo (`SECURE=true` para puerto 465) |
+| `SMTP_USER` / `SMTP_PASS` | Credenciales de la cuenta que envía |
+| `CORREO_REMITENTE` | Dirección que aparece como remitente |
+| `APP_URL` | URL pública de la app (arma los enlaces de invitación/recuperación) |
+
+La recuperación («¿Olvidó su contraseña?») ofrece el enlace por correo solo
+con SMTP activo; sin SMTP guía a pedírsela a gerencia o al líder desde
+*Usuarios*.
+
+## 🗄️ PDFs fuera de la base (opcional)
+
+Los PDF siempre viajan y reposan **cifrados**. Dónde viven los bytes lo
+decide `ALMACEN_PDF` (en `backend/.env` / Vercel):
+
+| Valor | Dónde quedan | Variables extra |
+|---|---|---|
+| `mongo` (default) | Colección `adjuntos` | — |
+| `blob` | Vercel Blob | `BLOB_READ_WRITE_TOKEN` |
+| `disco` | Carpeta del servidor | `ALMACEN_PDF_DIR` |
+
+Para mudar los existentes: `npm run pdfs:mover -- --simular` (revisa y
+cuenta), `npm run pdfs:mover` (mueve) y `--revertir` (vuelve atrás si algo
+queda mal). En Vercel: Storage → Blob → copiar el token a las variables.
+
 ## Qué queda pendiente
 
-- **PDFs en un bucket**: hoy los PDFs de radicados y respuestas se guardan
-  como bytes dentro de MongoDB (colección `adjuntos`, detrás de
-  `backend/src/services/almacenPdf.js`). Moverlos a un bucket (S3, Blob
-  Storage u similar) y dejar en la base solo la referencia.
-- **Correo real**: las notificaciones de alertas hoy solo se registran en el
-  log del servidor. Conectar SMTP/API de correo en `enviarNotificacion()`
-  (único punto de cambio, ver arriba).
-- **Administración de usuarios**: no hay interfaz para crear, editar,
-  desactivar usuarios ni reasignarlos de área. Hoy se gestionan con
-  `npm run db:seed` o directamente contra la base. Un usuario desactivado
-  (`activo: false`) deja de recibir notificaciones, pero sigue pudiendo
-  iniciar sesión si no se le cambia la contraseña.
-- **Tests de frontend**: el backend tiene su suite (`npm test`); el frontend
-  solo se verifica con `npm run build` y uso manual.
+- Configurar en Vercel las variables nuevas (SMTP, `APP_URL`, Blob si se
+  usa) y correr `npm run db:push` contra la base real **antes** de publicar
+  (solo agrega el índice de usuarios; hacer respaldo antes).
+- Probar en navegador el flujo de recuperación **con SMTP real** (el
+  recorrido sin SMTP ya está verificado).

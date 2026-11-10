@@ -23,6 +23,14 @@
           {{ cargando ? 'Cargando…' : 'Cargar datos' }}
         </button>
 
+        <!-- Exporta el informe del mes visible (con el área elegida) a Excel -->
+        <button type="button" class="btn-excel" :disabled="exportando" title="Descargar el informe del mes en Excel" @click="exportarExcel">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          {{ exportando ? 'Generando…' : 'Excel' }}
+        </button>
+
         <!-- Botón 2: el informe de la semana, con la pestaña del mensual -->
         <div class="seg" role="group" aria-label="Tipo de informe">
           <button type="button" :class="{ activo: modo === 'semana' }" @click="ponModo('semana')">Semana</button>
@@ -324,6 +332,7 @@ import { RadicadosAPI } from '@/api/radicados.js'
 import { AreasAPI } from '@/api/areas.js'
 import { useSesion } from '@/composables/useSesion.js'
 import { fechaLarga, hoyISO } from '@/utils/fechas.js'
+import { useToast } from '@/composables/useToast.js'
 
 const sesion = useSesion()
 const esLiderGeneral = computed(() => sesion.esLiderGeneral.value)
@@ -358,6 +367,29 @@ const diaCorto = (iso) => `${DOW[new Date(`${iso}T00:00:00.000Z`).getUTCDay()]} 
 
 const pct = (v) => (v == null ? '—' : `${Math.round(v * 1000) / 10} %`)
 const paramsArea = () => (areaId.value ? { areaId: areaId.value } : {})
+
+// ── Exportar a Excel (el mes visible, con el alcance de área elegido) ──
+const toast = useToast()
+const exportando = ref(false)
+async function exportarExcel() {
+  exportando.value = true
+  try {
+    const { blob, nombre } = await InformesAPI.excelMes(anio.value, mes.value, paramsArea())
+    const url = URL.createObjectURL(blob)
+    const enlace = document.createElement('a')
+    enlace.href = url
+    enlace.download = nombre
+    document.body.appendChild(enlace)
+    enlace.click()
+    enlace.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1500)
+    toast.exito('Informe descargado.')
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    exportando.value = false
+  }
+}
 
 // ── Periodo activo: la semana (S#, rango, kpis, porGrupo, pendientes al
 // corte de la semana) o el mes completo — una sola vista para las 3 líneas
@@ -691,6 +723,26 @@ onMounted(() => {
   font-weight: 800;
   padding: 7px 12px;
   cursor: pointer;
+}
+.btn-excel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #16a34a;
+  border-radius: 9px;
+  background: #fff;
+  color: #15803d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.btn-excel:hover:not(:disabled) {
+  background: #f0fdf4;
+}
+.btn-excel:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .btn-datos:hover:not(:disabled) {
   filter: brightness(1.08);

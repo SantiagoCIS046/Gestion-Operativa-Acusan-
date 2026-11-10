@@ -6,8 +6,81 @@
 // categoría se hacen en JS (select ligero de una sola columna).
 
 import prisma from '../../config/prisma.js'
-import { esLiderGeneral } from '../auth/permisos.js'
+import { esLiderGeneral, esLiderArea } from '../auth/permisos.js'
 import { enDias, diasHasta } from '../../utils/fechas.js'
+
+/**
+ * Rendimiento del equipo del área (solo lider_area): una fila por encargado
+ * con sus conteos de radicados. Van el líder y los miembros activos, más
+ * cualquier usuario con radicados asignados aunque ya esté inactivo (marcado).
+ * count() por encargado en paralelo — nunca groupBy (vetado sobre Radicado).
+ */
+async function rendimientoPorEncargado(areaId) {
+  const [equipo, radicadosArea] = await Promise.all([
+    prisma.usuario.findMany({
+      where: { areaId, activo: true },
+      select: { id: true, nombre: true, rol: true, activo: true },
+    }),
+    prisma.radicado.findMany({ where: { areaId }, select: { encargadoId: true } }),
+  ])
+
+  const conocido = new Map(equipo.map((u) => [u.id, u]))
+  const ids = new Set([...conocido.keys(), ...radicadosArea.map((r) => r.encargadoId)])
+
+  // Encargados inactivos (o desaparecidos) que siguen con radicados asignados
+  const faltantes = [...ids].filter((id) => !conocido.has(id))
+  if (faltantes.length) {
+    const extra = await prisma.usuario.findMany({
+      where: { id: { in: faltantes } },
+      select: { id: true, nombre: true, rol: true, activo: true },
+    })
+    for (const u of extra) conocido.set(u.id, u)
+  }
+
+  const hoy = enDias(0)
+  const d7 = enDias(7)
+  const filas = await Promise.all(
+    [...ids].map(async (id) => {
+      const alcance = { areaId, encargadoId: id }
+      const [total, pendientes, vencidos, porVencer, aTiempo, conRetraso] = await Promise.all([
+        prisma.radicado.count({ where: alcance }),
+        prisma.radicado.count({ where: { ...alcance, estado: 'PENDIENTE' } }),
+        prisma.radicado.count({
+          where: { ...alcance, estado: 'PENDIENTE', fechaLimite: { lt: hoy } },
+        }),
+        prisma.radicado.count({
+          where: { ...alcance, estado: 'PENDIENTE', fechaLimite: { gte: hoy, lte: d7 } },
+        }),
+        prisma.radicado.count({
+          where: { ...alcance, estado: 'RESPONDIDO', resultadoRespuesta: 'A_TIEMPO' },
+        }),
+        prisma.radicado.count({
+          where: { ...alcance, estado: 'RESPONDIDO', resultadoRespuesta: 'CON_RETRASO' },
+        }),
+      ])
+      const u = conocido.get(id)
+      return {
+        id,
+        nombre: u?.nombre ?? 'Usuario eliminado',
+        rol: u?.rol ?? null,
+        activo: u ? u.activo !== false : false,
+        total,
+        pendientes,
+        vencidos,
+        porVencer,
+        entregadosATiempo: aTiempo,
+        entregadosConRetraso: conRetraso,
+      }
+    }),
+  )
+
+  // El líder del área primero, luego por carga de trabajo
+  return filas.sort((a, b) => {
+    if ((a.rol === 'LIDER_AREA') !== (b.rol === 'LIDER_AREA')) return a.rol === 'LIDER_AREA' ? -1 : 1
+    if (b.total !== a.total) return b.total - a.total
+    return a.nombre.localeCompare(b.nombre)
+  })
+}
 
 export const ResumenService = {
   /**
@@ -117,6 +190,9 @@ export const ResumenService = {
     return {
       areas,
       kpis,
+      // Rendimiento por encargado: la herramienta del líder de área (gerencia
+      // tiene el ranking por áreas; usuario no llega a esta vista)
+      ...(esLiderArea(usuario) ? { porEncargado: await rendimientoPorEncargado(usuario.areaId) } : {}),
       ventanas: { hasta1Dia: ventanas[0], dias2a3: ventanas[1], dias4a7: ventanas[2] },
       proximosAVencer: proximos.map((r) => ({
         id: r.id,

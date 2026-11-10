@@ -44,10 +44,10 @@ let encargadoOpeId = null
 // Los radicados de esta suite se reconocen por el asunto (prefijo XL)
 const ASUNTO_PREFIX = 'XL '
 
-// Encabezados que la importación entiende (los de la plantilla + Encargado)
+// Encabezados de la plantilla (los mismos que entiende la importación)
 const ENCABEZADOS = [
-  'Número', 'Asunto', 'Descripción', 'Categoría', 'Área', 'Tipo', 'Remitente',
-  'Prioridad', 'Fecha radicación', 'Fecha límite', 'Instrucciones', 'Encargado',
+  'Número', 'Asunto', 'Descripción', 'Categoría', 'Área', 'Encargado', 'Tipo', 'Remitente',
+  'Prioridad', 'Fecha radicación', 'Fecha límite', 'Instrucciones',
 ]
 
 // Columna de cada encabezado en ENCABEZADOS (índice 0-based para armar filas)
@@ -183,7 +183,8 @@ test('la plantilla trae las hojas Instrucciones y Radicados', async () => {
     .getRow(1)
     .values.slice(1)
     .filter(Boolean)
-  assert.deepEqual(encabezados, ENCABEZADOS.slice(0, 11))
+  // Incluye Encargado: sin esa columna no se podía crear nada desde la plantilla
+  assert.deepEqual(encabezados, ENCABEZADOS)
 })
 
 test('el export trae filas con estado, extras y hoja Resumen', async () => {
@@ -217,12 +218,13 @@ test('el export trae filas con estado, extras y hoja Resumen', async () => {
   assert.ok(nombres.includes('Radicados'), `hojas: ${nombres}`)
   assert.ok(nombres.includes('Resumen'), `hojas: ${nombres}`)
 
-  // Encabezados completos: 11 de captura + 6 de solo-lectura
+  // Encabezados completos: 12 de captura + 5 de solo-lectura
   const encabezados = wb.getWorksheet('Radicados').getRow(1).values.slice(1).filter(Boolean)
   assert.equal(encabezados.length, 17)
+  assert.deepEqual(encabezados.slice(0, 12), ENCABEZADOS)
   assert.deepEqual(
-    encabezados.slice(11),
-    ['Estado', 'Días', 'Encargado', 'Respondido el', 'N.° oficio', 'Observaciones respuesta'],
+    encabezados.slice(12),
+    ['Estado', 'Días', 'Respondido el', 'N.° oficio', 'Observaciones respuesta'],
   )
 
   // La fila del radicado de prueba, con su semáforo y encargado
@@ -235,9 +237,10 @@ test('el export trae filas con estado, extras y hoja Resumen', async () => {
   assert.equal(filaXl.getCell(C['Asunto'] + 1).value, 'XL Export prueba')
   assert.equal(filaXl.getCell(C['Categoría'] + 1).value, 'Pruebas XL')
   assert.equal(filaXl.getCell(C['Área'] + 1).value, 'OPE')
-  assert.equal(filaXl.getCell(12).value, 'Por vencer') // Estado (vence en 5)
-  assert.equal(String(filaXl.getCell(13).value), '5') // Días
-  assert.equal(filaXl.getCell(14).value, 'Juan David Valdez') // Encargado
+  // Encargado en columna de captura: el export se puede volver a importar
+  assert.equal(filaXl.getCell(C['Encargado'] + 1).value, 'Juan David Valdez')
+  assert.equal(filaXl.getCell(13).value, 'Por vencer') // Estado (vence en 5)
+  assert.equal(String(filaXl.getCell(14).value), '5') // Días
 
   // Resumen: una fila por área con radicados (OPE viene del seed)
   let filaOpe = null
@@ -370,4 +373,22 @@ test('la importación acepta fechas serial de Excel y texto AAAA-MM-DD', async (
   assert.equal(fechaCalendario(serial.fechaRadicacion), serialEsperado)
   const iso = await porAsunto('XL Fecha iso')
   assert.equal(fechaCalendario(iso.fechaRadicacion), '2026-01-15')
+})
+
+test('importa sin encargado: el radicado nuevo queda a cargo del líder del área', async () => {
+  if (!dbOk) return
+  const buffer = await libro([
+    fila({ 'Número': '', 'Asunto': 'XL Sin encargado', 'Área': 'OPE', 'Fecha límite': '2030-04-01' }),
+    // Encargado escrito pero inexistente en el área: error claro, no se asigna al líder
+    fila({ 'Número': '', 'Asunto': 'XL Encargado fantasma', 'Área': 'OPE', 'Fecha límite': '2030-04-01', 'Encargado': 'nadie@acuasan.com' }),
+  ])
+  const { status, json } = await subirExcel(buffer)
+  assert.equal(status, 200)
+  assert.equal(json.data.creados, 1)
+  assert.equal(json.data.errores.length, 1)
+  assert.match(json.data.errores[0].mensaje, /Encargado "nadie@acuasan.com" no encontrado en OPE/)
+
+  const creado = await porAsunto('XL Sin encargado')
+  const lider = await prisma.usuario.findFirst({ where: { areaId: areaOpeId, rol: 'LIDER_AREA' } })
+  assert.equal(creado.encargadoId, lider.id)
 })

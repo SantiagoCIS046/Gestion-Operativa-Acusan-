@@ -51,3 +51,6 @@ acusan/backend/respaldos/
 # Artefactos locales de escritorio (bitacora y scripts de trabajo)
 Bitacora_*.xlsx
 Claude outputs/
+
+# PDFs del almacén local (ALMACEN_PDF=disco): solo desarrollo, nunca al repo
+acusan/backend/almacen-pdf/

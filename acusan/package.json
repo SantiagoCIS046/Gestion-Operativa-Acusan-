@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "preparar": "node scripts/preparar.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite frontend",
     "dev:api": "npm --prefix backend run dev",

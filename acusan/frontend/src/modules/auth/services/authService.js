@@ -22,133 +22,60 @@ const state = reactive({
   })()
 })
 
-const USUARIOS_FALLBACK = [
-  {
-    id: 'u-eliana-01',
-    nombre: 'Eliana',
-    email: 'eliana@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'RADICADOS',
-    cargo: 'Encargada de Radicaciones',
-    cedula: '11009004'
-  },
-  {
-    id: 'u-roman-02',
-    nombre: 'Ramón',
-    email: 'ramon@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'ENCARGADO',
-    cargo: 'Encargado de Permisos, Horas Extras y Radicados',
-    cedula: '11009002'
-  },
-  {
-    id: 'u-roman-alt',
-    nombre: 'Ramón',
-    email: 'roman@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'ENCARGADO',
-    cargo: 'Encargado de Permisos, Horas Extras y Radicados',
-    cedula: '11009002'
-  },
-  {
-    id: 'u-gerencia-03',
-    nombre: 'Gerencia General Acuasan',
-    email: 'gerencia@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'GERENCIA',
-    cargo: 'Gerente General',
-    cedula: '11009001'
-  },
-  {
-    id: 'u-operativo-04',
-    nombre: 'Atención al Ciudadano PQR',
-    email: 'operativo@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'OPERATIVO',
-    cargo: 'Agente de Atención al Usuario',
-    cedula: '11009003'
-  },
-  {
-    id: 'u-admin-05',
-    nombre: 'Administrador de TI & Sistemas',
-    email: 'admin@acuasan.com',
-    password: 'acuasan2026',
-    rol: 'ADMIN',
-    cargo: 'Administrador del Sistema',
-    cedula: '11009000'
+// POST a una ruta pública de /api/auth; devuelve { message, data }
+async function llamarPublico(ruta, cuerpo, conMensaje = false) {
+  let res
+  try {
+    res = await fetch(`${API_BASE}${ruta}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    })
+  } catch {
+    throw new Error('No se pudo conectar con el servidor. Revise su conexión e intente de nuevo.')
   }
-]
+  let json = null
+  try {
+    json = await res.json()
+  } catch { /* sin cuerpo */ }
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || 'No se pudo completar la solicitud.')
+  }
+  return conMensaje ? { message: json.message, data: json.data } : json.data
+}
 
 export const authService = {
   /**
-   * Realiza el login y actualiza el estado reactivo (con fallback seguro en despliegue estático)
+   * Inicia sesión contra la API y actualiza el estado reactivo.
+   * Sin respaldo local: antes existía un "login de emergencia" con cuentas y
+   * contraseñas escritas en este archivo (visibles para cualquiera en el
+   * navegador). Si la API no responde, simplemente se informa.
    */
   async login(email, password) {
     const cleanEmail = (email || '').trim().toLowerCase()
-    let data = null
-    let backendInalcanzable = false
 
+    let res
     try {
-      const res = await fetch(`${API_BASE}/login`, {
+      res = await fetch(`${API_BASE}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, password })
       })
-
-      if (res.ok) {
-        const json = await res.json()
-        if (json && json.success) {
-          data = json.data
-        }
-      } else {
-        // El backend respondió y rechazó el acceso (401 y similares): sus
-        // credenciales no valen y ningún fallback las puede "arreglar".
-        let mensaje = 'Credenciales inválidas. Verifique su correo institucional o contraseña.'
-        try {
-          const json = await res.json()
-          if (json?.message) mensaje = json.message
-        } catch { /* respuesta sin cuerpo legible */ }
-        throw new Error(mensaje)
-      }
-    } catch (err) {
-      if (err instanceof TypeError) {
-        // fetch solo lanza TypeError cuando no pudo conectar (backend caído):
-        // recién ahí tiene sentido el fallback de despliegue estático.
-        backendInalcanzable = true
-        console.warn('API backend no disponible en este host, cambiando a autenticación de respaldo.', err)
-      } else {
-        throw err
-      }
+    } catch {
+      // fetch solo lanza cuando no pudo conectar (servidor caído o sin red)
+      throw new Error('No se pudo conectar con el servidor. Revise su conexión e intente de nuevo.')
     }
 
-    // Fallback para cuentas oficiales SOLO si la API está inalcanzable
-    if (!data) {
-      if (!backendInalcanzable) {
-        throw new Error('No se pudo iniciar sesión. Intente de nuevo en unos momentos.')
-      }
+    let json = null
+    try {
+      json = await res.json()
+    } catch { /* respuesta sin cuerpo legible */ }
 
-      const usuarioEncontrado = USUARIOS_FALLBACK.find(
-        u => u.email === cleanEmail && u.password === password
-      )
-
-      if (!usuarioEncontrado) {
-        throw new Error('Credenciales inválidas. Verifique su correo institucional o contraseña.')
-      }
-
-      data = {
-        token: `jwt_token_acuasan_${usuarioEncontrado.rol}_${Date.now()}`,
-        usuario: {
-          id: usuarioEncontrado.id,
-          nombre: usuarioEncontrado.nombre,
-          email: usuarioEncontrado.email,
-          rol: usuarioEncontrado.rol,
-          cargo: usuarioEncontrado.cargo,
-          cedula: usuarioEncontrado.cedula,
-          ultimoAcceso: new Date().toISOString()
-        }
-      }
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || 'Credenciales inválidas. Verifique su correo institucional o contraseña.')
     }
 
+    const data = json.data
     localStorage.setItem(TOKEN_KEY, data.token)
     localStorage.setItem(USER_KEY, JSON.stringify(data.usuario))
 
@@ -159,26 +86,63 @@ export const authService = {
   },
 
   /**
-   * Registra un nuevo usuario en la base de datos de MongoDB Atlas
+   * Solicitud de cuenta (autorregistro): queda pendiente de aprobación por
+   * gerencia; NO inicia sesión.
    */
   async registro(datos) {
-    const res = await fetch(`${API_BASE}/registro`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(datos)
-    })
-
-    const data = await res.json()
-    if (!res.ok || !data.success) {
-      throw new Error(data.message || 'Error al registrar usuario')
-    }
-
-    return data.data
+    return llamarPublico('/registro', { nombre: datos.nombre, email: datos.email, password: datos.password })
   },
 
-  // NOTA: solicitarRecuperacion/resetearPassword fueron ELIMINADOS junto con
-  // los endpoints /recuperar-password y /reset-password del backend. El
-  // restablecimiento de clave lo media el ADMIN desde Gestión de Usuarios.
+  /** { correoHabilitado } — decide cómo se ofrece la recuperación */
+  async opciones() {
+    try {
+      const res = await fetch(`${API_BASE}/opciones`)
+      const json = await res.json()
+      return json?.data ?? { correoHabilitado: false }
+    } catch {
+      return { correoHabilitado: false }
+    }
+  },
+
+  /** Pide el enlace de recuperación (misma respuesta exista o no la cuenta) */
+  async solicitarRecuperacion(email) {
+    return llamarPublico('/recuperar-password', { email }, true)
+  },
+
+  /** Completa la recuperación con el token del enlace del correo */
+  async restablecer(token, password) {
+    return llamarPublico('/restablecer', { token, password }, true)
+  },
+
+  /**
+   * Cambia la contraseña propia (obligatorio tras una temporal). El backend
+   * cierra las demás sesiones y devuelve un token nuevo para esta.
+   */
+  async cambiarPassword(actual, nueva) {
+    const res = await fetch('/api/me/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+      body: JSON.stringify({ actual, nueva })
+    })
+    let json = null
+    try {
+      json = await res.json()
+    } catch { /* sin cuerpo */ }
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || 'No se pudo cambiar la contraseña.')
+    }
+    localStorage.setItem(TOKEN_KEY, json.data.token)
+    state.token = json.data.token
+    this.actualizarUsuario({ ...(state.usuario || {}), ...json.data.usuario })
+    return json.data
+  },
+
+  /** Marca la sesión como obligada a cambiar la contraseña (403 del backend) */
+  marcarCambioObligatorio() {
+    if (state.usuario && !state.usuario.debeCambiarPassword) {
+      this.actualizarUsuario({ ...state.usuario, debeCambiarPassword: true })
+    }
+  },
 
   /**
    * Cierra sesión de forma reactiva limpiando el estado y localStorage

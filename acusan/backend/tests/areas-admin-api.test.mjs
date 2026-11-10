@@ -68,6 +68,10 @@ after(async () => {
       .deleteMany({ where: { email: { in: [EMAIL_ENCARGADO, EMAIL_INACTIVO] } } })
       .catch(() => {})
     await prisma.area.deleteMany({ where: { codigo: { in: [CODIGO_TEMP, CODIGO_INACT] } } }).catch(() => {})
+    // Su historial en el mapa de estructura tampoco debe quedar en la base
+    await prisma.movimientoArea
+      .deleteMany({ where: { areaCodigo: { in: [CODIGO_TEMP, CODIGO_INACT] } } })
+      .catch(() => {})
   }
   if (servidor) await new Promise((r) => servidor.close(r))
   await prisma.$disconnect()

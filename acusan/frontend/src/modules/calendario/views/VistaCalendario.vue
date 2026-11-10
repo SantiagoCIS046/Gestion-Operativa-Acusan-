@@ -3,14 +3,20 @@
     <!-- ── Cabecera: título grande, estado y navegación del mes ── -->
     <header class="cal-cabecera-vista">
       <div class="cal-titulo-vista">
-        <h2>Calendario de Radicados<br />Enviados</h2>
+        <h2>Calendario de Radicados<br />{{ modo === 'vencen' ? 'por Vencer' : 'Enviados' }}</h2>
         <span class="cal-badge" :class="esMesActual ? 'cal-badge--verde' : 'cal-badge--indigo'">
           <i></i>{{ esMesActual ? 'Mes en curso' : 'Mes consultado' }}
         </span>
         <p class="cal-sub">
-          Registro numérico de los radicados enviados y recibidos por día hábil, festivos de
-          Colombia y días no laborales registrados por gerencia, con su registro detallado por
-          fecha — {{ alcanceTexto }}.
+          <template v-if="modo === 'vencen'">
+            Radicados pendientes según su fecha límite, día por día (incluye los días que vienen),
+            con festivos de Colombia y días no laborales — {{ alcanceTexto }}.
+          </template>
+          <template v-else>
+            Registro numérico de los radicados enviados y recibidos por día hábil, festivos de
+            Colombia y días no laborales registrados por gerencia, con su registro detallado por
+            fecha — {{ alcanceTexto }}.
+          </template>
         </p>
       </div>
 
@@ -33,6 +39,10 @@
             <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.codigo }} — {{ a.nombre }}</option>
           </select>
         </div>
+        <div class="cal-modo" role="group" aria-label="Qué muestra el calendario">
+          <button type="button" :class="{ activo: modo === 'enviados' }" :aria-pressed="modo === 'enviados'" @click="cambiarModo('enviados')">Recibidos</button>
+          <button type="button" :class="{ activo: modo === 'vencen' }" :aria-pressed="modo === 'vencen'" @click="cambiarModo('vencen')">Vencimientos</button>
+        </div>
         <button type="button" class="cal-btn-hoy" @click="irAHoy">Hoy</button>
       </div>
     </header>
@@ -43,9 +53,9 @@
       <!-- ── KPIs del mes: cuatro cuadros con cifra grande ── -->
       <section class="cal-kpis">
         <article class="cal-tarjeta cal-kpi">
-          <p class="cal-kpi-etiqueta">Radicados del mes</p>
+          <p class="cal-kpi-etiqueta">{{ modo === 'vencen' ? 'Vencen este mes' : 'Radicados del mes' }}</p>
           <p class="cal-kpi-cifra">{{ totalEnviados }}<small>rad.</small></p>
-          <p class="cal-kpi-sub">enviados o recibidos a la fecha</p>
+          <p class="cal-kpi-sub">{{ modo === 'vencen' ? 'pendientes con fecha límite en el mes' : 'enviados o recibidos a la fecha' }}</p>
         </article>
         <article class="cal-tarjeta cal-kpi">
           <p class="cal-kpi-etiqueta">Días hábiles</p>
@@ -60,9 +70,9 @@
           </p>
         </article>
         <article class="cal-tarjeta cal-kpi">
-          <p class="cal-kpi-etiqueta">Días con envíos</p>
+          <p class="cal-kpi-etiqueta">{{ modo === 'vencen' ? 'Días con vencimientos' : 'Días con envíos' }}</p>
           <p class="cal-kpi-cifra">{{ diasConEnvios }}<small>días</small></p>
-          <p class="cal-kpi-sub">días del mes con radicados enviados</p>
+          <p class="cal-kpi-sub">{{ modo === 'vencen' ? 'días del mes en que vence algo' : 'días del mes con radicados enviados' }}</p>
           <p class="cal-kpi-sub">de {{ totalEnviados }} radicados del mes</p>
         </article>
       </section>
@@ -76,10 +86,10 @@
             :dias="datos?.dias || []"
             :enviados="enviadosVisibles"
             :seleccionada="fechaSel"
-            :fecha-pico="picoEnviados.n ? picoEnviados.fecha : ''"
-            :hasta-fecha="HOY"
+            :fecha-pico="modo === 'enviados' && picoEnviados.n ? picoEnviados.fecha : ''"
+            :hasta-fecha="modo === 'vencen' ? '' : HOY"
             sin-navegacion
-            titulo="Matriz Mensual de Radicados"
+:titulo="modo === 'vencen' ? 'Matriz Mensual de Vencimientos' : 'Matriz Mensual de Radicados'"
             :subtitulo="actualizadoA ? `Actualizado ${actualizadoA}` : ''"
             :nota="notaMes"
             @seleccionar="seleccionar"
@@ -102,15 +112,15 @@
             <div v-if="cargandoDia" class="cal-vacio cal-vacio--chico">Cargando…</div>
             <template v-else-if="panel">
               <div class="cal-dia-total">
-                <p class="cal-etiqueta-min">Radicados enviados este día</p>
-                <p class="cal-dia-cifra">{{ panel.enviados.length }}<small>rad.</small></p>
-                <p class="cal-dia-sub">radicados enviados o recibidos esta fecha</p>
+                <p class="cal-etiqueta-min">{{ modo === 'vencen' ? 'Radicados que vencen este día' : 'Radicados enviados este día' }}</p>
+                <p class="cal-dia-cifra">{{ listaDia.length }}<small>rad.</small></p>
+                <p class="cal-dia-sub">{{ modo === 'vencen' ? 'pendientes con fecha límite en esta fecha' : 'radicados enviados o recibidos esta fecha' }}</p>
               </div>
 
               <!-- Registro numérico del día: un ítem por radicado enviado.
                    La lista se acota al alto de la matriz (scroll interno). -->
-              <ol v-if="panel.enviados.length" class="cal-lista-dia">
-                <li v-for="r in panel.enviados" :key="r.id" class="cal-item-dia">
+              <ol v-if="listaDia.length" class="cal-lista-dia">
+                <li v-for="r in listaDia" :key="r.id" class="cal-item-dia">
                   <div class="cal-item-dia-cab">
                     <RouterLink class="enlace-rad" :to="{ path: '/radicados', query: { q: r.numeroRadicado } }">{{ r.numeroRadicado }}</RouterLink>
                     <span class="chip-prioridad" :class="`chip-prioridad--${(r.prioridad || '').toLowerCase()}`">{{ r.prioridad }}</span>
@@ -126,8 +136,26 @@
                   </p>
                 </li>
               </ol>
-              <p v-else class="cal-vacio cal-vacio--chico">Sin radicados enviados este día.</p>
+              <p v-else class="cal-vacio cal-vacio--chico">{{ modo === 'vencen' ? 'Nada vence este día.' : 'Sin radicados enviados este día.' }}</p>
             </template>
+          </section>
+
+          <!-- Días no laborales extra (ferias, paros, cierres): se descuentan
+               como festivos en plazos, alertas e informes -->
+          <section class="cal-tarjeta cal-nolab" aria-label="Días no laborales">
+            <p class="cal-etiqueta-min">Días no laborales de la empresa</p>
+            <form class="cal-nolab-form" novalidate @submit.prevent="agregarNoLaboral">
+              <input v-model="formNoLaboral.fecha" type="date" aria-label="Fecha del día no laboral" />
+              <input v-model="formNoLaboral.nombre" type="text" maxlength="80" placeholder="Motivo (p. ej. Cierre por inventario)" aria-label="Motivo" />
+              <button type="submit" class="cal-btn-hoy" :disabled="guardandoNoLaboral">Agregar</button>
+            </form>
+            <ul v-if="proximosNoLaborales.length" class="cal-nolab-lista">
+              <li v-for="d in proximosNoLaborales" :key="d.id">
+                <span><b>{{ fechaDisplay(d.fechaISO) }}</b> · {{ d.nombre }}</span>
+                <button type="button" class="cal-nolab-quitar" :aria-label="`Quitar ${d.nombre}`" title="Quitar" @click="quitarNoLaboral(d)">×</button>
+              </li>
+            </ul>
+            <p v-else class="cal-vacio cal-vacio--chico">No hay días no laborales registrados desde hoy.</p>
           </section>
 
           <!-- El registro numérico del día vive en la tarjeta de arriba; los
@@ -140,8 +168,8 @@
       <section class="cal-tarjeta cal-registro">
         <div class="cal-registro-cab">
           <div>
-            <h3>Registro de Radicados Enviados</h3>
-            <p class="cal-registro-sub">Enviados del {{ fechaTitulo }}{{ areaSeleccionada ? ' · ' + areaSeleccionada.codigo : '' }}</p>
+            <h3>{{ modo === 'vencen' ? 'Radicados que Vencen' : 'Registro de Radicados Enviados' }}</h3>
+            <p class="cal-registro-sub">{{ modo === 'vencen' ? 'Vencen el' : 'Enviados del' }} {{ fechaTitulo }}{{ areaSeleccionada ? ' · ' + areaSeleccionada.codigo : '' }}</p>
           </div>
           <div class="cal-registro-controles">
             <input
@@ -156,7 +184,7 @@
               <option value="media">Media</option>
               <option value="baja">Baja</option>
             </select>
-            <span class="cal-registro-conteo">Mostrando {{ radicadosFiltrados.length }} de {{ panel?.enviados?.length ?? 0 }}</span>
+            <span class="cal-registro-conteo">Mostrando {{ radicadosFiltrados.length }} de {{ listaDia.length }}</span>
           </div>
         </div>
 
@@ -191,11 +219,11 @@
               </tbody>
             </table>
           </div>
-          <p v-else-if="panel.enviados.length" class="cal-vacio cal-vacio--chico">Ningún radicado coincide con el filtro.</p>
-          <p v-else class="cal-vacio cal-vacio--chico">Sin radicados enviados este día.</p>
+          <p v-else-if="listaDia.length" class="cal-vacio cal-vacio--chico">Ningún radicado coincide con el filtro.</p>
+          <p v-else class="cal-vacio cal-vacio--chico">{{ modo === 'vencen' ? 'Nada vence este día.' : 'Sin radicados enviados este día.' }}</p>
 
           <div v-if="radicadosFiltrados.length" class="cal-registro-pie">
-            <p>Registros del {{ rangoPagina.desde }} al {{ rangoPagina.hasta }} de un total de {{ radicadosFiltrados.length }} radicados enviados el {{ fechaLarga(fechaSel) }}.</p>
+            <p>Registros del {{ rangoPagina.desde }} al {{ rangoPagina.hasta }} de un total de {{ radicadosFiltrados.length }} radicados {{ modo === 'vencen' ? 'que vencen' : 'enviados' }} el {{ fechaLarga(fechaSel) }}.</p>
             <div class="cal-paginacion">
               <button type="button" class="cal-pag-btn" :disabled="pag === 1" @click="pag--">‹ Anterior</button>
               <template v-for="(p, i) in paginas" :key="`${p}-${i}`">
@@ -264,9 +292,21 @@ const festivosDelMes = computed(() => (datos.value?.dias || []).filter((d) => d.
 // Regla del calendario: el futuro no existe — no puede haber radicados
 // enviados ni recibidos después de hoy. Matriz, KPIs, PICO y promedio solo
 // cuentan los días ya transcurridos (≤ HOY); los posteriores van grises.
+// Modo "Vencimientos": la matriz cuenta los PENDIENTES por fecha límite y
+// sí muestra el futuro (es justo lo que hay que planear).
+const modo = ref('enviados')
 const enviadosVisibles = computed(() =>
-  Object.fromEntries(Object.entries(datos.value?.enviados || {}).filter(([fecha]) => fecha <= HOY))
+  modo.value === 'vencen'
+    ? datos.value?.vencen || {}
+    : Object.fromEntries(Object.entries(datos.value?.enviados || {}).filter(([fecha]) => fecha <= HOY))
 )
+const listaDia = computed(() => (modo.value === 'vencen' ? panel.value?.vencen : panel.value?.enviados) ?? [])
+
+function cambiarModo(nuevo) {
+  modo.value = nuevo
+  // En "Recibidos" el futuro está deshabilitado: vuelve a hoy si hacía falta
+  if (nuevo === 'enviados' && fechaSel.value > HOY) fechaSel.value = HOY
+}
 
 // Días hábiles ya transcurridos del mes: denominador real del promedio
 const habilesTranscurridos = computed(() =>
@@ -303,7 +343,7 @@ const promedioDia = computed(() => {
 const fechaTitulo = computed(() => (fechaSel.value ? fechaDisplay(fechaSel.value) : ''))
 
 const radicadosFiltrados = computed(() => {
-  const lista = panel.value?.enviados ?? []
+  const lista = listaDia.value
   const texto = filtroTexto.value.trim().toLowerCase()
   return lista.filter((r) => {
     if (filtroPrioridad.value && (r.prioridad || '').toLowerCase() !== filtroPrioridad.value) return false
@@ -348,7 +388,7 @@ const paginas = computed(() => {
   return salida
 })
 
-watch([filtroTexto, filtroPrioridad, fechaSel, filtroArea], () => {
+watch([filtroTexto, filtroPrioridad, fechaSel, filtroArea, modo], () => {
   pag.value = 1
 })
 
@@ -410,10 +450,64 @@ async function cargarAreas() {
 watch([anio, mes, filtroArea], cargarMes)
 watch([fechaSel, filtroArea], cargarDia)
 
+// ── Días no laborales (gerencia) ─────────────────────────────
+const noLaborales = ref([])
+const formNoLaboral = ref({ fecha: '', nombre: '' })
+const guardandoNoLaboral = ref(false)
+const proximosNoLaborales = computed(() =>
+  noLaborales.value
+    .map((d) => ({ ...d, fechaISO: String(d.fecha).slice(0, 10) }))
+    .filter((d) => d.fechaISO >= HOY)
+    .sort((a, b) => a.fechaISO.localeCompare(b.fechaISO))
+)
+
+async function cargarNoLaborales() {
+  try {
+    noLaborales.value = await CalendarioAPI.listarNoLaborales()
+  } catch {
+    noLaborales.value = []
+  }
+}
+
+async function agregarNoLaboral() {
+  const { fecha, nombre } = formNoLaboral.value
+  if (!fecha || !nombre.trim()) {
+    toast.error('Indica la fecha y el motivo del día no laboral.')
+    return
+  }
+  guardandoNoLaboral.value = true
+  try {
+    await CalendarioAPI.crearNoLaboral({ fecha, nombre: nombre.trim() })
+    toast.exito('Día no laboral registrado: ya no cuenta como hábil.')
+    formNoLaboral.value = { fecha: '', nombre: '' }
+    await Promise.all([cargarNoLaborales(), cargarMes(), cargarDia()])
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    guardandoNoLaboral.value = false
+  }
+}
+
+async function quitarNoLaboral(d) {
+  try {
+    await CalendarioAPI.borrarNoLaboral(d.id)
+    toast.exito(`${d.nombre}: el día vuelve a ser hábil.`)
+    await Promise.all([cargarNoLaborales(), cargarMes(), cargarDia()])
+  } catch (e) {
+    toast.error(e.message)
+  }
+}
+
+// El formulario propone la fecha seleccionada en la matriz
+watch(fechaSel, (f) => {
+  if (f && f >= HOY) formNoLaboral.value.fecha = f
+})
+
 onMounted(() => {
   cargarAreas()
   cargarMes()
   cargarDia()
+  cargarNoLaborales()
 })
 
 // ── Eventos del calendario ───────────────────────────────────
@@ -447,6 +541,79 @@ function irAHoy() {
 </script>
 
 <style scoped>
+.cal-modo {
+  display: inline-flex;
+  border: 1px solid var(--cx-borde, #e4e6f4);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.cal-modo button {
+  border: 0;
+  background: transparent;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  color: #5c5e72;
+  cursor: pointer;
+}
+
+.cal-modo button.activo {
+  background: #3a2bd8;
+  color: #fff;
+}
+
+.cal-nolab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-nolab-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cal-nolab-form input {
+  border: 1px solid #e4e6f4;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.74rem;
+  font-family: inherit;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.cal-nolab-lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.74rem;
+}
+
+.cal-nolab-lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fdf3dc;
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: #8a6410;
+}
+
+.cal-nolab-quitar {
+  border: 0;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  color: #8a6410;
+  cursor: pointer;
+}
+
 /* Paleta del diseño de referencia: tarjetas blancas, índigo, verde y ámbar */
 .vista-calendario {
   --cx-primario: #3a2bd8;

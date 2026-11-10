@@ -28,7 +28,7 @@
                 <line x1="12" y1="16" x2="12" y2="12"></line>
                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
               </svg>
-              <span>Su sesión ha expirado. Ingrese nuevamente para continuar.</span>
+              <span>{{ avisoSesion }}</span>
             </div>
           </transition>
 
@@ -158,8 +158,8 @@
               </svg>
             </div>
             <span class="portal-eyebrow">NUEVO FUNCIONARIO</span>
-            <h2 class="form-title">Registrar Usuario</h2>
-            <p class="form-subtitle">Crear cuenta e integrar a la BD de Acuasan</p>
+            <h2 class="form-title">Solicitar Cuenta</h2>
+            <p class="form-subtitle">Solicite su cuenta; gerencia la aprueba</p>
           </div>
 
           <!-- Error Alert -->
@@ -176,12 +176,6 @@
               <input v-model="formRegistro.nombre" type="text" class="field-input" placeholder="Nombre y Apellidos del Funcionario" required />
             </div>
 
-            <!-- Cédula -->
-            <div class="field-group">
-              <label class="field-label">Cédula de Ciudadanía</label>
-              <input v-model="formRegistro.cedula" type="text" class="field-input" placeholder="Número de cédula" required />
-            </div>
-
             <!-- Email -->
             <div class="field-group">
               <label class="field-label">Correo Electrónico Institucional</label>
@@ -196,7 +190,7 @@
                   v-model="formRegistro.password"
                   :type="mostrarPassword ? 'text' : 'password'"
                   class="field-input"
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mínimo 8 caracteres, con letras y números"
                   required
                 />
                 <button
@@ -220,12 +214,12 @@
 
             <!-- Security note -->
             <div class="security-notice">
-              <span>🛡️ Por seguridad institucional, los nuevos registros se asignan como Funcionario Operativo. Los cargos gerenciales son administrados por la entidad.</span>
+              <span>🛡️ Su solicitud queda pendiente hasta que gerencia la apruebe y le asigne su área y rol. Recibirá acceso cuando la cuenta quede activa.</span>
             </div>
 
             <button type="submit" class="btn-login btn-success" :disabled="cargando">
               <span v-if="cargando" class="spinner"></span>
-              <span v-else>Guardar e Ingresar al Sistema</span>
+              <span v-else>Enviar solicitud de cuenta</span>
             </button>
           </form>
 
@@ -236,10 +230,9 @@
           </div>
         </template>
 
-        <!-- ==================== MODO 3: RECUPERACIÓN MEDIADA POR EL ADMINISTRADOR ==================== -->
-        <!-- Sin canal de correo institucional, un código devuelto por HTTP lo vería
-             también un atacante: el restablecimiento lo gestiona el ADMIN desde
-             la Gestión de Usuarios (ver PROTECCION de auth en el backend). -->
+        <!-- ==================== MODO 3: RECUPERACIÓN DE CONTRASEÑA ==================== -->
+        <!-- Con correo configurado llega un enlace de un solo uso; sin correo, la
+             contraseña la restablece gerencia o el líder del área desde Usuarios. -->
         <template v-else-if="modo === 'recuperar'">
           <div class="form-header">
             <div class="brand-emblem-badge bg-amber">
@@ -249,7 +242,68 @@
             </div>
             <span class="portal-eyebrow">RECUPERACIÓN DE CUENTA</span>
             <h2 class="form-title">¿Olvidó su Contraseña?</h2>
-            <p class="form-subtitle">El restablecimiento es gestionado por el Administrador del Sistema</p>
+            <p class="form-subtitle">
+              {{ correoHabilitado ? 'Le enviaremos un enlace a su correo institucional' : 'La restablece gerencia o su líder de área' }}
+            </p>
+          </div>
+
+          <transition name="shake-fade">
+            <div v-if="errorMsg" class="error-alert" role="alert">
+              <span>{{ errorMsg }}</span>
+            </div>
+          </transition>
+          <transition name="shake-fade">
+            <div v-if="successMsg" class="success-alert" role="status">
+              <span>{{ successMsg }}</span>
+            </div>
+          </transition>
+
+          <form v-if="correoHabilitado && !successMsg" class="login-form" novalidate @submit.prevent="handleRecuperar">
+            <div class="field-group">
+              <label class="field-label" for="recuperar-email">Correo Electrónico Institucional</label>
+              <input
+                id="recuperar-email"
+                v-model="formRecuperar.email"
+                type="email"
+                class="field-input"
+                placeholder="ejemplo@acuasan.com"
+                autocomplete="email"
+                :disabled="cargando"
+              />
+            </div>
+            <button type="submit" class="btn-login" :disabled="cargando">
+              <span v-if="cargando" class="spinner"></span>
+              <span v-else>Enviar enlace</span>
+            </button>
+          </form>
+
+          <div v-else-if="!correoHabilitado" class="security-notice">
+            <span>
+              🔐 Pida a gerencia o a su líder de área que restablezca su contraseña desde
+              <strong>Usuarios</strong>. Le entregarán una clave temporal que el sistema le pedirá
+              cambiar al ingresar.
+            </span>
+          </div>
+
+          <div class="bottom-action-container">
+            <button type="button" class="action-link-subtle" @click="cambiarModo('login')">
+              ← Regresar al inicio de sesión
+            </button>
+          </div>
+        </template>
+
+        <!-- ==================== MODO 4: NUEVA CONTRASEÑA (enlace del correo) ==================== -->
+        <template v-else-if="modo === 'restablecer'">
+          <div class="form-header">
+            <div class="brand-emblem-badge bg-green">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <span class="portal-eyebrow">NUEVA CONTRASEÑA</span>
+            <h2 class="form-title">Crear Contraseña</h2>
+            <p class="form-subtitle">Mínimo 8 caracteres, con letras y números</p>
           </div>
 
           <transition name="shake-fade">
@@ -258,23 +312,44 @@
             </div>
           </transition>
 
-          <div class="security-notice">
-            <span>
-              🔐 Contacte al Administrador del Sistema (<strong>admin@acuasan.com</strong>) solicitando el
-              restablecimiento de su clave. Él la reestablece desde la Gestión de Usuarios y le entrega una
-              clave temporal de forma presencial o telefónica, nunca por este medio.
-            </span>
-          </div>
+          <form class="login-form" novalidate @submit.prevent="handleRestablecer">
+            <div class="field-group">
+              <label class="field-label" for="nueva-password">Nueva contraseña</label>
+              <input
+                id="nueva-password"
+                v-model="formRestablecer.password"
+                :type="mostrarPassword ? 'text' : 'password'"
+                class="field-input"
+                autocomplete="new-password"
+                :disabled="cargando"
+              />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="confirmar-password">Confirmar contraseña</label>
+              <input
+                id="confirmar-password"
+                v-model="formRestablecer.confirmar"
+                :type="mostrarPassword ? 'text' : 'password'"
+                class="field-input"
+                autocomplete="new-password"
+                :disabled="cargando"
+              />
+            </div>
+            <label class="ver-password">
+              <input v-model="mostrarPassword" type="checkbox" /> Mostrar contraseña
+            </label>
+            <button type="submit" class="btn-login btn-success" :disabled="cargando">
+              <span v-if="cargando" class="spinner"></span>
+              <span v-else>Guardar contraseña</span>
+            </button>
+          </form>
 
           <div class="bottom-action-container">
-            <button type="button" class="action-link-subtle" @click="cambiarModo('login')">
-              ← Cancelar y regresar al Login
+            <button type="button" class="action-link-subtle" @click="irALogin">
+              ← Regresar al inicio de sesión
             </button>
           </div>
         </template>
-
-        <!-- (MODO 4 reset-password ELIMINADO: el restablecimiento de clave lo media
-             el Administrador desde Gestión de Usuarios; ver MODO 3) -->
 
         <!-- Footer -->
         <div class="form-footer">
@@ -371,17 +446,33 @@ const route = useRoute()
 const router = useRouter()
 const currentYear = new Date().getFullYear()
 
-// Vuelve del 401 con ?sesion=expirada para avisar qué pasó
-const sesionExpirada = computed(() => route.query.sesion === 'expirada')
+// Vuelve del 401 con ?sesion=expirada|inactiva|cerrada para avisar qué pasó
+const AVISOS_SESION = {
+  expirada: 'Su sesión ha expirado. Ingrese nuevamente para continuar.',
+  inactiva: 'Su cuenta fue desactivada. Contacte a gerencia o a su líder de área.',
+  cerrada: 'Su contraseña cambió: ingrese con la nueva contraseña.',
+}
+const sesionExpirada = computed(() => Boolean(AVISOS_SESION[route.query.sesion]))
+const avisoSesion = computed(() => AVISOS_SESION[route.query.sesion] || '')
 
-// Tras entrar, vuelve a donde lo expulsó la guardia (?redirect=...) o al panel
+// Tras entrar, vuelve a donde lo expulsó la guardia (?redirect=...) o al
+// inicio de su rol (el redirect de '/' decide: panel de gerencia/líder,
+// radicados para un usuario del área)
 const destinoPostLogin = () =>
   typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
     ? route.query.redirect
-    : '/resumen'
+    : '/'
 
-// Modos: 'login' | 'registro' | 'recuperar' (informativo: el reset lo media el ADMIN)
-const modo = ref('login')
+// Modos: 'login' | 'registro' | 'recuperar' | 'restablecer' (enlace del correo:
+// /restablecer?token=…)
+const tokenRestablecer = typeof route.query.token === 'string' ? route.query.token : ''
+const modo = ref(route.path === '/restablecer' && tokenRestablecer ? 'restablecer' : 'login')
+
+// ¿Hay correo configurado en el servidor? Cambia cómo se ofrece la recuperación
+const correoHabilitado = ref(false)
+authService.opciones().then((o) => {
+  correoHabilitado.value = Boolean(o?.correoHabilitado)
+})
 
 const cargando = ref(false)
 const errorMsg = ref('')
@@ -403,12 +494,14 @@ const formLogin = reactive({
 
 const formRegistro = reactive({
   nombre: '',
-  cedula: '',
   email: '',
   password: ''
 })
-// NOTA: el autoregistro NO envía rol — el backend asigna SIEMPRE
-// 'OPERATIVO' (la asignación de roles la hace el ADMIN en Gestión de Usuarios).
+// NOTA: el autoregistro NO envía rol — el backend crea SIEMPRE una solicitud
+// de USUARIO pendiente; gerencia la aprueba con su área y rol en Usuarios.
+
+const formRecuperar = reactive({ email: '' })
+const formRestablecer = reactive({ password: '', confirmar: '' })
 
 const errores = reactive({
   email: '',
@@ -452,7 +545,7 @@ const handleLogin = async () => {
   }
 }
 
-// 2. Manejo de Registro de Nuevo Usuario
+// 2. Solicitud de cuenta: queda pendiente de aprobación (no inicia sesión)
 const handleRegistro = async () => {
   errorMsg.value = ''
   if (!formRegistro.nombre.trim() || !formRegistro.email.trim() || !formRegistro.password) {
@@ -463,15 +556,59 @@ const handleRegistro = async () => {
   cargando.value = true
   try {
     await authService.registro(formRegistro)
-    // Tras registrar con éxito, iniciar sesión automáticamente con su nuevo usuario
-    const loginRes = await authService.login(formRegistro.email, formRegistro.password)
-    successMsg.value = `Bienvenido(a), ${loginRes.usuario.nombre}. Sesión iniciada correctamente.`
-    router.push(destinoPostLogin())
+    const correo = formRegistro.email
+    Object.assign(formRegistro, { nombre: '', email: '', password: '' })
+    cambiarModo('login')
+    formLogin.email = correo
+    successMsg.value = 'Solicitud enviada. Podrá ingresar cuando gerencia apruebe su cuenta.'
   } catch (error) {
-    errorMsg.value = error.message || 'Error al registrar el usuario en el sistema.'
+    errorMsg.value = error.message || 'Error al enviar la solicitud de cuenta.'
   } finally {
     cargando.value = false
   }
+}
+
+// 3. Recuperación por correo (misma respuesta exista o no la cuenta)
+const handleRecuperar = async () => {
+  errorMsg.value = ''
+  if (!formRecuperar.email.trim()) {
+    errorMsg.value = 'Escriba su correo institucional.'
+    return
+  }
+  cargando.value = true
+  try {
+    const r = await authService.solicitarRecuperacion(formRecuperar.email.trim())
+    successMsg.value = r.message
+  } catch (error) {
+    errorMsg.value = error.message
+  } finally {
+    cargando.value = false
+  }
+}
+
+// 4. Nueva contraseña desde el enlace del correo
+const handleRestablecer = async () => {
+  errorMsg.value = ''
+  if (formRestablecer.password !== formRestablecer.confirmar) {
+    errorMsg.value = 'Las contraseñas no coinciden.'
+    return
+  }
+  cargando.value = true
+  try {
+    const r = await authService.restablecer(tokenRestablecer, formRestablecer.password)
+    irALogin()
+    formLogin.email = r.data?.email || ''
+    successMsg.value = r.message
+  } catch (error) {
+    errorMsg.value = error.message
+  } finally {
+    cargando.value = false
+  }
+}
+
+function irALogin() {
+  cambiarModo('login')
+  if (route.path !== '/login') router.replace('/login')
 }
 </script>
 
@@ -707,6 +844,16 @@ const handleRegistro = async () => {
 
 .select-input {
   padding: 8px 10px;
+  cursor: pointer;
+}
+
+.ver-password {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #475569;
+  margin: -4px 0 12px;
   cursor: pointer;
 }
 

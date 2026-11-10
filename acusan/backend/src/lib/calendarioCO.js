@@ -11,7 +11,10 @@
 // los consideran. El resultado por año y la lista de no laborales viven
 // en caché en memoria (se refresca con cargarDiasNoLaborales(true)).
 
-import { PrismaClient } from '@prisma/client'
+// Cliente compartido (sin cifrado: los días no laborales no son datos
+// sensibles). Antes se creaba un PrismaClient propio: una segunda conexión a
+// la base que además no cargaba backend/.env fuera de app.js.
+import { prismaSinCifrado as prisma } from '../config/prisma.js'
 
 import {
   ZONA_HORARIA,
@@ -29,8 +32,6 @@ import {
 } from '../utils/fechas.js'
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000
-
-const prisma = new PrismaClient()
 
 export const TIPO_SEMANAL = 'semanal'
 export const TIPO_MENSUAL = 'mensual'
@@ -212,6 +213,23 @@ export async function diasHabilesEntre(a, b) {
 
 // Suma n días HÁBILES a la fecha (n negativo retrocede). La fecha base
 // cuenta solo si es hábil: sumarDiasHabiles(viernes, 1) = lunes.
+/**
+ * Días hábiles en [desdeISO, hastaISO] (ambos incluidos), SIN consultar la
+ * base: recibe el mapa de no laborales ya cargado (cargarDiasNoLaborales).
+ * Sirve para calcular muchas filas seguidas (listado de radicados).
+ */
+export function contarHabiles(desdeISO, hastaISO, noLaborales) {
+  if (!desdeISO || !hastaISO || desdeISO > hastaISO) return 0
+  let n = 0
+  let isoFecha = desdeISO
+  while (isoFecha <= hastaISO) {
+    const d = diaSemana(isoFecha)
+    if (d !== 0 && d !== 6 && !festivosOficialesDe(isoFecha).length && !noLaborales?.has(isoFecha)) n++
+    isoFecha = sumarDiasISO(isoFecha, 1)
+  }
+  return n
+}
+
 export async function sumarDiasHabiles(fecha, n) {
   const paso = n >= 0 ? 1 : -1
   let restantes = Math.abs(n)

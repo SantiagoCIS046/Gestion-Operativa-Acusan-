@@ -24,4 +24,17 @@ export const PerfilController = {
       })
     }
   },
+
+  /** POST /api/me/password { actual, nueva } */
+  async cambiarPassword(req, res) {
+    try {
+      const data = await PerfilService.cambiarPassword(req.usuario.id, req.body || {})
+      res.json({ success: true, message: 'Contraseña actualizada.', data })
+    } catch (error) {
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || 'No se pudo cambiar la contraseña.',
+      })
+    }
+  },
 }

@@ -1,5 +1,13 @@
 import { AuthService } from './auth.service.js'
 
+// Respuesta de error uniforme: { success: false, message }
+function fallo(res, error, porDefecto, statusPorDefecto = 400) {
+  res.status(error?.status || statusPorDefecto).json({
+    success: false,
+    message: error?.message || porDefecto,
+  })
+}
+
 export const AuthController = {
   /**
    * POST /api/auth/login
@@ -10,108 +18,65 @@ export const AuthController = {
       const { email, password } = req.body
       const meta = {
         ip: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || null,
-        userAgent: req.headers['user-agent'] || null
+        userAgent: req.headers['user-agent'] || null,
       }
       const resultado = await AuthService.login(email, password, meta)
-
-      res.json({
-        success: true,
-        message: `Bienvenido, ${resultado.usuario.nombre}`,
-        data: resultado
-      })
+      res.json({ success: true, message: `Bienvenido, ${resultado.usuario.nombre}`, data: resultado })
     } catch (error) {
-      const status = error.status || 500
-      res.status(status).json({
-        success: false,
-        message: error.message || 'Error al iniciar sesión'
-      })
+      fallo(res, error, 'Error al iniciar sesión', 500)
     }
+  },
+
+  /** GET /api/auth/opciones — { correoHabilitado } para la pantalla de login */
+  opciones(req, res) {
+    res.json({ success: true, data: AuthService.opciones() })
   },
 
   /**
    * POST /api/auth/registro
-   * Registra un nuevo usuario en la base de datos de MongoDB Atlas
+   * Solicitud de cuenta: queda pendiente de aprobación por gerencia
    */
   async registro(req, res) {
     try {
       const resultado = await AuthService.registrarUsuario(req.body)
       res.status(201).json({
         success: true,
-        message: `Usuario ${resultado.usuario.nombre} registrado exitosamente en el sistema Acuasan.`,
-        data: resultado
+        message: 'Solicitud enviada. Gerencia debe aprobar su cuenta antes de que pueda ingresar.',
+        data: resultado,
       })
     } catch (error) {
-      const status = error.status || 400
-      res.status(status).json({
-        success: false,
-        message: error.message || 'Error al registrar el usuario'
-      })
+      fallo(res, error, 'Error al registrar el usuario')
     }
   },
 
   /**
    * POST /api/auth/recuperar-password
-   * Registra la solicitud; el restablecimiento lo media el Administrador
+   * Envía el enlace por correo (si está configurado) o indica a quién acudir
    */
   async solicitarRecuperacion(req, res) {
     try {
-      const { email } = req.body
-      const resultado = await AuthService.solicitarRecuperacion(email)
+      const resultado = await AuthService.solicitarRecuperacion(req.body?.email)
       res.json({
         success: true,
         message: resultado.message,
-        data: { email: resultado.email }
+        data: { email: resultado.email, correoHabilitado: resultado.correoHabilitado },
       })
     } catch (error) {
-      const status = error.status || 400
-      res.status(status).json({
-        success: false,
-        message: error.message || 'Error al procesar la solicitud de recuperación'
-      })
+      fallo(res, error, 'Error al procesar la solicitud de recuperación')
     }
   },
 
-  /**
-   * GET /api/auth/verificar-cedula/:cedula
-   * Consulta si una cédula está registrada en la base de datos de usuarios
-   */
-  async verificarCedula(req, res) {
+  /** POST /api/auth/restablecer { token, password } — enlace del correo */
+  async restablecer(req, res) {
     try {
-      const { cedula } = req.params
-      const resultado = await AuthService.buscarPorCedula(cedula)
+      const resultado = await AuthService.restablecerConToken(req.body?.token, req.body?.password)
       res.json({
         success: true,
-        data: resultado
+        message: 'Contraseña actualizada. Ya puede iniciar sesión con la nueva contraseña.',
+        data: resultado,
       })
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Error al verificar la cédula'
-      })
+      fallo(res, error, 'No se pudo restablecer la contraseña')
     }
   },
-
-  /**
-   * POST /api/auth/token-empleado
-   * Genera un JWT de 12h para empleados de campo (app externa de Horas Extras).
-   * Solo requiere cédula + nombre. Sin contraseña.
-   */
-  async tokenEmpleado(req, res) {
-    try {
-      const { cedula, nombre } = req.body
-      const resultado = await AuthService.tokenEmpleado({ cedula, nombre })
-      res.json({
-        success: true,
-        message: `Bienvenido, ${resultado.nombre}. Tu acceso es válido por 12 horas.`,
-        data: resultado
-      })
-    } catch (error) {
-      const status = error.status || 400
-      res.status(status).json({
-        success: false,
-        message: error.message || 'Error al generar token de empleado'
-      })
-    }
-  }
 }
-

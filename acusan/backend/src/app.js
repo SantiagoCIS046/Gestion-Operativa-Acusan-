@@ -19,9 +19,11 @@ import cronAlertasRoutes from './modules/alertas/cron.routes.js'
 import informeRoutes from './modules/informes/informes.routes.js'
 import avisoRoutes from './modules/informes/avisos.routes.js'
 import calendarioRoutes from './modules/calendario/calendario.routes.js'
+import usuarioRoutes from './modules/usuarios/usuario.routes.js'
 
 // Middlewares
 import { auditMiddleware } from './middlewares/audit.middleware.js'
+import { cuentaVigente } from './middlewares/auth.middleware.js'
 
 // Seed de usuarios iniciales
 import { AuthService } from './modules/auth/auth.service.js'
@@ -77,6 +79,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(auditMiddleware) // 📋 Registro automático de cada request HTTP
+app.use('/api', cuentaVigente) // 🔒 Cuenta activa y sesión vigente en cada petición
 
 // ─── Endpoint de salud (público) ─────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -100,6 +103,7 @@ app.use('/api/cron/alertas', cronAlertasRoutes) // revisión diaria (secreto CRO
 app.use('/api/informes', informeRoutes) // informes periódicos (solo gerencia)
 app.use('/api/avisos', avisoRoutes) // avisos internos de fin de periodo
 app.use('/api/calendario', calendarioRoutes) // calendario hábil Colombia
+app.use('/api/usuarios', usuarioRoutes) // administración de cuentas (gerencia y líderes)
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((req, res) => {

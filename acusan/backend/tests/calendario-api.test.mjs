@@ -280,3 +280,40 @@ test('días no laborales: solo gerencia, CRUD completo y caché refrescada', asy
 
   assert.equal((await llamar('/api/calendario/no-laborales/aabbccddeeff001122334455', { metodo: 'DELETE' })).status, 404)
 })
+
+test('sumar días hábiles salta fines de semana y festivos (plazos legales)', async () => {
+  if (!dbOk) return
+  // Martes 10 nov 2026 + 5 hábiles: 11, 12, 13, (14-15 fin de semana, 16
+  // festivo de Independencia de Cartagena trasladado), 17, 18 → miércoles 18
+  const r = await llamar('/api/calendario/sumar-habiles?desde=2026-11-10&dias=5', { token: usuarioOpe.token })
+  assert.equal(r.status, 200)
+  const d = (await r.json()).data
+  assert.equal(d.fecha, '2026-11-18')
+  assert.equal(d.habil, true)
+  // 15 hábiles desde el 1 de diciembre (8 dic festivo)
+  const r15 = await (await llamar('/api/calendario/sumar-habiles?desde=2026-12-01&dias=15')).json()
+  assert.equal(r15.data.fecha, '2026-12-23')
+  assert.equal((await llamar('/api/calendario/sumar-habiles?desde=2026-11-10&dias=0')).status, 400)
+  assert.equal((await llamar('/api/calendario/sumar-habiles?desde=mañana&dias=3')).status, 400)
+  assert.equal((await llamar('/api/calendario/sumar-habiles?desde=2026-11-10&dias=5', { token: null })).status, 401)
+})
+
+test('vista de vencimientos: el mes trae pendientes por fecha límite y el día los lista', async () => {
+  if (!dbOk) return
+  const usuario = await prisma.usuario.findUnique({ where: { email: USUARIO_OPE } })
+  const limite = medianocheBogotaDe(sumarDiasISO(hoyBogota(), 40))
+  const iso = sumarDiasISO(hoyBogota(), 40)
+  const rad = await crearRadicado({ numero: `CAL-VENCE-${Date.now()}`, limite, areaId: areaOpeId, encargadoId: usuario.id })
+  const [anio, mes] = iso.split('-').map(Number)
+  const m = (await (await llamar(`/api/calendario?anio=${anio}&mes=${mes}`)).json()).data
+  assert.ok(m.vencen[iso] >= 1, 'el día límite cuenta el pendiente')
+  const dia = (await (await llamar(`/api/calendario/dia?fecha=${iso}`)).json()).data
+  const fila = dia.vencen.find((x) => x.id === rad.id)
+  assert.ok(fila, 'el pendiente aparece en los vencimientos del día')
+  assert.equal(fila.encargado, usuario.nombre)
+  // Otra área no lo ve
+  if (usuarioOtraArea) {
+    const ajena = (await (await llamar(`/api/calendario/dia?fecha=${iso}`, { token: usuarioOtraArea.token })).json()).data
+    assert.equal(ajena.vencen.some((x) => x.id === rad.id), false)
+  }
+})

@@ -17,7 +17,7 @@
 import prisma from '../../config/prisma.js'
 import { esLiderGeneral, puedeGestionar } from '../auth/permisos.js'
 import { enDias, diasHasta, diasRestantes } from '../../utils/fechas.js'
-import { enviarNotificacion } from './notificaciones.js'
+import { enviarResumenAlertas } from './notificaciones.js'
 
 // Ventana de revisión: radicados con límite a ≤30 días (o ya vencidos)
 const VENTANA_DIAS = 30
@@ -248,16 +248,20 @@ export const AlertaService = {
       })
     }
 
-    // Notificación (hoy solo log): encargado + líder del área; vencidas a
-    // gerencia además (escaladas)
+    // Notificación por correo: encargado + líder del área; las vencidas
+    // escalan además a gerencia. Un solo correo-resumen por persona.
+    const items = []
     for (const { alerta, radicado } of notificables) {
-      const destinatarios = [
-        encargadoPorId.get(radicado.encargadoId) ?? null,
-        await liderDe(radicado.areaId),
-        ...(alerta.nivel === 'VENCIDO' ? gerencia : []),
-      ].filter(Boolean)
-      enviarNotificacion(alerta, destinatarios)
+      items.push({
+        alerta,
+        destinatarios: [
+          encargadoPorId.get(radicado.encargadoId) ?? null,
+          await liderDe(radicado.areaId),
+          ...(alerta.nivel === 'VENCIDO' ? gerencia : []),
+        ].filter(Boolean),
+      })
     }
+    const correo = items.length ? await enviarResumenAlertas(items) : { personas: 0, enviados: 0 }
 
     return {
       ejecucion: {
@@ -270,6 +274,7 @@ export const AlertaService = {
       nuevas,
       reenviadas,
       areas,
+      correo,
     }
   },
 
