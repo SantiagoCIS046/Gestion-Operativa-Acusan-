@@ -811,6 +811,44 @@ function irAHoy() {
   padding: 13px 15px;
 }
 
+/* Cada KPI con su tinte de familia (índigo · verde · ámbar · azul):
+   la vista ganaba color sin recargar las tarjetas */
+.cal-kpis .cal-kpi:nth-child(1) {
+  background: var(--cx-primario-suave);
+  border-color: #d9dcf8;
+}
+
+.cal-kpis .cal-kpi:nth-child(1) .cal-kpi-cifra {
+  color: var(--cx-primario);
+}
+
+.cal-kpis .cal-kpi:nth-child(2) {
+  background: var(--cx-verde-bg);
+  border-color: #c8ecda;
+}
+
+.cal-kpis .cal-kpi:nth-child(2) .cal-kpi-cifra {
+  color: var(--cx-verde);
+}
+
+.cal-kpis .cal-kpi:nth-child(3) {
+  background: var(--cx-ambar-bg);
+  border-color: #f0e2ba;
+}
+
+.cal-kpis .cal-kpi:nth-child(3) .cal-kpi-cifra {
+  color: var(--cx-ambar);
+}
+
+.cal-kpis .cal-kpi:nth-child(4) {
+  background: #e7f3ff;
+  border-color: #c5e2f8;
+}
+
+.cal-kpis .cal-kpi:nth-child(4) .cal-kpi-cifra {
+  color: #1570cd;
+}
+
 .cal-kpi-etiqueta {
   margin: 0 0 7px;
   font-size: 0.6rem;
@@ -855,6 +893,12 @@ function irAHoy() {
   grid-template-columns: minmax(0, 1.62fr) minmax(310px, 0.75fr);
   gap: 14px;
   align-items: start;
+}
+
+/* La tarjeta de la matriz lleva un tinte índigo suave: las celdas casi
+   blancas de adentro resaltan y la vista deja de ser un mar de blanco */
+.cal-col-principal > .cal-tarjeta:first-child {
+  background: #f3f4fd;
 }
 
 .cal-col-principal,
@@ -917,9 +961,9 @@ function irAHoy() {
 }
 
 .cal-dia-total {
-  border: 1px solid var(--cx-borde);
+  border: 1px solid #c8ecda;
   border-radius: 12px;
-  background: #fbfbff;
+  background: var(--cx-verde-bg);
   padding: 11px 13px;
   margin-bottom: 10px;
 }
@@ -928,7 +972,7 @@ function irAHoy() {
   margin: 0 0 4px;
   font-size: 1.62rem;
   font-weight: 800;
-  color: var(--cx-texto);
+  color: var(--cx-verde);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -977,6 +1021,7 @@ function irAHoy() {
 
 .cal-item-dia {
   border: 1px solid var(--cx-borde);
+  border-left: 3px solid var(--cx-primario-medio);
   border-radius: 11px;
   background: #fbfbff;
   padding: 9px 11px;

@@ -104,12 +104,14 @@
               {{ conteo.pendientes.value }}
             </span>
           </RouterLink>
-          <div class="usuario-datos">
-            <span class="usuario-nombre">{{ sesion.usuario.value?.nombre }}</span>
-            <span class="usuario-rol">{{ sesion.etiquetaRol.value }}<template v-if="sesion.area.value && !sesion.esLiderGeneral.value"> · {{ sesion.area.value.codigo }}</template></span>
-          </div>
-          <div class="usuario-avatar" :aria-hidden="true">
-            {{ iniciales }}
+          <div class="sesion-pill" :title="sesion.usuario.value?.nombre">
+            <div class="usuario-datos">
+              <span class="usuario-nombre">{{ sesion.usuario.value?.nombre }}</span>
+              <span class="usuario-rol">{{ sesion.etiquetaRol.value }}<template v-if="sesion.area.value && !sesion.esLiderGeneral.value"> · {{ sesion.area.value.codigo }}</template></span>
+            </div>
+            <div class="usuario-avatar" :aria-hidden="true">
+              {{ iniciales }}
+            </div>
           </div>
           <button
             type="button"
@@ -603,6 +605,10 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  /* Si el ancho no alcanza, el grupo de sesión baja entero a una segunda
+     fila en vez de recortarse contra el borde */
+  flex-wrap: wrap;
+  row-gap: 8px;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -767,29 +773,53 @@ onMounted(() => {
   color: #4d7c0f;
 }
 
+/* Cápsula de sesión: agrupa nombre, rol y avatar en una sola pieza con
+   fondo suave, para que el grupo no se vea como elementos sueltos */
+.sesion-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 5px 8px 5px 12px;
+  background: #f4f8fd;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+
 .usuario-datos {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
+  text-align: left;
   line-height: 1.25;
+  min-width: 0;
 }
 
 .usuario-nombre {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-main);
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .usuario-rol {
   font-size: 0.66rem;
   font-weight: 600;
   color: var(--acuasan-blue);
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .usuario-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
   background: linear-gradient(135deg, var(--acuasan-blue) 0%, var(--acuasan-blue-dark) 100%);
   color: #a3e05c;
   font-size: 0.76rem;
@@ -798,6 +828,19 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   box-shadow: 0 3px 10px rgba(0, 72, 132, 0.25);
+}
+
+/* Pantallas muy angostas (o zoom alto): la cápsula queda solo en avatar */
+@media (max-width: 640px) {
+  .usuario-nombre,
+  .usuario-rol {
+    display: none;
+  }
+
+  .sesion-pill {
+    padding: 4px;
+    gap: 0;
+  }
 }
 
 .btn-clave {

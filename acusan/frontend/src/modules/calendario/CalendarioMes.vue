@@ -420,7 +420,7 @@ function alTeclar(ev) {
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 5px;
 }
 
 .cal-dia-semana {
@@ -429,21 +429,23 @@ function alTeclar(ev) {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--cx-secundario);
-  padding: 2px 0 9px;
+  color: var(--cx-primario-medio, #5b4ee8);
+  padding: 2px 0 6px;
 }
 
+/* Celda compacta: número del día + contador en poco más de 50 px de alto
+   (antes 82 px: la matriz empujaba media página fuera de la pantalla) */
 .cal-celda {
   position: relative;
-  min-height: 82px;
+  min-height: 54px;
   border: 1px solid var(--cx-borde);
-  border-radius: 10px;
+  border-radius: 9px;
   background: #fafbff;
-  padding: 7px 8px;
+  padding: 5px 7px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 3px;
+  gap: 2px;
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -490,7 +492,7 @@ function alTeclar(ev) {
 }
 
 .cal-numero {
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 800;
   color: var(--cx-texto);
   line-height: 1;
@@ -526,7 +528,7 @@ function alTeclar(ev) {
 .cal-valor {
   margin-top: auto;
   color: var(--cx-verde);
-  font-size: 0.98rem;
+  font-size: 0.8rem;
   font-weight: 800;
   line-height: 1;
   align-self: flex-start;
@@ -535,7 +537,7 @@ function alTeclar(ev) {
 
 .cal-valor small {
   margin-left: 3px;
-  font-size: 0.54rem;
+  font-size: 0.5rem;
   font-weight: 700;
   color: var(--cx-secundario);
 }
